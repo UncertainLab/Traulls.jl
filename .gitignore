@@ -1,4 +1,28 @@
+# Auxiliary Julia files
+
 *.jl.*.cov
 *.jl.cov
 *.jl.mem
 /Manifest*.toml
+
+# MacOS files
+*.DS_Store
+
+## Core latex/pdflatex auxiliary files:
+*.aux
+*.lof
+*.log
+*.lot
+*.fls
+*.out
+*.toc
+*.fmt
+*.fot
+*.cb
+*.cb2
+.*.lb
+*.synctex
+
+## Auxiliary bibtex files
+*.bbl
+*.blg

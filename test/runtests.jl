@@ -1,6 +1,8 @@
-using Traulls
+using Traulls, LinearAlgebra
 using Test
 
-@testset "Traulls.jl" begin
-    # Write your tests here.
-end
+
+include("aug_lag.jl")
+include("projection.jl")
+include("models.jl")
+include("hessian.jl")
