@@ -1,0 +1,13 @@
+name = "Traulls"
+uuid = "bd9e17d5-77a1-4ac2-8218-86d07aba9392"
+authors = ["Pierre Borie <pierre.borie98@gmail.com>"]
+version = "1.0.0-DEV"
+
+[compat]
+julia = "1.11"
+
+[extras]
+Test = "8dfed614-e22c-5e08-85e1-65c5234f0b40"
+
+[targets]
+test = ["Test"]
