@@ -1,0 +1,292 @@
+\subsection{Global convergence of the inner minimization}
+
+We start by proving the global convergence of the inner minimization process of algorithm~\ref{algo:trinner_iteration}. This ensures that the inner minimization of algorithm~\ref{algo:basic_al_trm} always succeeds. Because of the similarities between our algorithms, the proof given in this paper follows the structure of the one outlined in~\cite{conn-etal:1988a}. Most of the work consists into formulating and adapting intermediate results to the polyhedral case. 
+ 
+We first make the standard assumption
+\begin{assumption}\label{assumption:inner_iterates_compact}
+	The set $\calX = \left\{x \ | \ \varphi(x) \le \varphi(x_0)\right\} \cap \Omega$ is non empty and compact.
+\end{assumption}
+Combined with the fact that the objective function $\varphi$ is twice continuously differentiable, this ensures that there exists a solution to problem~\eqref{eq:inner_itr_subpb}.
+
+We now introduce notations, some of them being taken from previous sections. 
+
+For $x \in \Omega$, $I(x)$ denotes the set of all bound constraints satisfied as equalities (active) at $x$.
+
+We consider the quadratic model
+
+\[q_k(s) = \dfrac{1}{2} \inner{s}{H_ks} + \inner{g_k}{s},\]
+where $g_k = \nabla \varphi(x_k)$ and $H_k$ is an approximation of the Hessian based on the structured SR1 formula from~\ref{subsec:hessian_approx}. We formulate two assumptions relative to those approximations. The norm used is the induced norm on matrices, i.e. $\|M\| := \sup_{\|x\|=1} \|Mx\|$ for a given matrix $M$.
+\begin{assumption}\label{assumption:model_hessian}
+	Defining, for every iteration index $k$, the scalars $b_k$ by 
+	\[b_k = 1+\max_{0 \le i \le k} \ \left\| H_i\right\|,\]
+	we require that the series $\sum_k \frac{1}{b_k}$ diverges to $\infty$.
+\end{assumption}
+The second assumption and states that the norm of the approximating Hessians should not increase too fast compared with the speed of convergence of the function values.
+\begin{assumption}
+	\[\lim_{k\to \infty} b_k (\varphi_{k+1}-\varphi_k) = 0.\]
+\end{assumption}
+
+The projected gradient path is defined as
+\[s_k(t)=\proj{\Omega}{x_k-tg_k}-x_k \text{ for } t\ge 0.\]
+The reduction of the model along the projected gradient path may thus be defined as the piecewise quadratic function
+\[\psi(t) = q_k(s_k(t)),\]
+and we denote by $t_k^C$ the first local minimum of $\psi$ subject to the trust region constraint 
+\begin{equation}
+	\|s_k(t)\|_\infty \le \Delta_k.
+\end{equation}
+The associated Cauchy step is 
+\begin{equation}\label{eq:cauchy_step}
+	s_k^C = s_k(t_k^C).
+\end{equation}
+Because of the choice of the $\ell_\infty$ norm, computing $s_k(t)$ within the trust region corresponds to project the direction $x_k-tg_k$ onto
+\begin{equation}\label{eq:proj_grad_feasible_set}
+	\left\{d \in \RR^n \ | \ Ad=0,\ l_k \le d \le u_k\right\},
+\end{equation}
+with $(l_k)_i = \max\left(-\Delta_k,l_i-(x_k)_i\right)$ and $(u_k)_i = \min\left(\Delta_k,u_i-(x_k)_i\right)$ for all $i=1,\ldots,n$.
+
+We assume that the total step $s_k$ produces a fraction of the reduction achieved by the Cauchy point:
+\begin{equation}\label{eq:step_drecrease_wrt_cauchy}
+	q_k(s_k) \le \kappa_{fcd} \ q_k(s_k^C),
+\end{equation}
+for $\kappa_{fcd} \in (0,1]$. 
+
+We detail the behavior of the polygonal line $s_k(t)$. At first, if no bounds are active at $x_k$, projecting on the set~\eqref{eq:proj_grad_feasible_set} for $t$ close to $0$ is equivalent to projecting onto the null space of $A$. As $t$ increases, the direction might hit several bounds. Since the set of active bounds can only be increased, we have that
+\begin{equation}\label{eq:nested_active_sets}
+	I(x_k+s_k(t)) \subseteq I(x_k+s_k(t^\prime)) \quad \text{for all}\ 0 < t \le t^\prime.
+\end{equation}
+Let 
+\[0=t_0 < t_1 < \ldots < t_p,\]
+be the successive values of $t$ at which the projected step $s_k(t)$ hits a bound, also called breakpoints. Hitting a bound not only affects the corresponding components, that are now fixed, but it also affects the other components, as the steepest direction must now be projected on a subspace of the form 
+\[\left\{d \in \RR^n \ | \ Ad=0,\ d_i=0\ \text{for some}\ i\right\}\]
+This motivates to adapt the notion of tangent space at a point on the projected gradient path:
+\begin{equation}\label{eq:tangent_space}
+	T(t) := \left\{ d \in \RR^n \ | \ Ad = 0,\ d_i=0\ \text{for all}\ i\in I(x_k+s_k(t))\right\},
+\end{equation}
+for $t\ge0$. This enables us to give a recursive expression of $s_k(t)$ on each interval $[t_i,t_{i+1})$, with $0 \leq i \le p$, as:
+\begin{equation}\label{eq:projected_gradient_path_recursion}
+	s_k(t) = (t-t_i) \proj{T(t_i)}{-g_k} + s_k(t_i).
+\end{equation}
+We also define the reduced gradient on the projected gradient path:
+\begin{equation}
+	z_k(t) := \proj{T(t)}{g_k},
+\end{equation}
+and state a first lemma on how the tangent spaces and the reduced gradients at two different positions compare to each other.
+\begin{lemma}\label{lemma:non_increasing_reduced_gradient_norm}
+	For all $0 < t < t^\prime$, we have that 
+	\begin{equation}\label{eq:lemma_tangent_spaces_inclusion}
+		T(t) \supseteq T(t^\prime),
+	\end{equation}
+	and
+	\begin{equation}\label{eq:lemma_reduced_gradient_norm}
+		\|z_k(t)\| \ge \|z_k(t^\prime)\|.
+	\end{equation}
+\end{lemma}
+\begin{proof}
+	The first statement follows from the inclusion~\eqref{eq:nested_active_sets}. Inequality~\eqref{eq:lemma_reduced_gradient_norm} then results from the fact that projecting the same vector on a smaller linear subspace reduces the norm of its projection. 
+\end{proof}
+When referring to the tangent space and the reducted gradient at a given breakpoint $t_i$, we will make use of the shorthand notation $T_i := T(x_k+s_k(t_i))$ and $z_i:=z_k(t_i)$. Notice that because the active set is fixed on each interval $[t_i,t_{i+1})$, so is the tangent space and hence, the reduced gradient is constant. Also, we can deduce from lemma~\ref{lemma:non_increasing_reduced_gradient_norm} that the tangent spaces associated to each breakpoint form a finite sequence of nested linear subspaces
+\[T_0 \supseteq T_1 \supseteq \ldots \supseteq T_p.\]
+We can now expand equation~\eqref{eq:projected_gradient_path_recursion}:
+\begin{equation}\label{eq:projected_gradient_path_full_expr}
+	s_k(t) = -(t-t_i)z_i - \sum_{j=0}^{i-1}(t_{j+1}-t_j)z_j,
+\end{equation}
+which shows than on each interval $(t_i,t_{i+1})$, $s_k(t)$ is differentiable w.r.t. $t$ and that
+\begin{equation}\label{eq:projected_gradient_path_derivative}
+	s_k^\prime(t) = -z_k(t) = -z_i,
+\end{equation}
+for $t \in (t_i,t_{i+1})$.
+
+Our proof follows the structure of proof of global convergence given in~\cite{conn-etal:1988a} because of the similarity between our algorithm and the one described in~\cite{conn-etal:1988b}, used in the inner minimization phase of LANCELOT~\cite{conn-etal:1992} for the bound constrained case. Most of the work consists into giving an adapted formulation for the intermediate results involving the structure of the linear constraints. 
+We start by establishing an inequality on the decrease of the objective function after taking step $s_k$. This will involve the norm of the projected gradient, i.e.:
+\begin{equation}\label{eq:crit_norm_projected_grad}
+	h_k := \left\|s_k(1)\right\|.
+\end{equation}
+
+\begin{lemma}\label{lemma:majoration_reduced_gradient_norm}
+	Assume $h_k>0$ and define the constant $c_2$ by \[c_2 := \max\left(1, \max_{x \in \calX} \|\nabla \varphi(x)\|\right).\]
+	Then \[\|z_k(t_k^{(1)})\| \ge \dfrac{h_k}{2},\]
+	with $t_k^{(1)}=\frac{h_k}{2c_2}$.
+\end{lemma}
+
+\begin{proof} 
+	First note that the constant $c_2$ is well defined because $\varphi$ is continuously differentiable on $\calX$, the latter being compact by assumption~\ref{assumption:inner_iterates_compact}.
+	 
+	By non-expansivity of the projection mapping onto the convex set $\Omega$, one has, for any $t\ge 0$:
+	\begin{equation}
+			\begin{split}
+			\left\| s_k\left(t\right) \right\| & = \left\| \proj{\Omega}{x_k-tg_k}-x_k\right\| \\
+			& = \left\| \proj{\Omega}{x_k-tg_k}-\proj{\Omega}{x_k}\right\| \\
+			& \le \left\| x_k-tg_k-x_k\right\|\\
+			& \le t\|g_k\|.
+		\end{split}
+	\end{equation}
+	Choosing $t=t_k^{(1)}$ and because $\|g_k\|\le c_2$ by definition of $c_2$, we get
+	\begin{equation}\label{eq:norm_proj_grad_t1}
+		\| s_k(t_k^{(1)})\| \le \dfrac{h_k}{2}.
+	\end{equation}
+	Now, defined $t_k^{(2)}$ as the smallest $t\ge 0$ such that
+	\begin{equation}\label{eq:def_t2}
+		\|s_k(t_k^{(2)})\| = h_k.
+	\end{equation}
+	By~\eqref{eq:norm_proj_grad_t1}, we have
+	\begin{equation}\label{eq:t1_leq_t2}
+		0 < t_k^{(1)} < t_k^{(2)} \le 1.
+	\end{equation}
+	
+	
+	On each interval $(t_i,t_{i+1})$, the left, resp. right, derivative of $s_k(t)$ at $t_i$, resp. $t_{i+1}$, are well defined and equal $z_i$. We can thus rewrite~\eqref{eq:projected_gradient_path_full_expr} as
+	\begin{equation}
+		s_k(t) = \int_{t_i}^{t} s_k^\prime(t)dt + \sum_{j=0}^{i-1} \int_{t_j}^{t_{j+1}} s_k^\prime(t)dt,
+	\end{equation} 
+	which we simplify by
+	\begin{equation}\label{eq:projected_gradient_path_integral_form}
+		s_k(t) = -\int_{0}^{t} z_k(t)dt,
+	\end{equation}
+	using~\eqref{eq:projected_gradient_path_derivative} and keeping in mind that it is a sum of integrals defined on each segment $[t_i,t_{i+1}]$. 
+	Now let $i_1$, resp. $i_2$ be the breakpoint index such that $t_k^{(1)} \in [t_{i_1},t_{i_1+1})$, resp. $t_k^{(2)} \in [t_{i_2},t_{i_2+1})$. Then by~\eqref{eq:projected_gradient_path_integral_form}:
+	\begin{equation}
+		s_k(t_k^{(2)}) - s_k(t_k^{(1)}) = -\int_{t_k^{(1)}}^{t_k^{(2)}} z_k(t)dt, 
+	\end{equation}
+	which leads to
+	\begin{equation}\label{eq:ineq_dist_proj_grad_t1t2}
+		\begin{split}
+			\|s_k(t_k^{(2)}) - s_k(t_k^{(1)})\| & \le \int_{t_k^{(1)}}^{t_k^{(2)}} \|z_k(t)\|dt \\
+			& \le \int_{t_k^{(1)}}^{t_k^{(2)}} \|z_k(t_k^{(1)})\|dt \\
+			& \le (t_k^{(2)}-t_k^{(1)}) \|z_k(t_k^{(1)})\|,
+		\end{split}
+	\end{equation}
+	where we have used~\eqref{eq:lemma_reduced_gradient_norm} to bound the norm of the reduced gradient on $[t_k^{(1)},t_k^{(2)}]$.
+	Combined with~\eqref{eq:t1_leq_t2} and~\eqref{eq:def_t2}, we get
+	\begin{equation}
+		\begin{split}
+			\|z_k(t_k^{(1)})\| & \ge (t_k^{(2)}-t_k^{(1)}) \|z_k(t_k^{(1)})\| \\
+			& \ge \|s_k(t_k^{(2)}) - s_k(t_k^{(1)})\| \\
+			& \ge \|s_k(t_k^{(2)})\| - \|s_k(t_k^{(1)})\| \\
+			& \ge \dfrac{h_k}{2},
+		\end{split}
+	\end{equation}
+	which is the desired inequality.
+\end{proof}
+
+The next lemma gives an upper bound on the quadratic model $\psi(t)$ in an interval of interest.
+
+\begin{lemma}\label{lemma:bound_model_proj_grad_path}
+	Assume assumption~\ref{assumption:inner_iterates_compact} holds.
+	Also assume that for some $t_k^{(3)}>0 $, one has
+	\[\alpha_k = \|z_k(t_k^{(3)})\| > 0.\]
+	Then, if $T$ is the set of points in $[0,t_k^{(3)}]$ at which the piecewise quadratic $\psi$ is differentiable, 
+	\begin{equation}\label{eq:lemma_ineq_model_derivative_t3}
+		\psi^\prime(t) \le -\alpha_k^2 + t_k^{(3)}c_2^2\|H_k\|,
+	\end{equation}
+	for all $t\in T$.
+	
+	Furthermore, 
+	\begin{equation}\label{eq:lemma_ineq_model_derivative_t4}
+		\psi^\prime(t) \le -\dfrac{1}{2}\alpha_k^2 ,
+	\end{equation}
+	for all $t\in T \cap [0,t_k^{(4)}]$ and 
+	\begin{equation}\label{eq:lemma_ineq_model_t4}
+		\psi(t) \le  - \dfrac{\alpha_k^2}{2}t,
+	\end{equation}
+	for all $t\in  [0,t_k^{(4)}]$ where 
+	\begin{equation}\label{eq:t4_def}
+		t_k^{(4)} = \min \left(t_k^{(3)}, \dfrac{\alpha_k^2}{2c_2^2(\|H_k\|+1)}\right).
+	\end{equation}
+\end{lemma}
+
+\begin{proof}
+	For $t \in T$, let $i$ be the breakpoint index such that $t\in(t_i,t_{i+1})$. On the latter interval, $\psi$ is differentiable and we have, by expression~\eqref{eq:projected_gradient_path_full_expr}:
+	\begin{equation}\label{eq:model_proj_grad_path_derivative}
+		\begin{split}
+			\psi^\prime(t) & = \inner{g_k}{s_k^\prime(t)} + \inner{s_k(t)}{H_ks_k^\prime(t)} \\
+			& = -\inner{g_k}{z_i} - \inner{s_k(t)}{H_kz_i}.
+		\end{split}
+	\end{equation}
+	Because $z_i$ is, by definition, the orthogonal projection of the vector $g_k$ on a linear subspace:
+	\begin{equation}\label{eq:ineq_derivative_model_first_order}
+		\begin{split}
+			\inner{g_k}{z_i} & = \inner{z_i}{z_i} \\
+			& \ge \|z_k(t_k^{(3)})\|^2 = \alpha_k^2,
+		\end{split}
+	\end{equation}
+	where the last inequality follows from the monotonicity of the reduced gradient norm on $[0,\infty)$. 
+	
+	We now look at the quadratic terms. First, by Cauchy-Schwarz inequality:
+	\begin{equation}
+		\left|\inner{s_k(t)}{H_kz_i}\right| \le \|s_k(t)\| \|H_kz_i\|.
+	\end{equation}
+	Then, applying the triangle inequality to expression~\eqref{eq:projected_gradient_path_full_expr}, we obtain
+	\begin{equation}\label{eq:norm_proj_grad_step_ineq}
+		\begin{split}
+			\|s_k(t)\| & \le (t-t_i) \|z_i\| + \sum_{j=0}^{i-1} (t_{j+1}-t_j)\|z_j\| \\
+			& \le (t-t_i) \|g_k\| + \sum_{j=0}^{i-1} (t_{j+1}-t_j)\|g_k\| \\
+			& \le t\|g_k\| \le t_k^{(3)}c_2,
+		\end{split}
+	\end{equation}
+	where we have used the facts that for all breakpoints indices $j$, $\|z_i\| \le \|g_k\| \le c_2$ and that the scalar $t$ is taken in $T$. For the remaining terms:
+	\begin{equation}
+		\|H_kz_i\| \le \|H_k\| \|z_i\| \le c_2\|H_k\|.
+	\end{equation}
+	Combining the latter inequality with~\eqref{eq:norm_proj_grad_step_ineq}, we get the following bound for the quadratic terms:
+	\begin{equation}\label{eq:ineq_derivative_model_second_order}
+		\left|\inner{s_k(t)}{H_kz_i}\right| \le t_k^{(3)} c_2^2 \|H_k\|.
+	\end{equation}
+	Hence, using~\eqref{eq:ineq_derivative_model_first_order} and~\eqref{eq:ineq_derivative_model_second_order}:
+	\begin{equation}
+		\psi^\prime(t) \le -\alpha_k^2 + t_k^{(3)} c_2^2 \|H_k\|,
+	\end{equation}
+	for all $t \in T$, which proves~\eqref{eq:lemma_ineq_model_derivative_t3}.
+	Now, considering $t_k^{(4)}$ as defined by~\eqref{eq:t4_def}, since $t_k^{(4)} \le t_k^{(3)}$, we get that $\|z_k(t_k^{(4)})\| \ge \alpha_k > 0$. The above reasoning based on $t_k^{(4)}$ thus yields
+	\begin{equation}
+		\psi^\prime(t) \le -\alpha_k^2 + t_k^{(4)} c_2^2 \|H_k\| \le -\dfrac{\alpha_k^2}{2},
+	\end{equation}
+	for $t\in T$, $t\le t_k^{(4)}$. It follows that, for all $t\in [0,t_k^{(4)}]$:
+	\begin{equation}
+		\psi(t) \le -\dfrac{\alpha_k^2}{2}t,
+	\end{equation}
+	which completes the proof.
+\end{proof}
+
+The next lemma bounds the decrease guaranteed by the step.
+\begin{lemma}\label{lemma:step_guaranteed_decrease}
+	If assumptions~\ref{assumption:inner_iterates_compact}--\ref{assumption:model_hessian} hold and that $h_k > 0$, then
+	\begin{equation}\label{eq:bound_step_decrease}
+		q_k(s_k) \le -\kappa_{mdc} h_k^2 \min\left(\dfrac{h_k^2}{b_k},\Delta_k\right),
+	\end{equation}
+	where 
+	\begin{equation}
+		\kappa_{mdc} = \dfrac{\kappa_{fcd}}{64c_2^2}.
+	\end{equation}
+	Furthermore, if iteration $k$ is successful, then
+	\begin{equation}\label{eq:bound_successful_step_decrease}
+		\varphi(x_k) - \varphi(x_k+s_k) \ge \kappa_{sdc} h_k^2 \min\left(\dfrac{h_k^2}{b_k},\Delta_k\right),
+	\end{equation}
+	with $\kappa_{sdc} = \eta_1 \kappa_{mdc}$.
+\end{lemma} 
+\begin{proof}
+	We first observe that if we use $t_1^{(k)}$ as $t_k^{(3)}$ in the proof of lemma~\ref{lemma:bound_model_proj_grad_path} and apply lemma~\ref{lemma:majoration_reduced_gradient_norm}, we get 
+	\begin{equation}\label{eq:model_bound_t1}
+		q_k(t) \le -\dfrac{h_k^2}{0} t,
+	\end{equation}
+	for $t \in [0,t_k^{(5)}]$ with \[t_k^{(5)} := \min\left(t_k^{(1)},\dfrac{h_k^2}{8c_2^2 (\|H_k\|+1)}\right) = \dfrac{h_k^2}{8c_2^2 (\|H_k\|+1)}.\]
+	First, assume that $\|s_k(t_k^{(5)})\|_\infty \le \Delta_k.$ Then \footnote{TODO: might have to justify this ``then"}, by~\eqref{eq:step_drecrease_wrt_cauchy}:
+	\begin{equation}\label{eq:model_decrease_cauchy_in_tr}
+		q_k(s_k) \le -\kappa_{fcd} \frac{h_k^2}{8} t_k^{(5)}.
+	\end{equation}
+	Now, assume that $\|s_k(t_k^{(5)})\|_\infty > \Delta_k$. The latter implies that $\|s_k(t_k^C)\|_\infty = \Delta_k$ and from
+	\begin{equation}
+		\left\|s_k\left(\frac{\Delta_k}{c_2}\right)\right\|_\infty \le 	\left\|s_k\left(\frac{\Delta_k}{c_2}\right)\right\| \le \frac{\Delta_k}{c_2} \|g_k\| \le \Delta_k,
+	\end{equation}
+	we can deduce that 
+	\begin{equation}
+		t_k^C \ge \frac{\Delta_k}{c_2}.
+	\end{equation}
+	Therefore, using~\eqref{eq:model_bound_t1} with $t=t_k^C$ and~\eqref{eq:step_drecrease_wrt_cauchy} implies
+	\begin{equation}\label{eq:model_decrease_cauchy_at_tr}
+		q_k(s_k) \le -\kappa_{fcd} \frac{h_k^2}{8c_2} \Delta_k \le -\kappa_{fcd} \frac{h_k^2}{64c^2_2} \Delta_k,
+	\end{equation} 
+	because $c_2 \ge 1.$
+	The inequality~\eqref{eq:bound_step_decrease} results from gathering~\eqref{eq:model_decrease_cauchy_in_tr},~\eqref{eq:model_decrease_cauchy_at_tr} and the definition of scalar $b_k$. 
+	
+	Finally, if the step is successful, we get inequality~\eqref{eq:bound_successful_step_decrease} by using~\eqref{eq:bound_step_decrease} and the step acceptance condition $\rho_k > \eta_1$ from algorithm~\ref{algo:trinner_iteration}. 
+\end{proof}
