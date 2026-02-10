@@ -653,7 +653,7 @@
 	be the successive values of $t$ at which the projected step $s_k(t)$ hits a bound, also called breakpoints. Hitting a bound not only affects the corresponding components, that are now fixed, but it also affects the other components, as the steepest direction must now be projected on a subspace of the form 
 	\[\left\{d \in \RR^n \ | \ Ad=0,\ d_i=0\ \text{for some}\ i\right\}\]
 	This motivates to adapt the notion of tangent space at a point on the projected gradient path:
-	\begin{equation}\label{eq:tangent_space}
+	\begin{equation}\label{eq:path_tangent_space}
 		T(t) := \left\{ d \in \RR^n \ | \ Ad = 0,\ d_i=0\ \text{for all}\ i\in I(t)\right\},
 	\end{equation}
 	for $t\ge0$. This enables us to give a recursive expression of $s_k(t)$ on each interval $[t_i,t_{i+1})$, with $0 \leq i \le p$, as:
