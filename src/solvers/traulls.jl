@@ -81,6 +81,8 @@ function jac_residuals(model::PolyhedralCnls, x::Vector)
     return Jx
 end
 
+
+
 """
     jac_nlconstraints!(model::PolyhedralCnls, x::Vector, C::Matrix) 
 

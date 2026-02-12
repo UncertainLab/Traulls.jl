@@ -18,7 +18,7 @@ of vectors must equal `0` whereas `fixvars[i] = false` means that component `i` 
 with such a matrix efficient and without explicitly storing the matrix `Z`.
 """
 mutable struct SubspaceMatrix{T<:Real} <: AbstractMatrix{T} 
-    mat::AbstractMatrix{T}
+    eqmat::AbstractMatrix{T}
     fixvars::BitVector
 end
 
@@ -58,7 +58,7 @@ of vectors must equal `0` whereas `fixvars[i] = false` means that component `i` 
 
 """
 struct TransposeSubspaceMatrix{T<:Real,S<:AbstractMatrix{T}} <: AbstractMatrix{T}
-    mat::Transpose{T,S}
+    eqmat::Transpose{T,S}
     fixvars::BitVector
 end
 
@@ -71,10 +71,10 @@ Base.:*(A::SubspaceMatrix{T},x::Vector{T}) where T = vcat(A.mat*x,x[A.fixvars])
 # overloads matrix vector product with transposition
 function Base.:*(A::TransposeSubspaceMatrix{T,S},x::Vector{T}) where {T,S}
     
-    (n,m) = size(A.mat)
+    (n,m) = size(A.eqmat)
     res = Vector{T}(undef,n)
     
-    mul!(res,A.mat,x[1:m])
+    mul!(res,A.eqmat,x[1:m])
     
     if any(A.fixvars)
         res[A.fixvars] .+= x[m+1:end]
@@ -91,13 +91,71 @@ nb_fixed(submat::SubspaceMatrix{T}) where T = count(submat.fixvars)
 using the normal equations approach.
 =#
 
+#####################  REWORK PROJECTOR OPERATOR ##############################
+
+"""
+    SubspaceProjector{T}
+
+This structure encodes the projector operator onto a subspace of the form 
+`{v | Av = 0, vᵢ = 0 for i ∈ fixvars}`
+where `A` is a full row rank `m × n` ('m < n') matrix and `fixvars = [i₁,...iₚ]`, (`p ≤ n - m`)
+is a subset of `[1,2,...,n]`.
+
+The subspace is merely the null space of the matrix `A₊` being the concatenation of `A` 
+with `Z`, a  `p × n` matrix whose row `k` is the row `iₖ` of the `n × n` identity matrix.
+
+The projection is computed by solving the normal equations associated to the 
+projection quadratic program, which involves the Cholesky decomposition of 
+the Gram matrix `A₊A₊ᵀ`.
+
+** Attributes
+
+* `workspace_mat`: `SubspaceMatrix` representing matrix `A₊`
+
+* `chol_gram`: `Factorization` storing the Cholesky decomposition of `A₊A₊ᵀ`
+
+* `buffer`: Buffer vector to store intermediate results when solving normal equations,
+avoids realocation of memomry at every projection computation  
+"""
+mutable struct SubspaceProjector{T<:Real} <: Projector{T}
+    workspace_mat::SubspaceMatrix{T}
+    chol_gram::Cholesky{T,Matrix{T}}
+    buffer::Vector{T}
+end
+
+# Update the Cholesky decomposition of the Gram matrix when adding one bound constraint 
+# to the active set 
+
+function update_cholesky_gram_mat!(
+    proj_op::SubspaceProjector,
+    idx::Int,)
+    return 
+end
+
+# Update the Cholesky decomposition of the Gram matrix when adding several bounds constraints 
+# to the active set
+
+function update_cholesky_gram_mat!()
+    return 
+end
+
+# Update working space matrix and the projector operator 
+# First identify the bounds newly active at current point 
+# Then form the corresponding subspace projector by forming the 
+# Cholesky decomposition of the associated Gram matrix. 
+
+function update_working_space!()
+    return
+end
+##################### DEPRECATED CODE #########################################
+
 """
     SubspaceProjector{T}
 
 This structure encodes the projector operator onto a subspace of the form `{v | Av = 0, vᵢ = 0 for i ∈ fixvars}`
 where `A` is a full row rank `m × n` ('m < n') matrix and `fixvars = [i₁,...iₚ]`, (`p ≤ n - m`) is a subset of `[1,2,...,n]`.
 
-The subspace is merely the null space of the matrix `A₊` defined as the concatenation of `A` with `Z` defined as the
+The subspace is merely the null space of the matrix `A₊` being the concatenation of `A` with `Z`, a  
 `p × n` matrix whose row `k` is the row `iₖ` of the `n × n` identity matrix.
 
 The projection is computed by solving the normal equations associated to the projection quadratic program,
@@ -244,8 +302,6 @@ function active_bounds!(
     x_low::Vector{T},
     x_upp::Vector{T};
     atol::Float64 = sqrt(eps(T))) where T
-
-
 
     active = BitVector(undef,size(x,1))
     for i in axes(x,1)
