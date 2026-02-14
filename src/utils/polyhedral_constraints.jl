@@ -112,35 +112,33 @@ the Gram matrix `A₊A₊ᵀ`.
 
 * `workspace_mat`: `SubspaceMatrix` representing matrix `A₊`
 
-* `chol_gram`: `Factorization` storing the Cholesky decomposition of `A₊A₊ᵀ`
+* `chol_gram_augmat`: `Factorization` storing the Cholesky decomposition of `A₊A₊ᵀ`
 
-* `buffer`: Buffer vector to store intermediate results when solving normal equations,
-avoids realocation of memomry at every projection computation  
+* `chol_gram_eqmat`: `Factorization` storing the Cholesky decomposition of `A₊A₊ᵀ`
 """
 mutable struct SubspaceProjector{T<:Real} <: Projector{T}
     workspace_mat::SubspaceMatrix{T}
-    chol_gram::Cholesky{T,Matrix{T}}
-    buffer::Vector{T}
+    chol_gram_augmat::Cholesky{T,Matrix{T}}
+    chol_gram_eqmat
 end
 
 # Update the Cholesky decomposition of the Gram matrix when adding one bound constraint 
 # to the active set 
 
-function update_cholesky_gram_mat!(
-    proj_op::SubspaceProjector,
-    idx::Int,)
+function cholesky_augmented_gram_mat!(
+    )
     return 
 end
 
 # Update the Cholesky decomposition of the Gram matrix when adding several bounds constraints 
 # to the active set
 
-function update_cholesky_gram_mat!()
+function update_projector!()
     return 
 end
 
 # Update working space matrix and the projector operator 
-# First identify the bounds newly active at current point 
+# First set the newly active bounds as fixed variables 
 # Then form the corresponding subspace projector by forming the 
 # Cholesky decomposition of the associated Gram matrix. 
 
