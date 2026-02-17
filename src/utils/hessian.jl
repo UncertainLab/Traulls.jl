@@ -67,10 +67,35 @@ function update_hessian!(
     return
 end
 
+# SR1 approximation
+
+mutable struct SR1 <: ALHessian
+    J::Matrix
+    C::Matrix
+    S::Matrix
+    mu::Float64
+    secant_rhs::Bool
+end
+
+# Constructor
+
+function SR1(
+    J::AbstractMatrix,
+    C::AbstractMatrix,
+    mu::Float64)
+
+    n = size(J,2)
+
+    return SR1(J,C,zeros(n,n),mu,zeros(n))
+end
+
+# Overload
+
 """
     HybridSR1 <: ALHessian
 
 Mutable structure reprensenting the SR1 approximation of the Augmented Lagrangian Hessian
+with hybrid updates
 
 **Attributes**
 
@@ -125,8 +150,8 @@ end
 
 """ Base.:*(H::HybridSR1,v::Vector)
 
-Overloads the `*` operator to the type [`HybridSR1`](@ref) for better Hessian-vector product.
-Avoids to perform matrix-matrix multiplication. 
+Overloads the `*` operator to the type [`HybridSR1`](@ref) to compute Hessian-vector products
+without having to perform matrix-matrix multiplications.
 """
 function Base.:*(H::HybridSR1, v::Vector) 
     
@@ -170,11 +195,11 @@ function update_hessian!(
 
     # In current version, Jacobians are implicitly updated when evaluated at trial point 
     # TODO: think about a more modular way of handeling Jacobians in place modifications
-    # H.J .= J_next[:,:]
-    # H.C .= C_next[:,:]
+    H.J .= J_next[:,:]
+    H.C .= C_next[:,:]
 
     # Update small_residuals field
-    # check_small_residuals(H,mx,mx_next,kappa_sml_res)
+    check_small_residuals!(H,mx,mx_next,kappa_sml_res)
     H.small_res = false
 
     return
@@ -242,7 +267,7 @@ Sets `small_res` attribute of `H` to the boolean result of  `(φ - φ₊) / φ <
 
 Modifies in place the `small_res` attribute of `H`.
 """
-function check_small_residuals(
+function check_small_residuals!(
     H::HybridSR1,
     mx::Float64,
     mx_next::Float64,
