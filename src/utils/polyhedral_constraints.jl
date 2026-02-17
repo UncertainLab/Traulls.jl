@@ -83,6 +83,12 @@ function Base.:*(A::TransposeSubspaceMatrix{T,S},x::Vector{T}) where {T,S}
     return res
 end
 
+# Set the bounds corresponding to indices in array `newly_active` as active
+function add_active_bounds!(M::SubspaceMatrix{T}, newly_active::Vector{Int}) where T
+
+    M.fixvars[newly_active] .= true
+    return
+end
 # Returns the number of fixed variables in the subsspace represented by the `SubspaceMatrix` `A`
 nb_fixed(submat::SubspaceMatrix{T}) where T = count(submat.fixvars)
 
@@ -101,12 +107,12 @@ This structure encodes the projector operator onto a subspace of the form
 where `A` is a full row rank `m × n` ('m < n') matrix and `fixvars = [i₁,...iₚ]`, (`p ≤ n - m`)
 is a subset of `[1,2,...,n]`.
 
-The subspace is merely the null space of the matrix `A₊` being the concatenation of `A` 
-with `Z`, a  `p × n` matrix whose row `k` is the row `iₖ` of the `n × n` identity matrix.
+The subspace is the null space of the matrix `A₊` defined as the concatenation of `A` with `Z`, a
+`p × n` matrix whose row `k` is the row `iₖ` of the `n × n` identity matrix.
 
 The projection is computed by solving the normal equations associated to the 
 projection quadratic program, which involves the Cholesky decomposition of 
-the Gram matrix `A₊A₊ᵀ`.
+the augmented Gram matrix `A₊A₊ᵀ`.
 
 ** Attributes
 
@@ -114,26 +120,89 @@ the Gram matrix `A₊A₊ᵀ`.
 
 * `chol_gram_augmat`: `Factorization` storing the Cholesky decomposition of `A₊A₊ᵀ`
 
-* `chol_gram_eqmat`: `Factorization` storing the Cholesky decomposition of `A₊A₊ᵀ`
+* `chol_gram_eqmat`: `Factorization` storing the Cholesky decomposition of `AAᵀ`
 """
 mutable struct SubspaceProjector{T<:Real} <: Projector{T}
     workspace_mat::SubspaceMatrix{T}
     chol_gram_augmat::Cholesky{T,Matrix{T}}
-    chol_gram_eqmat
+    chol_gram_eqmat::Cholesky{T,Matrix{T}}
 end
+
+"""
+    SubspaceProjector(A,chol_AAᵀ)
+
+Constructor for the `SubspaceProjector` corresponding to the projection operator onto the null space of the matrix `A`.
+
+** Arguments
+
+* `A`: full row rank `(m × n)` (`m < n`) matrix
+
+* `chol_AAᵀ`: `Factorization` storing the Cholesky decomposition of `AAᵀ`
+"""
+SubspaceProjector(A::Matrix{T},chol::Cholesky{T,Matrix{T}}) where T = SubspaceProjector(SubspaceMatrix(A),chol)
+
+# Constructor for polyhedra with initial active bounds
+"""
+    SubspaceProjector
+
+Constructor for the `SubspaceProjector` corresponding to the projection operator
+onto the subspace `{v | Av = 0, vᵢ = 0 for i ∈ fixvars}`
+where `A` is a full row rank `m × n` ('m < n') matrix and
+`fixvars = [i₁,...iₚ]`, (`p ≤ n - m`) is a subset of `[1,2,...,n]`.
+
+** Arguments
+
+* `A`: Linear equality matrix
+
+* `fixvars`: `BitVector` encoding the vectors components that are set to 0
+
+* `chol_AAᵀ`: `Factorization` storing the Cholesky decomposition of `AAᵀ`
+"""
+function SubspaceProjector(A::Matrix{T},fixvars::BitVector,chol_aat::Cholesky{T,Matrix{T}}) where T
+
+    subA = SubspaceMatrix(A,fixvars)
+    chol = cholesky_augmented_gram_mat(A,fixvars,chol_aat)
+
+    SubspaceProjector(subA,chol,chol_aat)
+end
+
 
 # Update the Cholesky decomposition of the Gram matrix when adding one bound constraint 
 # to the active set 
 
-function cholesky_augmented_gram_mat!(
-    )
-    return 
+function cholesky_augmented_gram_mat(A::Matrix,
+                                      fix_bounds::BitVector,
+                                      chol_aat::Cholesky)
+
+    (m,n) = size(A)
+    p = count(fix_bounds)
+    mpp = m+p
+    @assert mpp <= n
+
+    # Auxiliary buffer arrays
+    H = Matrix{Float64}(I,p,p)
+    L = LowerTriangular(Matrix{Float64}(undef, mpp, mpp))
+
+    A_act_cols = view(A,:,fix_bounds)
+    G = chol_aat.L \ A_act_cols
+    mul!(H, G', G, -1, 1) # forms I - GᵀG
+
+    # Forms the L factor of ÃÃᵀ Cholesy decomposition
+    L[1:m,1:m] .= chol_aat.L
+    L[m+1:end,1:m] .= G'
+    L[m+1:end,m+1:end] .= cholesky(H).L
+    return Cholesky(L)
 end
 
 # Update the Cholesky decomposition of the Gram matrix when adding several bounds constraints 
 # to the active set
 
-function update_projector!()
+function update_projector!(proj_op::SubspaceProjector)
+
+    proj_op.chol_gram_augmat = cholesky_augmented_gram_mat(
+        proj_op.workspace_mat.eqmat,
+        proj_op.workspace_mat.fixvars,
+        proj_op.chol_gram_eqmat)
     return 
 end
 
@@ -142,7 +211,79 @@ end
 # Then form the corresponding subspace projector by forming the 
 # Cholesky decomposition of the associated Gram matrix. 
 
-function update_working_space!()
+function update_working_space!(proj_op::SubspaceProjector, newly_active::Vector{Int})
+
+    # Set new constraints active
+    add_active_bounds(proj_op.workspace_mat, newly_active)
+
+    # Update accordingly the projection operator
+    update_projector(proj_op)
+    return
+end
+
+"""
+    mul!(r,P,x)
+
+Computes the matrix-vector product `Px` and stores the result in `r`, where `P`
+ is the projection operator onto the subspace
+`{v | Av = 0, vᵢ = 0 for i ∈ fixvars}` where `A` is a full row rank `m × n` ('m < n') matrix
+and `fixvars = [i₁,...iₚ]` (`p ≤ n - m`) is a subset of `[1,2,...,n]`.
+
+Overloads the `LinearAlgebra.mul!` method.
+
+** Arguments
+
+* `r`: Buffer vector to store the result of the projection operation
+
+* `P`: Projection operator encoded as a `SubspaceProjector`
+
+* `x`: input vector
+
+** On return
+
+Nothing is returned, the result is stored in vector `r`.
+"""
+function mul!(r::Vector{T},P::SubspaceProjector{T},x::Vector{T}) where T
+
+    temp = P.workspace_mat * x # form A₊x
+    ldiv!(P.chol_gram_augmat,temp) # solve for y (A₊A₊ᵀ)y = A₊x
+    r .= x .- transpose(P.workspace_matr)*temp # form r = x - A₊ᵀy
+
+    return r
+end
+
+"""
+    Base.:*(P,x)
+
+Computes the matrix-vector product `Px`, where `P` is the projection operator onto
+the subspace `{v | Av = 0, vᵢ = 0 for i ∈ fixvars}`
+where `A` is a full row rank `m × n` ('m < n') matrix
+and `fixvars = [i₁,...iₚ]`, (`p ≤ n - m`) is a subset of `[1,2,...,n]`.
+
+Overloads the base multiplication `*` method.
+
+** Arguments
+
+* `P`: Projection operator encoded as a `SubspaceProjector`
+
+* `x`: input vector
+
+** On return
+
+* `res`: `Vector` containing the result of the projection operation
+"""
+function Base.:*(P::SubspaceProjector{T}, x::Vector{T}) where T
+
+    res = Vector{T}(undef,size(x,1))
+    mul!(res,P,x)
+    return res
+end
+
+# Reset the projector operator by setting all bounds as inactive
+function reset_projector!(P::SubspaceProjector)
+
+    P.workspace_mat.fixvars .= false
+    P.chol_gram_augmat = P.chol_gram_eqmat
     return
 end
 ##################### DEPRECATED CODE #########################################
@@ -153,15 +294,15 @@ end
 This structure encodes the projector operator onto a subspace of the form `{v | Av = 0, vᵢ = 0 for i ∈ fixvars}`
 where `A` is a full row rank `m × n` ('m < n') matrix and `fixvars = [i₁,...iₚ]`, (`p ≤ n - m`) is a subset of `[1,2,...,n]`.
 
-The subspace is merely the null space of the matrix `A₊` being the concatenation of `A` with `Z`, a  
+The subspace is the null space of the matrix `A₊` defined as the concatenation of `A` with `Z`, a
 `p × n` matrix whose row `k` is the row `iₖ` of the `n × n` identity matrix.
 
 The projection is computed by solving the normal equations associated to the projection quadratic program,
-which involves the Cholesky decomposition of the augmented matrix `A₊A₊ᵀ`.
+which involves the Cholesky decomposition of the augmented Gram matrix `A₊A₊ᵀ`.
 
 ** Attributes
 
-* `mat`: `SubspaceMatrix` representing matrix `A₊`
+* ``: `SubspaceMatrix` representing matrix `A₊`
 
 * `chol`: `Factorization` storing the Cholesky decomposition of `A₊A₊ᵀ`
 """
