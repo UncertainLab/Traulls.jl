@@ -134,7 +134,7 @@
 	\end{equation}
 	We end this section by introducing some notations. Jacobian matrices of $r$ and $c$ evaluated at $x$ are respectively noted $J(x)$ and $C(x)$. Components of a vector $x\in\RR^n$ are noted $x_i$ for $i=1,\ldots,n$. When describing iterative processes to solve problem~\eqref{pb:cnls}, we index vectors and matrices by the iteration number. For instance, at iteration $k$, $(x_k,\lambda_k)$ is the current primal-dual iterate. For functions evaluated at $x_k$, we use the shorthand notation $r_k = r(x_k)$, $c_k =c(x_k)$, $J_k=J(x_k)$ etc. To not interfere with previous notation for components, we will add parentheses to make the distinction clear. For instance, $(x_k)_i$ denotes the $i$-th component of vector $x_k$.	
 	
-	The rest of the paper is organised as follows. In section~\ref{sec:algorithm}, we present our algorithmic framework and discuss implementation details. We study global convergence in section~\ref{sec:convergence_analysis}. Numerical experiments are shown in section~\ref{sec:numerical_experiments} and we end up by a conclusion and perspectives.
+	The rest of the paper is organized as follows. In section~\ref{sec:algorithm}, we present our algorithmic framework and discuss implementation details. We study global convergence in section~\ref{sec:convergence_analysis}. Numerical experiments are shown in section~\ref{sec:numerical_experiments} and we end up by a conclusion and perspectives.
 	
 	\section{About the algorithm}\label{sec:algorithm}
 	
@@ -680,7 +680,7 @@
 	\begin{proof}
 		The first statement follows from the inclusion~\eqref{eq:nested_active_sets}. Inequality~\eqref{eq:lemma_reduced_gradient_norm} then results from the fact that projecting the same vector on a smaller linear subspace reduces the norm of its projection. 
 	\end{proof}
-	When referring to the tangent space and the reducted gradient at a given breakpoint $t_i$, we will make use of the shorthand notation $T_i := T(x_k+s_k(t_i))$ and $z_i:=z_k(t_i)$. Notice that because the active set is fixed on each interval $[t_i,t_{i+1})$, so is the tangent space and hence, the reduced gradient is constant. Also, we can deduce from lemma~\ref{lemma:non_increasing_reduced_gradient_norm} that the tangent spaces associated to each breakpoint form a finite sequence of nested linear subspaces
+	When referring to the tangent space and the reducted gradient at a given breakpoint $t_i$, we will make use of the shorthand notation $T_i := T(t_i)$ and $z_i:=z_k(t_i)$. Notice that because the active set is fixed on each interval $[t_i,t_{i+1})$, so is the tangent space and hence, the reduced gradient is constant. Also, we can deduce from lemma~\ref{lemma:non_increasing_reduced_gradient_norm} that the tangent spaces associated to each breakpoint form a finite sequence of nested linear subspaces
 	\[T_0 \supseteq T_1 \supseteq \ldots \supseteq T_p.\]
 	We can now expand equation~\eqref{eq:projected_gradient_path_recursion}:
 	\begin{equation}\label{eq:projected_gradient_path_full_expr}
@@ -701,14 +701,14 @@
 	\begin{lemma}\label{lemma:majoration_reduced_gradient_norm}
 		If assumption~\ref{assumption:inner_iterates_compact} holds and that $h_k>0$, then 
 		\[\|z_k(t_k^{(1)})\| \ge \dfrac{h_k}{2},\]
-		where $\kappa_{ubg}$ is the constant defined by \[\kappa_{ubg} := \max\left(1, \max_{x \in \calX} \|\nabla \varphi(x)\|\right),\] 
+		where $\kappa_{ubg}$\footnote{Upper Bound on the Gradient norm} is the constant defined by \[\kappa_{ubg} := \max\left(1, \max_{x \in \calX} \|\nabla \varphi(x)\|\right),\] 
 		and $t_k^{(1)}=\frac{h_k}{2\kappa_{ubg}}$.
 	\end{lemma}
 	
 	\begin{proof} 
 		First note that the constant $\kappa_{ubg}$ is well defined because $\varphi$ is continuously differentiable on $\calX$, the latter being compact by assumption~\ref{assumption:inner_iterates_compact}.
 		
-		By non-expansivity of the projection mapping onto the convex set $\Omega$, one has, for any $t\ge 0$:
+		By non-expressivity of the projection mapping onto the convex set $\Omega$, one has, for any $t\ge 0$:
 		\begin{equation}
 			\begin{split}
 				\left\| s_k\left(t\right) \right\| & = \left\| \proj{\Omega}{x_k-tg_k}-x_k\right\| \\
@@ -932,51 +932,48 @@
 	
 	\appendix
 	
-	\section{Block Cholesky factorization of the augmented matrix}\label{appendix:chol_aug_matrix}
-	
-	In this appendix, we show how to construct the Cholesky decomposition of the matrix $\tilde{A}\tilde{A}^T$, where $\tilde{A}$ has been introduced at~\eqref{eq:active_constraints_matrix}. The content of this appendix is adapted from the description given in~\cite{golubvanloan:2013} on how to compute a Cholesky decomposition for a general block matrix.
-	
-	We remind that, considering  $\left\{i_1,\ldots, i_p\right\} \subseteq \{1,\ldots,n\}$, with $p < n-m$, we have
-	\[\tilde{A} = \begin{bmatrix}
+	\section{Block Cholesky factorization of the augmented Gram matrix}\label{appendix:chol_aug_matrix}
+	Let $A$ be a $m \times n$ full line rank matrix for which the Cholesky factor of the Gram matrix $AA^T$ is available. Considering $\calA = \left\{i_1,\ldots, i_p\right\} \subseteq \{1,\ldots,n\}$, let $Z \in \RR^{p\times n}$ the matrix whose row $k$ is the row $i_k$ of the $n\times n$ identity.
+	In this appendix, we show how to construct the Cholesky decomposition of the Gram matrix matrix $MM^T$, where $M$ is defined as
+	\[M = \begin{bmatrix}
 		A \\ Z
-	\end{bmatrix} \in \RR^{(m+p)\times n},\]
-	where $Z \in \RR^{p\times n}$ the matrix whose row $k$ is the row $i_k$ of the $n\times n$ identity matrix.
-	We assume that we already know a $m\times m$ lower triangular matrix $L$ such that $AA^T=LL^T$. Following the reasoning in~\cite[][section 4.2.9]{golubvanloan:2013}, we will show how, at the cost of extra computations, we can recover the Cholesky factor $\tilde{L}$ using the block structure of $\tilde{A}\tilde{A}^T$ and the factor $L$. The definition of $\tilde{A}$ naturally leads to the block pattern
-	\[\tilde{A}\tilde{A}^T = \begin{bmatrix}
+	\end{bmatrix} \in \RR^{(m+p)\times n},\]  
+	 Following the reasoning in~\cite[][section 4.2.9]{golubvanloan:2013} for the Cholesky decomposition of a general block matrix, we will show how, at the cost of extra computations, we can recover the Cholesky factor of $MM^T$ using its block structure and the factor $L$. The definition of $M$ naturally leads to the block pattern
+	\[MM^T = \begin{bmatrix}
 		AA^T & AZ^T \\ ZA^T & ZZ^T.
 	\end{bmatrix}\]
 	Simple computations first show that 
 	\[ZZ^T = I_p,\quad AZ^T = [A_{i_1},\ldots,A_{i_p}].\]
-	The latter, written $A_{|\calA}$, is the restriction of A to the columns corresponding to the indices in $\calA$. Let $\tilde{L}$ be $(m+p)\times(m+p)$ triangular such that $\tilde{A}\tilde{A}^T=\tilde{L}\tilde{L}^T$. We apply the same block structure to $\tilde{L}$, i.e.
+	The latter, written $A_{|\calA}$, is the restriction of A to the columns corresponding to the indices in $\calA$. Let $\tilde{L}$ be $(m+p)\times(m+p)$ triangular such that $MM^T=\tilde{L}\tilde{L}^T$. We apply the same block structure to $\tilde{L}$, i.e.
 	\[\tilde{L} = \begin{bmatrix}
-		\tilde{L}_{11} & 0 \\ \tilde{L}_{21} & \tilde{L}_{22},
+		\tilde{L}_{11} & 0 \\ G_{21} & \tilde{L}_{22},
 	\end{bmatrix},\]
 	with 
 	\begin{itemize}
 		\item $\tilde{L}_{11} \ m\times m$ lower triangular
-		\item $\tilde{L}_{21} \ p\times m$
+		\item $G_{21} \ p\times m$
 		\item $\tilde{L}_{22} \ p \times p$ lower triangular
 	\end{itemize}
-	Verifying $\tilde{A}\tilde{A}^T= \tilde{L}\tilde{L}^T$ implies the matrix equality
+	Verifying $MM^T= \tilde{L}\tilde{L}^T$ implies the matrix equality
 	\begin{equation}\label{eq:block_equalities_chol_fact}
 		\begin{bmatrix}
 			AA^T &  A_{|\calA} \\  A_{|\calA}^T & I_p.
 		\end{bmatrix}
 		=
 		\begin{bmatrix}
-			\tilde{L}_{11}\tilde{L}_{11}^T & \tilde{L}_{11}\tilde{L}_{21}^T \\ 
-			\tilde{L}_{21}\tilde{L}_{11}^T & \tilde{L}_{21}\tilde{L}_{21}^T + \tilde{L}_{22}\tilde{L}_{22}^T
+			\tilde{L}_{11}\tilde{L}_{11}^T & \tilde{L}_{11}G_{21}^T \\ 
+			G_{21}\tilde{L}_{11}^T & G_{21}G_{21}^T + \tilde{L}_{22}\tilde{L}_{22}^T
 		\end{bmatrix}.
 	\end{equation}
 	By comparison of the blocks in~\eqref{eq:block_equalities_chol_fact}, it follows that
 	\begin{equation*}
 		\begin{aligned}
 			AA^T &= \tilde{L}_{11}\tilde{L}_{11}^T \\
-			A_{|\calA} &= \tilde{L}_{11}\tilde{L}_{21}^T \\
-			I_p &= \tilde{L}_{21}\tilde{L}_{21}^T + \tilde{L}_{22}\tilde{L}_{22}^T.
+			A_{|\calA} &= \tilde{L}_{11}G_{21}^T \\
+			I_p &= G_{21}G_{21}^T + \tilde{L}_{22}\tilde{L}_{22}^T.
 		\end{aligned}
 	\end{equation*}
-	Therefore, we can form $\tilde{L}$ by first setting $\tilde{L}_{11}=L$, then solve $m$ lower triangular systems to compute $\tilde{L}_{21}$ and finally compute the Cholesky factor of $I_p-\tilde{L}_{21}\tilde{L}_{21}^T$ to get $\tilde{L}_{22}$.
+	Therefore, we can form $\tilde{L}$ by first setting $\tilde{L}_{11}=L$, then solve $m$ lower triangular systems to compute $G_{21}$ and finally compute the Cholesky factor of $I_p-G_{21}G_{21}^T$ to get $\tilde{L}_{22}$.
 	
 	\section{Cauchy point computation}\label{appendix:cauchy_point_computation}
 	
