@@ -32,17 +32,6 @@ mutable struct GN <: ALHessian
     mu::Float64 
 end
 
-""" vthv(H::GN,v::Vector)
-
-The quadratic term `vᵀHv` where `H = JᵀJ + μCᵀC` is the Gauss-Newton approximation of the augmented Lagrangian Hessian encoded into
-the [`GN`](@ref) type.
-"""
-function vthv(H::GN, v::Vector) 
-    Jv = H.J*v
-    Cv = H.C*v 
-    return dot(Jv,Jv) + H.mu*dot(Cv,Cv)
-end 
-
 """ Base.:*(H::GN, v)
 
 Overload the `*` operator to the type [`GN`](@ref) in order to avoid matrix-matrix multiplication
@@ -69,12 +58,14 @@ end
 
 # SR1 approximation
 
-mutable struct SR1 <: ALHessian
-    J::Matrix
-    C::Matrix
-    S::Matrix
-    mu::Float64
-    secant_rhs::Bool
+mutable struct SR1{T<:Real} <: ALHessian{T}
+    J::AbstractMatrix{T}
+    C::AbstractMatrix{T}
+    S::AbstractMatrix{T}
+    mu::T
+    step::Vector{T}
+    secant_rhs::Vector{T}
+    temp::Vector{T}
 end
 
 # Constructor
@@ -86,10 +77,69 @@ function SR1(
 
     n = size(J,2)
 
-    return SR1(J,C,zeros(n,n),mu,zeros(n))
+    return SR1(J,C,zeros(n,n),mu,zeros(n),zeros(n),zeros(n),zeros(n),zeros(n))
 end
 
-# Overload
+
+
+# Overload base multiplication
+
+function Base.:*(sr1_op::SR1{T}, v::Vector{T}) where T
+
+    Hv = Vector{T}(undef,size(v,1))
+    mul!(Hv, sr1_op, v)
+
+    return Hv
+end
+# Overload LinearAlgebra.mul! method
+
+function mul!(Hv::Vector{T}, sr1_op::SR1{T}, v::Vector{T}) where T
+
+    # Buffer vectors for intermediate computations
+    temp = sr1_op.temp
+
+    # Reset result values to make sure it is zero
+    Hv .= 0.0
+    # JᵀJv term
+    mul!(temp, sr1_op.J, v) # form Jv
+    mul!(Hv, sr1.op.J', temp, 1, 1) # add JᵀJv to result Hv
+
+    # μCᵀCv term
+    mul!(temp, sr1_op.C, v) # form Cv
+    mul!(Hv, sr1_op.C', temp, sr1_op.mu, 1) # add μCᵀCv to result Hv
+
+    # Sv term
+    mul!(Hv, sr1_op.S, v, 1, 1) # add Sv to result Hv
+
+    return
+end
+
+
+# Method to apply the structured SR1 update to second order terms
+
+function update_sr1_second_order!(sr1_op::SR1)
+
+    # Tolerance for the skipping update safeguard
+    eps_safeguard = sqrt(eps(T))
+
+    # Vectors of the secant Equation Ss = y
+    y = sr1_op.secant_rhs
+    s = sr1_op.step
+
+    # Buffer to store y - Ss
+    ymSs = sr1_op.temp
+    ymSs .= y
+    mul!(ymSs, sr1_op.S, s, -1, 1) # Form ymSs = y - Ss
+
+    # Apply update if denominator (y - Ss)ᵀs not too small
+    denom = dot(s,ymSs)
+    if abs(denom) > eps_safeguard * norm(s) * norm(ymSs)
+        # Add (y - Ss)(y - Ss)ᵀ / (y - Ss)ᵀs to second order terms approximation
+        mul!(sr1_op.S, ymSs, ymSs', 1/denom, 1)
+    end
+
+    return
+end
 
 """
     HybridSR1 <: ALHessian

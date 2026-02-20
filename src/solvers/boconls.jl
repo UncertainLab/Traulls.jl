@@ -750,7 +750,7 @@ function solve_subproblem(
 
     H = @match hessian_approx begin
         $gn     => GN(J,C,mu)
-        $sr1    => HybridSR1(J,C,mu)
+        $sr1    => SR1(J,C,mu)
     end
 
     set_initial_radius!(tr,g)
@@ -789,45 +789,65 @@ function solve_subproblem(
 
         if short_circuit continue end
 
-        # Evaluate and analyze the reduction at trial point x+s
+        # Evaluate the objective at trial point
         x .+= s
-        residuals!(model,x,rx); nlconstraints!(model,x,cx)
+        residuals!(model,x,rx)
+        nlconstraints!(model,x,cx)
         alx = al_obj(rx,cx,y,mu)
 
         # Step taken on the slack variables, if any
         if n_slack > 0
+
+            # Add "magical" step to current point x
+            step_slack!(x,y,cx,mu,n_slack,p)
+
+            # Adjust the step vector
             slack_idx = n - n_slack + 1 : n
             ineq_idx = p - n_slack + 1 : p
+            s[slack_idx] .= x[slack_idx] .- x_prev[slack_idx] .- s[slack_idx]
+
+            # Update the constraints involving slack variables without evaluating
+            cx[ineq_idx] .-= s[slack_idx]
             
-            step_slack!(x,y,cx,mu,n_slack,p)
-            s[slack_idx] .= x[slack_idx] .- x_prev[slack_idx] .- s[slack_idx] # Adjust the step 
-            cx[ineq_idx] .-= s[slack_idx] # Update the constraints involving slack variables without evaluating
-            
-            # Add reduction of the true objective function after taking second step to pred  
+            # Add reduction of the true objective function after taking second
+            # step to pred
             pred -= alx
             alx = al_obj(rx,cx,y,mu)
             pred += alx
 
         end
 
+        # Compute the ratio actual reduction / predicted reduction
         ratio = step_ratio(alx_prev, alx, pred)
         # verbose && println("[solve_subproblem] ared = $ared, pred = $pred, ratio = $ratio")
 
         if accept_step(tr,ratio)
             
-            # Update the Hessian 
+            # Update gradient and Hessian approximation
 
             if hessian_approx == gn # Gauss-Newton case
-                jac_residuals!(model,x,J); jac_nlconstraints!(model,x,C) # Implicitly modifies J and C fields in H
+                # Implicitly modifies J and C fields in H
+                jac_residuals!(model,x,J)     # Implicitly modifies field J
+                jac_nlconstraints!(model,x,C) # Implicitly modifies field C
                 al_grad!(rx,cx,y,mu,J,C,g)
             
             else # Quasi Newton update
-                # Form right handside of the structured secant equation
+                # Update Jacobians and apply structured SR1 update to
+                # second order terms
+
+                # Form the terms of the structured secant equation
+
                 H.secant_rhs .= -J'*rx .- C'*(y .+ mu.*cx)
-                jac_residuals!(model,x,J); jac_nlconstraints!(model,x,C) # Implicitly modifies J and C fields in H
+
+                jac_residuals!(model,x,J)     # Implicitly modifies field J
+                jac_nlconstraints!(model,x,C) # Implicitly modifies field C
                 al_grad!(rx,cx,y,mu,J,C,g)
+
                 H.secant_rhs .+= g
-                update_hessian!(H,s,alx_prev,alx,kappa_sos,kappa_sml_res)
+                H.step .= s
+
+                # Update second order terms
+                update_sr1_second_order!(H)
             end
 
             #update_hessian!(H,J,C)
