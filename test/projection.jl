@@ -8,7 +8,7 @@
     @test B.eqmat ≈ A
     @test all(.!(B.fixvars))
     fix_bounds = [1,3,5,7]
-    Traulls.add_active_bounds!(B,fix_bounds)
+    Traulls.update_subspace!(B,fix_bounds)
     @test all(B.fixvars[fix_bounds]) && all(.!(B.fixvars[setdiff(1:n,fix_bounds)]))
     p = size(fix_bounds,1)
 
@@ -54,7 +54,7 @@ end
     P = Traulls.SubspaceProjector(A,chol_aat)
 
     @test all(.!(P.workspace_mat.fixvars))
-    Traulls.update_working_space!(P,active)
+    Traulls.update_subspace_projector!(P,active)
 
     @test all(P.workspace_mat.fixvars[active]) &&
         all(.!(P.workspace_mat.fixvars[setdiff(1:n,active)]))

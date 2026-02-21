@@ -4,6 +4,37 @@
 
 # Structure encoding a nonlinear least-squares problems subject to nonlinear equality constraints, linear equality constraints and bound
 # constraints.
+
+# - `r`: function that computes the residuals
+# - `J`: Jacobian operator of the residuals
+# - `c`: function that computes the equality constraints
+# - `C`: Jacobian operator of the equality constraints
+# - `n::Int`: Number of variables
+# - `m::Int`: Number of residuals
+# - `p::Int`: Number of equality constraints
+
+# ## Notes
+
+# Arguments `r`, `J`, `c` and `C` must be functions of a single `Vector` argument
+# of size `n`, say `x`, and return a `Vector` or `Matrix` of appropriate dimensions.
+
+# For instance, evaluating the residuals must be done by calling `r(x)` and the
+# output must be a `Vector` of size `m`.
+# Similarly, `c(x)` must be of size `p`, `J(x)` of size `m × n` and `C(x)` of size
+#  `p × n`.
+#  ## Notes
+
+# Arguments `r`, `J`, `c` and `C` must be functions of a single `Vector` argument
+# of size `n`, say `x`, and return a `Vector` or `Matrix` of appropriate dimensions.
+
+# For instance, evaluating the residuals must be done by calling `r(x)` and the
+# output must be a `Vector` of size `m`.
+# Similarly, `c(x)` must be of size `p`, `J(x)` of size `m × n` and `C(x)` of size
+#  `p × n`.
+
+
+
+
 mutable struct PolyhedralCnls <: AbstractCnlsModel
     res
     nleq
@@ -20,12 +51,6 @@ mutable struct PolyhedralCnls <: AbstractCnlsModel
     m::Int
     p::Int
 end
-
-#= Methods to evaluate residuals, nonlinear constraints and jacobians of a given model
-Methods are implemented in both in place and out of place versions 
-In place versions are implemented in local scope inside the solver =#
-
-
 
 """
     residuals!(model::PolyhedralCnls, x::Vector, v::Vector)
@@ -102,8 +127,113 @@ function jac_nlconstraints(model::PolyhedralCnls,x::Vector)
     return Cx
 end
 
-# Main solving method 
+"""
+    traulls(model; kwargs...)
 
+Solve a linearly constrained nonlinear least-squares problem with equality
+constraints of the form
+
+`minₓ 1/2 * r(x)ᵀr(x)`
+
+`s.t. c(x) = 0`
+
+`Ax = b`
+
+`ℓ ≤ x ≤ u,`
+
+by an iterative Augmented Lagrangian method.
+
+Matrix `A` is assumed to be full line rank.
+
+Starting from an initial guess `x₀` and an initial estimate of the vector of
+Lagrange multipliers associated to the equality constraints `y₀`,
+each new iterate `xₖ₊₁` is an approximate solution, with respect to a tolerance
+ `ωₖ > 0`, of the subproblem
+
+`minₓ Lₐ(x,yₖ,μₖ) = 1/2 * r(xₖ)ᵀr(xₖ) + c(xₖ)ᵀ[yₖ + μₖ/2 * c(xₖ)]`²`
+
+`s.t. Ax = b`
+
+`s.t. ℓ ≤ x ≤ u,`
+
+for some penalty parameter `μₖ > 0`, a current estimate of the Lagrange
+multipliers `yₖ` and using `xₖ` as a starting point.
+
+If the new iterate satisfies `||c(xₖ₊₁)||₂ ≤ ηₖ`, for some `ηₖ > 0`, then the
+Lagrange multipliers are updated by `yₖ₊₁ = yₖ + μₖc(xₖ)` and the tolerances
+`ωₖ` and `ηₖ` are tightened.
+
+On the contrary, if xₖ₊₁ fails to satisfies the feasibility inequality, the
+iterate is unchanged, i.e. `(xₖ₊₁,yₖ₊₁) = (xₖ,yₖ)` and the minimization of the
+ subproblem is restarted with
+a higher penalty parameter `μₖ₊₁ = τμₖ`, with `τ > 1`. The tolerances `ωₖ` and
+`ηₖ` are still reduced but in a weaker maner.
+
+Subproblems are solved by the gradient projection method (see [`projected_gradient`](@ref)).
+
+This solver works in double relative precision.
+
+# Arguments
+
+- `model::PolyhedralCnls`: Encodes the model of the problem to be solved
+
+
+# Keyword Arguments
+
+- `x::Vector`: initial guess for the variables (default: `zeros(n)`)
+- `output_file_name`: name of the output file for logging (default: `""` which
+makes `stdout` the default output stream)
+- `verbose`: Boolean. If set to `true`, execution and iterations detail are
+printed into the output file (default: false)
+
+## Augmented Lagrangian parameters
+
+- `mu::Float64`: initial penalty parameter (default: `10.0`)
+- `tau::Float64`: increase factor for the penalty parameter (default: `100.0`)
+- `omega0::Float64`: constant to set the initial criticality tolerance
+(default: `1.0`)
+- `eta0::Float64`: constant to set the initial feasibility tolerance
+(default: `1.0`)
+- `feas_tol::Float64`: tolerance for feasibility of equality constraints
+(default: `1e-6`)
+- `crit_tol::Float64`: tolerance for criticality (default: `1e-5`)
+- `k_crit::Float64`: positive constant used to initialize and update the
+subproblem criticality tolerance in the case of poor improvement of the
+feasibility (default: `1.0`)
+- `k_feas::Float64`: positive constant used to initialize and update the
+subproblem feasibility tolerance in the case of poor improvement of the
+feasibility (default: `0.1`)
+- `beta_crit::Float64`: positive constant used to reduce the subproblem
+criticality tolerance in the case of good improvement of the feasibility (default: `1.0`)
+- `beta_feas::Float64`: positive constant used to reduce the subproblem
+feasibility tolerance in the case of good improvement of the feasibility (default: `0.9`)
+
+
+## Trust region parameters
+
+- `accept_treshold::Float64`: threshold for accepting a step (default: `0.25`)
+- `increase_treshold::Float64`: threshold for very successful steps in order to
+extend the trust region (default: `0.75`)
+- `decrease_factor::Float64`: reducing factor of the trust region (default: `0.5`)
+- `increase_factor::Float64`: extension factor of the trust region (default: `2.5`)
+
+
+## Other solver related constants
+
+- `kappa_step::Float64`: constant to define the tolerance for the projection
+gradient method  (default: `0.1`)
+- `kappa_cg::Float64`: constant to define the tolerance for the projected
+conjugate gradient method (default: `0.1`)
+- `max_outer_iter`: maximum number of outer iterations, i.e. number of
+minimization of the Augmented Lagrangian (default: `200`)
+- `max_inner_iter`: maximum number of iterations when solving each subproblem
+ with the gradient projection method (default: `100`)
+- `max_cg_iter`: maximum number of conjugate gradient iterations (default: `50`)
+
+# Return
+
+Returns the solution vector and additional information encoded in a [`PrimalDualSolution`](@ref).
+"""
 function solve(
     model::PolyhedralCnls;
     x::Vector{Float64}=zeros(model.n),
@@ -124,8 +254,6 @@ function solve(
     neg_ratio_factor::Float64 = 0.0625,
     kappa_step::Float64 = 0.1,
     kappa_cg::Float64 = 0.1,
-    kappa_sos::Float64 = sqrt(eps(Float64)),
-    kappa_sml_res::Float64 = 0.1,
     hessian_approx::HessianApprox = gn,
     max_iter::Int = 100,
     max_inner_iter::Int = 100,
@@ -215,9 +343,11 @@ function solve(
     cx = nlconstraints(model, x)
     J = jac_residuals(model, x)
     C = jac_nlconstraints(model, x)
-   
-    omega_rel, eta = initial_tolerances(mu, omega0, eta0, k_crit, k_feas)  # Initial tolerances 
-    y = least_squares_multipliers(rx, J, C)                            # Initial Lagrange multipliers 
+
+     # Initial tolerances
+    omega_rel, eta = initial_tolerances(mu, omega0, eta0, k_crit, k_feas)
+    # Initial Lagrange multipliers
+    y = least_squares_multipliers(rx, J, C)
 
     fx = dot(rx,rx)
     feas_measure = norm(cx,Inf)
@@ -254,8 +384,6 @@ function solve(
             omega_rel,
             kappa_step,
             kappa_cg,
-            kappa_sos,
-            kappa_sml_res,
             hessian_approx,
             max_inner_iter,
             max_cg_iter;
@@ -295,8 +423,137 @@ function solve(
 
     end
 
-# Function that solves the subproblem of the tralconls method 
 
+"""
+    solve_subproblem(model, args...)
+
+Solves the outer iteration subproblem
+
+`minₓ Lₐ(x,y,μ) = 1/2 * r(x)ᵀr(x) + c(x)ᵀ[y + μ/2 * c(x)]`
+
+`s.t. Ax = b`
+
+`ℓ ≤ x ≤ u,`
+
+using the gradient projection method with trust region.
+
+The starting point `x₀` and optimality tolerance `ω` are given. The Lagrange
+ multipliers `y` and penalty parameter `μ` are fixed.
+
+At iteration `k`, a quadratic model of the objective function around `xₖ` is
+formed by
+
+`qₖ(s) = 1/2 sᵀHₖs + sᵀgₖ,`
+
+with `gₖ = ∇ₓLₐ(xₖ,y,μ)` and `Hₖ ≈ ∇²ₓₓ Lₐ(xₖ,y,μ)`.
+
+The step computation consists into approximately solving the quadratic program
+
+`minₛ qₖ(s)`
+
+`s.t. As = 0`
+
+`ℓ ≤ xₖ + s ≤ u`
+
+`||s|| ≤ Δₖ,`
+
+where `Δₖ` is the trust region radius and `||.||` denotes the `∞`-norm
+`||x|| = maxᵢ |xᵢ|`. Because `||x|| ≤ Δₖ ⟺ -Δₖ ≤ xᵢ ≤ Δₖ` for all `i`,
+the bounds on the step can be simplified as
+
+`s ∈ [max(-Δₖe, ℓ-x), min(Δₖe, u-x)]`, with `e = (1,...,1)`.
+
+# Solving the QP
+
+## Cauchy point
+
+We start by finding the first local minimizer of the model along the projected
+gradient path
+
+`s(t) = P[xₖ - tgₖ] - xₖ` for  `t ≥ 0,`
+
+`P` denoting the projection over the feasible domain. The corresponding scalar
+defines a Cauchy step that ensures a sufficient reduction of the objective
+function. This means that taking the Cauchy step at every iteration is enough to
+solve the subproblem.
+
+## Beyond the Cauchy point
+
+In order to provide a better reduction, we then apply the conjugate gradient
+method to the subspace where the components corresponding to bounds active at the
+ Cauchy point are fixed.
+
+The resulting `sₖ` step is then accepted or rejected depending on the value of
+the ratio of the actual reduction over the reduction predicted by the model
+
+`ρ = (Lₐ(xₖ+sₖ,y,μ) - Lₐ(xₖ,y,μ)) / qₖ(sₖ) - qₖ(0)`.
+
+If `ρ ≥ η₁`, where `η₁ ∈ (0,1)` is a given parameter, then the step is accepted
+and the radius `Δₖ` is eventually increased. This translates the fact that there
+ is a good agreement between the objective function and the model.
+
+If `ρ < η₁` (poor agreement), the step is rejected and the minimization is
+restarted with a smaller trust region.
+
+## Trust region update
+
+The scalars `η₁, η₂, α₁, α₂, γᵦ` are constant chosen such that
+
+`0 < η₁ ≤ η₂ < 1`, `0 < α₁ < 1 < α₂` and `0 < γᵦ < 1`.
+
+The radius is updated as follows:
+- if `ρ ≥ η₂` (very good step), `Δₖ₊₁ = max(α₂*||sₖ||, Δₖ)`
+- if `η₁ ≤ ρ < η₂` (good step), `Δₖ₊₁ = Δₖ`
+- if `0 < ρ < η₁` (bad step), `Δₖ₊₁ = α₁*||sₖ||`
+- if `ρ ≤ 0` (very bad step), `Δₖ₊₁ = min(α₂*||sₖ||, γᵦ*Δₖ)`
+
+Here, `||.||` denotes the euclidean norm.
+
+## Stopping criteria
+
+The minimization process is stopped once there is an iterate `xₖ` such that
+
+`|| P[xₖ - gₖ] - xₖ || ≤ ω`,
+
+where `P` here denotes the projection operator onto the subspace that maintains
+the active linear constraints active (equalities + active bounds).
+
+This quantity measures how close a point is from first-order criticality.
+
+# Arguments
+
+- `model::BoxCnls`: structure encoding the original constrained nonlinear
+least-squares problem to be solved
+- `x::Vector`: starting point the the outer iteration
+- `x_low::Vector`: lower bounds on the variables
+- `x_upp::Vector`: upper bounds on the variables
+- `proj_op::SubspaceProjector`: operator involved in computations of projections
+onto the linear constraints feasible domain (see [`SubspaceProjector`](@ref))
+- `y::Vector`: current estimation of the Lagrange multipliers
+- `mu::Float64`: penalty parameter
+- `rx::Vector`: residuals evaluated at `x`
+- `cx::Vector`: equality constraints evaluated at `x`
+- `J::Matrix`: jacobian of the residuals evaluated at `x`
+- `C::Matrix`: jacobian of the equality constraints evaluated at `x`
+- `g::Vector`: gradient of the Augmented Lagrangian at `x`
+- `tr::TrustRegion`: encodes the trust region constraint and associated constants
+- `omega_crit::Float64`: optimality tolerance
+- `kappa_step::Float64`: constant used to define the stopping criteria of the
+gradient projection method
+- `kappa_cg::Float64`: constant used to define the stopping criteria of the
+conjugate gradient iterations
+- `hessian_approx::HessianApprox`: Encodes the type of Hessian approximation used
+(see [`HessianApprox`](@ref))
+- `max_iter::Int`: maximum number of iterations to solve the outer iteration
+ subproblem
+- `max_cg_iter::Int`: maximum number of uses of the conjugate gradient method
+- `verbose::Bool=false`: boolean to log details into a input/output stream
+- `io::IO=stdout`: input/output stream (default is `stdout`)
+
+# On return
+
+- `pix::Float64`: value of the criticality measure at the approximate solution
+"""
 function solve_subproblem(
     model::PolyhedralCnls,
     x::Vector,
@@ -314,8 +571,6 @@ function solve_subproblem(
     omega_rel::Float64,
     kappa_step::Float64,
     kappa_cg::Float64,
-    kappa_sos::Float64,
-    kappa_sml_res::Float64,
     hessian_approx::HessianApprox,
     max_iter::Int,
     max_cg_iter::Int;
@@ -456,7 +711,51 @@ function solve_subproblem(
     return pix
 end
 
-# Computes a step by approximaelty solving a QP with the projected gradient method 
+"""
+    projected_gradient(x,g,H,xₗ,xᵤ,Δ,max_cg_iter,κ_step,κ_cg)
+
+Approximately solves the quadratic program
+
+`minₛ 1/2 sᵀHs + sᵀg`
+
+` s.t. As = 0`
+
+`xₗ ≤ x + s ≤ xᵤ`
+
+`||s|| ≤ Δ`
+
+by the gradient projection method.
+
+In the QP model, `||.||` denotes the `∞`-norm `||s|| = maxᵢ |sᵢ|`.
+
+
+
+First, a Cauchy step ensuring sufficient decrease is computed.
+
+Then, the projected conjugate gradient method is applied to further minimize
+the objective in the subspace where the components corresponding to active
+bounds of the Cauchy step are fixed.
+
+# Arguments
+
+- `x::Vector`: current iterate
+- `g::Vector`: gradient of the Augmented Lagrangian at `x`
+- `H::ALHessian`: approximation of the Hessian of the Augmented Lagrangian at `x`
+- `xₗ::Vector`: lower bounds on `x`
+- `xᵤ::Vector`: upper bounds on `x`
+- `Δ::Float64`: trust region radius
+- `max_cg_iter::Int`: number of maximum uses of the conjugate gradient method
+- `κ_step::Float64`: positive constant used to define the convergence criteria
+relative of the gradient projection method
+- `κ_cg::Float64`: positve constant used to define the convergence criteria of the
+ conjugate gradient method
+
+# On return
+
+- `s::Vector`: Trial step
+- `pred::Float64`: Reduction of the quadratic model after taking step `s`.
+
+"""
 function projected_gradient(
     x::Vector{T},
     g::Vector{T},
@@ -538,33 +837,34 @@ function next_breakpoint(
     return theta, idx
 end
 
-# Assert if the first breakpoint is zero
-
-
-#=
-
-Reworked version of the Cauchy step computation 
-
-Computes the step corresponding to the first local minimum of the quadratic model along the projected gradient path.
-
-# On return
-
-- `s`: Cauchy step  
-- `P`: projection operator of type [`SubspaceProjector`](@ref) that encodes the active bounds after taking the Cauchy step
-=#
-
 """ 
-    cauchy_step(x,g,H,A,chol_AAᵀ,xₗ,xᵤ,lincons)
+    cauchy_step(x,g,H,proj_op,xₗ,xᵤ,dₗ,dᵤ)
 
-Compute a Cauchy step that provides a sufficient reduction of the quadratic model `q(s) = <s,Hs> + <g,s>`.
+Compute a Cauchy step that provides a sufficient reduction of the quadratic model
+`q(s) = <s,Hs> + <g,s>`.
 
-The step is defined by `s_c = s(t_c)` , where `s(t)`, for `t ≥ 0`, is the projected gradient step `P(x-t*g) - x` with `P` denoting the projection over `{v | Av = 0 and max(-Δ,xₗ) ≤ x + v ≤ min(Δ,xᵤ)}`.
+The step is defined by `s_c = s(t_c)` , where `s(t)`, for `t ≥ 0`, is the
+projected gradient step `P(x-t*g) - x` with `P` denoting the projection over
+`{v | Av = 0 and max(-Δ,xₗ) ≤ x + v ≤ min(Δ,xᵤ)}`.
 
-This method finds the first local minimum of the quadratic model along the projected gradient path, i.e. the first local minimum of `t ↦ q(s(t))` on `[0, ∞)`.
+This method finds the first local minimum of the quadratic model along the
+projected gradient path, i.e. the first local minimum of `t ↦ q(s(t))` on `[0, ∞)`.
+
+# Arguments
+
+- `x::Vector`: current iterate
+- `g::Vector`: gradient of the augmented Lagrangian at current point
+- `H`: Hessian approximation of type `ALHessian` at current point
+- `proj_op`: [`SubspaceProjector`](@ref) operator to project the gradient onto
+linear constraints
+- `x_low::Vector`: lower bounds on the variables `x`
+- `x_upp::Vector`: upper bounds on the variables `x`
+- `d_low::Vector`: lower bounds on the step
+- `d_upp::Vector`: upper bounds on the step
 
 # On return
-- `s`: Cauchy step  
-- `P`: projection operator of type [`SubspaceProjector`](@ref) that encodes the active bounds after taking the Cauchy step
+
+- `s::Vector`: Cauchy step
 
 """ 
 function cauchy_step(
@@ -592,7 +892,7 @@ function cauchy_step(
     initial_fixed = initial_active_bounds(x,d,x_low,x_upp)
     
     if !isempty(initial_fixed)
-        update_working_space!(proj_op,initial_fixed)
+        update_subspace_projector!(proj_op,initial_fixed)
     end
 
     # Update the projection 
@@ -628,7 +928,7 @@ function cauchy_step(
             s .+= d .* l_interval
             
             # Compute the projected direction on the next interval
-            update_working_space!(proj_op,idx)
+            update_subspace_projector!(proj_op,idx)
             mul!(d,proj_op,-g)
 
             # Prepare for the next interval

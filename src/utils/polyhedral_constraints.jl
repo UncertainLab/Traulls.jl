@@ -84,22 +84,20 @@ function Base.:*(A::TransposeSubspaceMatrix{T,S},x::Vector{T}) where {T,S}
 
     return res
 end
+"""
 
-# Set the bounds corresponding to indices in array `newly_active` as active
-function add_active_bounds!(M::SubspaceMatrix{T}, newly_active::Vector{Int}) where T
+Add the bounds corresponding to indices in array `vᵢ = 0` for `i ∈ newly_active`
+to the subspace encoded in `SubspaceMatrix` `M`.
+"""
+function update_subspace!(M::SubspaceMatrix{T}, newly_active::Vector{Int}) where T
 
     M.fixvars[newly_active] .= true
     return
 end
+
 # Returns the number of fixed variables in the subsspace represented by the `SubspaceMatrix` `A`
 nb_fixed(submat::SubspaceMatrix) = count(submat.fixvars)
 
-#= Mutable struct to encode the operator that computes projections onto the subspace
-`{v | Av = 0, vᵢ = 0 for i ∈ fixvars}`,
-using the normal equations approach.
-=#
-
-#####################  REWORK PROJECTOR OPERATOR ##############################
 
 """
     SubspaceProjector{T}
@@ -179,7 +177,31 @@ end
 
 # Update the Cholesky decomposition of the Gram matrix when adding one bound constraint 
 # to the active set 
+"""
+    cholesky_augmented_gram_mat(A,fix_bounds,chol_AAᵀ)
 
+Forms the Cholesky decomposition of the augmented Gram matrix `A₊A₊ᵀ`  with
+`A₊` defined as the concatenation of `A`, full line rank `m × n`, with rows
+of the `n × n` identity. The indices of the selected rows
+`{i₁,...,iₚ} ⊂ {1,...n}`, with `p < n-m` are encoded into the `BitVector`
+`fix_bounds`.
+
+The computations exploits the block structure of `A₊A₊ᵀ` and the availability of
+the Cholesky decomposition of `AAᵀ`.
+
+** Arguments
+
+* `A`: full line rank matrix
+
+* `fix_bounds`: `BitVector` encoding the fixed variables.
+`fix_bounds[i] = true` means that a bound on component `i` is active
+
+* `chol_AAᵀ`: Cholesky decomposition of `AAᵀ`
+
+* On return
+
+The Cholesky decomposition `A₊A₊ᵀ` in a `Factorization` type.
+"""
 function cholesky_augmented_gram_mat(
     A::Matrix,
     fix_bounds::BitVector,
@@ -206,31 +228,30 @@ function cholesky_augmented_gram_mat(
     return Cholesky(L)
 end
 
-# Update the Cholesky decomposition of the Gram matrix when adding several bounds constraints 
-# to the active set
+"""
+    update_subspace_projector!(proj_op, newly_active)
 
-function update_projector!(proj_op::SubspaceProjector)
+Add constraints `vᵢ = 0` for `i ∈ newly_active` to the subspace encoded in
+`proj_op` and forms the corresponding projection operator by modifying the
+Cholesky decomposition involved in the normal equations solving.
 
+** Arguments
+
+* `proj_op`: `SubspaceProjector`
+
+* `newly_active`: `Vector` containing the indices of the variables that are set
+active
+"""
+function update_subspace_projector!(proj_op::SubspaceProjector, newly_active::Vector{Int})
+
+    # Set new constraints active
+    update_subspace!(proj_op.workspace_mat, newly_active)
+
+    # Update the Cholesky decomposition involved in the normal equations solving
     proj_op.chol_gram_augmat = cholesky_augmented_gram_mat(
         proj_op.workspace_mat.eqmat,
         proj_op.workspace_mat.fixvars,
         proj_op.chol_gram_eqmat)
-
-    return 
-end
-
-# Update working space matrix and the projector operator 
-# First set the newly active bounds as fixed variables 
-# Then form the corresponding subspace projector by forming the 
-# Cholesky decomposition of the associated Gram matrix. 
-
-function update_working_space!(proj_op::SubspaceProjector, newly_active::Vector{Int})
-
-    # Set new constraints active
-    add_active_bounds!(proj_op.workspace_mat, newly_active)
-
-    # Update accordingly the projection operator
-    update_projector!(proj_op)
     return
 end
 
@@ -303,7 +324,8 @@ end
 # Returns the number of active constraints in subspace
 nb_fixed(proj_op::SubspaceProjector) = nb_fixed(proj_op.workspace_mat)
 
-# Returns the number of bounds that can become active
+# Returns the maximum number of bounds that can become active
+# Equals `dimension - number of equality constraints`
 function nbmax_fixed_bounds(proj_op::SubspaceProjector)
 
     (n,m) = size(proj_op.workspace_mat.eqmat)

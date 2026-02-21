@@ -38,7 +38,24 @@ end
 # Constructor for Gauss-Newton approximation
 # Takes jacobians and a penalty parameter as inputs
 # Initializes the buffer vector to zero
+#
+#
+"""
+    GN(J,C,μ)
 
+Constructor method for the [`GN`](@ref) structure.
+
+Takes jacobians and a penalty parameter as inputs and initializes the buffer
+vector to zero.
+
+* Arguments
+
+- `J`: Jacobian matrix of the residuals
+
+- `C`: Jacobian matrix of the nonlinear equality constraints
+
+- `μ`: Penalty parameter
+"""
 function GN(
     J::AbstractMatrix{T},
     C::AbstractMatrix{T},
@@ -49,7 +66,7 @@ function GN(
 end
 
 """
-    mul!(Hv, H, v)
+    mul!(Hv, H::GN, v)
 
 Overload the 3-argument `mul!` method to the type [`GN`](@ref) to compute
 Hessian-vector without doing matrix-matrix multiplications.
@@ -115,7 +132,7 @@ Matrix `S` is updated iteratively by a SR1 formula derived from a structured
 secant equation `Ss = y` where `s` is a step and right handside `y` is defined
 by first order quantities.
 
-**Attributes**
+** Attributes
 
 * `J`: Jacobian of the residuals
 
@@ -149,6 +166,22 @@ end
 # Secant equations components and the buffer vector are
 # set to `0`.
 
+"""
+    SR1(J,C,μ)
+
+Constructor method for the [`GN`](@ref) structure.
+
+Takes jacobians and a penalty parameter as inputs and initializes the other
+attributes to `0`.
+
+** Arguments
+
+* `J`: Jacobian matrix of the residuals
+
+* `C`: Jacobian matrix of the nonlinear equality constraints
+
+* `μ`: Penalty parameter
+"""
 function SR1(
     J::AbstractMatrix,
     C::AbstractMatrix,
