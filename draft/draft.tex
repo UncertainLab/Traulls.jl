@@ -514,11 +514,11 @@
 	
 	From~\eqref{eq:structured_sr1_secant_eq}, we can derive the SR1 update formula 
 	\begin{equation}\label{eq:structured_sr1_update}
-		B_{k+1} = B_k + \dfrac{(y^A_k-B_ks_k)(y^A_k-B_ks_k)^T}{(y^A_ks_k-B_ks_k)^Ts_k},
+		B_{k+1} = B_k + \dfrac{(y^A_k-B_ks_k)(y^A_k-B_ks_k)^T}{\inner{y^A_k-B_ks_k}{s_k}},
 	\end{equation}
-	if $(y^A_k-S_ks_k)^Ts_k \neq 0$. When the denominator in~\eqref{eq:structured_sr1_update} is zero, we simply set $B_{k+1}=B_k$. To avoid numerical errors, we apply the update when
+	if $\inner{y^A_k-B_ks_k}{s_k} \neq 0$. When the denominator in~\eqref{eq:structured_sr1_update} is zero, we simply set $B_{k+1}=B_k$. To avoid numerical errors, we apply the update when
 	\begin{equation}\label{eq:structured_sr1_safeguard}
-		\left|\inner{y^A_k-S_ks_k}{s_k}\right| \ge \kappa_{sds}\|s_k\|\|y^A_k-S_ks_k\|,
+		\left|\inner{y^A_k-B_ks_k}{s_k}\right| \ge \kappa_{sds}\|s_k\|\|y^A_k-B_ks_k\|,
 	\end{equation}
 	for $\kappa_{sds} \in (0,1)$\footnote{Small Denominator Safeguard}. Inequality~\eqref{eq:structured_sr1_safeguard} is one of the most commons safeguards used in SR1 methods. 
 	
@@ -564,7 +564,9 @@
 	\[ \mu_0 = 10,\ \kappa_\omega = \beta_\omega = \eta = \omega = 1,\ \kappa_\eta = 0.1,\ \beta_\eta = 0.9,\ \tau = 100,\  \omega^*=\eta^* = 10^{-7}.\]
 	The constants relative to the inner minimization process of algorithm~\ref{algo:trinner_iteration} are set to
 	\[ \kappa_{cg} = \kappa_{mlt} = 0.1.\]
-	We now discuss aspects relative to the trust region handling. The initial radius value for algorithm~\ref{algo:trinner_iteration} is set to
+	The value of constant $\kappa_{sds}$ used safeguard~\eqref{eq:structured_sr1_safeguard} is set to the square root of the relative double precision.
+	
+	We now discuss about the trust region handling. The initial radius value for algorithm~\ref{algo:trinner_iteration} is set to
 	\begin{equation}\label{eq:initial_radius}
 		\Delta_0 = 0.1\| g_0\|_\infty.
 	\end{equation}
