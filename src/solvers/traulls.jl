@@ -240,8 +240,6 @@ function solve(
         pix = solve_subproblem(
             model,
             x,
-            A,
-            chol_aat,
             x_low,
             x_upp,
             proj_op,
@@ -293,7 +291,7 @@ function solve(
     verbose && print_termination_info(iter,x,y,mu,fx,pix,feas_measure;io=stream)
     verbose && close(output_stream)
 
-    PrimalDualSolution(x, y, fx, pix, feas_measure)
+    PrimalDualSolution(x,y,fx,pix,feas_measure)
 
     end
 
@@ -302,8 +300,6 @@ function solve(
 function solve_subproblem(
     model::PolyhedralCnls,
     x::Vector,
-    A::Matrix,
-    chol_aat::Cholesky,
     x_low::Vector,
     x_upp::Vector,
     proj_op::SubspaceProjector,
@@ -330,7 +326,7 @@ function solve_subproblem(
     n, n_slack, p = model.n, model.n_slack, model.p
     x_prev, rx_prev, cx_prev = copy(x), copy(rx), copy(cx)
     
-    reset_projector!(proj_op,chol_aat)  # set all bounds as inactive
+    reset_projector!(proj_op)  # set all bounds as inactive
 
     # Evaluate objective, first derivatives and Hessian of the AL at current point (x,y)
     alx = al_objgrad!(rx,cx,y,mu,J,C,g)
@@ -360,7 +356,6 @@ function solve_subproblem(
             x,
             g,
             H,
-            A,
             proj_op,
             x_low,
             x_upp,
@@ -436,7 +431,6 @@ function solve_subproblem(
             end
             #update_hessian!(H,J,C)
             pix = criticality_measure(g,proj_op)
-            
 
         else
             x .= x_prev
@@ -464,58 +458,41 @@ end
 
 # Computes a step by approximaelty solving a QP with the projected gradient method 
 function projected_gradient(
-    x::Vector,
-    g::Vector,
-    H::ALHessian,
-    A::Matrix,
-    proj_op::SubspaceProjector,
-    chol_aat::Cholesky,
-    x_low::Vector,
-    radius::Float64,
+    x::Vector{T},
+    g::Vector{T},
+    H::ALHessian{T},
+    proj_op::SubspaceProjector{T},
+    x_low::Vector{T},
+    radius::T,
     max_cg_iter::Int,
-    kappa_step::Float64,
-    kappa_cg::Float64)
+    kappa_step::T,
+    kappa_cg::T) where T
 
-
-    (m,n) = size(A)
-    max_fixed_bounds = n-m
-
+    # Lower bounds on the step
     s_low,s_upp = step_bounds(x,x_low,x_upp,radius)
-    w_low, w_upp = Vector{Float64}(undef,n), Vector{Float64}(undef,n)
 
-    s = cauchy_step(s,g,H,A,proj_op,chol_aat,x_low,x_upp,radius)
-    Hs = H*s 
-    cg_rhs = Hs .+ g 
+    # Cauchy step
+    s = cauchy_step(s,g,H,proj_op,,x_low,x_upp,s_low,s_upp)
+    Hs = H*s
 
-    optimal, cg_stop = false, false
-    iter = 1
+    # Apply conjugate gradient if at least one free variable
+    saturated_active_set = nb_fixed(proj_op) < nbmax_fixed_bounds(proj_op)
 
-    while !optimal && !cg_stop && iter <= max_cg_iter && nb_fixed(proj_op) < max_fixed_bounds
+    if !saturated_active_set
 
-        w_low .= s_low .- s 
-        w_upp .= s_upp .- s
-        
-        w, cg_status = pcg(cg_rhs, H, proj_op, w_low, w_upp, kappa_cg)
+        # Prepare for conjugate gradient iterations
+        s_low .-= s
+        s_upp .-= s
+        cg_rhs = Hs .+ g
 
-        s .+= w 
-        Hs .= H*s 
-        cg_rhs = Hs .+ g 
+        # Compute search direction via  projected conjugate gradient
+        w, cg_status = pcg(cg_rhs,H,proj_op,s_low,s_upp,kappa_cg)
 
-        # Compute norms of reduced gradients ||Zᵀg|| and ||Zᵀ(Hs+g)||
-        norm_reduced_g = norm_reduced_v(g, proj_op)
-        norm_reduced_gnext = norm_reduced_v(b, proj_op)
-
-        # Evaluate termination criteria 
-        optimal = norm_reduced_gnext <= kappa_step * norm_reduced_g
-        cg_stop = cg_status == negative_curvature
-
-        # Update the set of fixed variables and the projection operator 'proj_op'
-        active_bounds!(s,P,chol_aat,s_low,s_upp)
-
-        iter += 1
+        # Update the step
+        s .+= w
+        Hs .= H*s
     end
 
-    # Predicted reduction of the model taking step s 
     pred = dot(g,s) + 0.5*dot(s,Hs)
 
     return s, pred
@@ -535,8 +512,8 @@ function next_breakpoint(
         fix_bounds::BitVector;
         atol::T=sqrt(eps(T))) where T
 
-    theta = Inf
-    idx = []
+    theta = Inf # current breakpoint value
+    idx = []    # list of bounds indicices becoming active at theta
 
     for i in axes(d,1)
         if !fix_bounds[i]
@@ -591,48 +568,44 @@ This method finds the first local minimum of the quadratic model along the proje
 
 """ 
 function cauchy_step(
-    x::Vector,
-    g::Vector,
-    H::ALHessian,
-    A::Matrix,
-    chol_aat::Cholesky,
-    P::SubspaceProjector,
-    x_low::Vector,
-    x_upp::Vector,
-    radius::Float64)
+    x::Vector{T},
+    g::Vector{T},
+    H::ALHessian{T},
+    proj_op::SubspaceProjector{T},
+    x_low::Vector{T},
+    x_upp::Vector{T},
+    d_low::Vector{T},
+    d_upp::Vector{T}) where T
 
     (m,n) = size(A)
-    max_fixed_bounds = n-m
+    max_fixed_bounds = nbmax_fixed_bounds(proj_op)
     
     # Buffers 
     s = zeros(n)                    # accumulated Cauchy step 
     d = Vector{Float64}(undef,n)    # projected search direction 
-    
-    mul!(d,P,-g)
 
+    # Initial projected steepest direction
+    mul!(d,proj_op,-g)
+
+    # Check if they are bounds active at x
     prev_tb = 0
     initial_fixed = initial_active_bounds(x,d,x_low,x_upp)
     
     if !isempty(initial_fixed)
-        # TODO: implement the version that does not require `chol_aat`
-        add_active_bounds!(P,initial_fixed,chol_aat) 
+        update_working_space!(proj_op,initial_fixed)
     end
 
     # Update the projection 
-    mul!(d,P,-g)
-
-    # Upper and lower bounds for the projected gradient 
-    d_upp = (t -> min(t, radius)).(x_upp-x)
-    d_low = (t -> max(t, -radius)).(x_low-x)
+    mul!(d,proj_op,-g)
 
     # Prepare the first interval 
-    tb, idx = next_breakpoint(d,s,d_low,d_upp,P.fixvars)
+    tb, idx = next_breakpoint(d,s,d_low,d_upp,proj_op.workspace_mat.fixvars)
     gtd = dot(g,d)
     Hd = H*d
     
     found = false
 
-    while !found && nb_fixed(P) < max_fixed_bounds
+    while !found && nb_fixed(proj_op) < max_fixed_bounds
 
         # Compute slope and curvature 
         phi_p = gtd + dot(s,Hd)
@@ -655,15 +628,15 @@ function cauchy_step(
             s .+= d .* l_interval
             
             # Compute the projected direction on the next interval
-            add_active_bounds!(P,idx,chol_aat)
-            mul!(d,P,-g)
+            update_working_space!(proj_op,idx)
+            mul!(d,proj_op,-g)
 
             # Prepare for the next interval
             gtd = dot(g,d)
-            Hd = H*d 
+            Hd .= H*d
             
             prev_tb = tb
-            tb, idx = next_breakpoint(d,s,d_low,d_upp,P.fixvars)
+            tb, idx = next_breakpoint(d,s,d_low,d_upp,proj_op.workpsace_mat.fixvars)
         end
 
     end
