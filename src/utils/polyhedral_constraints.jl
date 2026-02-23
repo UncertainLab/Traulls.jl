@@ -189,7 +189,7 @@ of the `n × n` identity. The indices of the selected rows
 The computations exploits the block structure of `A₊A₊ᵀ` and the availability of
 the Cholesky decomposition of `AAᵀ`.
 
-** Arguments
+**Arguments**
 
 * `A`: full line rank matrix
 
@@ -235,7 +235,7 @@ Add constraints `vᵢ = 0` for `i ∈ newly_active` to the subspace encoded in
 `proj_op` and forms the corresponding projection operator by modifying the
 Cholesky decomposition involved in the normal equations solving.
 
-** Arguments
+**Arguments**
 
 * `proj_op`: `SubspaceProjector`
 
@@ -265,7 +265,7 @@ and `fixvars = [i₁,...iₚ]` (`p ≤ n - m`) is a subset of `[1,2,...,n]`.
 
 Overloads the `LinearAlgebra.mul!` method.
 
-** Arguments
+**Arguments**
 
 * `r`: Buffer vector to store the result of the projection operation
 
@@ -296,7 +296,7 @@ and `fixvars = [i₁,...iₚ]`, (`p ≤ n - m`) is a subset of `[1,2,...,n]`.
 
 Overloads the base multiplication `*` method.
 
-** Arguments
+**Arguments**
 
 * `P`: Projection operator encoded as a `SubspaceProjector`
 

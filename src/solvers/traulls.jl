@@ -35,6 +35,74 @@
 
 
 
+"""
+    PolyhedralCnls <: AbstractCnlsModel
+
+Mutable struct encoding a constrained nonlinear least-squares problem of the form
+
+`minₓ 1/2 * r(x)ᵀr(x)`
+
+`s.t. h(x) = 0`
+
+`g(x) ≥ 0`
+
+`Ax = b`
+
+`ℓ ≤ x ≤ u.`
+
+Functions `r`, `h` and `g` are two times continuously differentiable, nonlinear 
+and potentially non convex.
+
+Inequality constraints are implicitly converted into equalities by adding slack
+variables, so that `g(x) ≥ 0` becomes `g(x) - z = 0, z ≥ 0.`
+
+'A' is a full line rank matrix of size `m × n`, with `m < n`.
+
+Bounds on the variables `ℓ` and `u` can be set to `±∞`.
+
+**Attributes** 
+
+* `res`: function evaluating the residuals
+
+* `nleq`: function evaluating the nonlinear equality constraints 
+
+* `nlineq`: function evaluating the nonlinear inequality constraints 
+
+* `jac_res`: function evaluating the jacobian matrix of the residuals
+
+* `jac_nleq`: function evaluating the jacobian matrix of the nonlinear equality
+ constraints
+
+* `jac_nlineq`: function evaluating the jacobian matrix of the nonlinear 
+inequality constraints 
+
+* `eqmat`: matrix of the linear equality constraints 
+
+* `eqrhs`: right handside vector of the linear equality constraints  
+
+* `n::Int`: number of variables (size of `x`)
+
+* `x_low::Vector`: vector of lower bounds on the parameters 
+
+* `x_upp::Vector`: vector of upper bounds on the parameters 
+
+* `n_slack::Int`: number of slack variables (size of `z`)
+
+* `m::Int`: number of residuals (size of `r(x)`)
+
+* `p::Int`: number of nonlinear equality constraints (size of `c(x)`)
+
+
+**Note**
+
+When instantiating a `PolyhedralCnls`, arguments for evaluation functions 
+`res`, `jac_res` etc. must be functions of a single `Vector` argument of size
+`n` and return a `Vector` or `Matrix` of appropriate dimensions.
+
+For instance, evaluating the residuals must be done by calling `r(x)` and the
+output must be a `Vector` of size `m`. Similarly, `c(x)` must be of size `p`, 
+`J(x)` of size `m × n` and `C(x)` of size `p × n`.
+"""
 mutable struct PolyhedralCnls <: AbstractCnlsModel
     res
     nleq
@@ -143,7 +211,11 @@ constraints of the form
 
 by an iterative Augmented Lagrangian method.
 
-Matrix `A` is assumed to be full line rank.
+Functions 'r' and 'c' are two times continuously differentiable, nonlinear and potentially non convex.
+
+'A' is a full line rank matrix of size `m × n`, with `m < n`.
+
+Bounds on the variables `ℓ` and `u` can be set to `±∞`.
 
 Starting from an initial guess `x₀` and an initial estimate of the vector of
 Lagrange multipliers associated to the equality constraints `y₀`,
@@ -382,11 +454,9 @@ function solve(
             g,
             tr,
             omega_rel,
-            kappa_step,
             kappa_cg,
             hessian_approx,
-            max_inner_iter,
-            max_cg_iter;
+            max_inner_iter;
             verbose=verbose,
             io=output_stream)
 
@@ -569,11 +639,9 @@ function solve_subproblem(
     g::Vector,
     tr::TrustRegion,
     omega_rel::Float64,
-    kappa_step::Float64,
     kappa_cg::Float64,
     hessian_approx::HessianApprox,
-    max_iter::Int,
-    max_cg_iter::Int;
+    max_iter::Int;
     verbose::Bool=false,
     io::IO=stdout)
 
@@ -615,8 +683,6 @@ function solve_subproblem(
             x_low,
             x_upp,
             radius,
-            max_cg_iter,
-            kappa_step,
             kappa_cg)
 
         # Trial point undistinguishable from current solution or too small radius
@@ -762,16 +828,15 @@ function projected_gradient(
     H::ALHessian{T},
     proj_op::SubspaceProjector{T},
     x_low::Vector{T},
+    x_upp::Vector{T},
     radius::T,
-    max_cg_iter::Int,
-    kappa_step::T,
     kappa_cg::T) where T
 
     # Lower bounds on the step
     s_low,s_upp = step_bounds(x,x_low,x_upp,radius)
 
     # Cauchy step
-    s = cauchy_step(s,g,H,proj_op,,x_low,x_upp,s_low,s_upp)
+    s = cauchy_step(s,g,H,proj_op,x_low,x_upp,s_low,s_upp)
     Hs = H*s
 
     # Apply conjugate gradient if at least one free variable
@@ -961,6 +1026,29 @@ norm_reduced_v(v::Vector,P::SubspaceProjector) = norm(P*v)
 # Criticality measure for the traulls algorithm 
 # Norm of the negative gradient on the subspace spanned by active constraints (all equalities + actives bounds)
 
+"""
+    criticality_measure(g,Pₓ;p=Inf)
+
+Returns the value of the criticality measure at a point `x`.
+
+Computes the `p`-norm of `Pₓ[g]` where `g` is the gradient of the augmented 
+Lagrangian with respect to the primal variables evaluated at `x` and `P` is the
+projection operator onto the tangent space
+
+`T(x) = null(A) ∩ {d | dᵢ = 0 for i such that xᵢ = ℓ_i or xᵢ = u_i}}`.
+
+**Arguments**
+
+* `g::Vector`: gradient of the augmented Lagrangian at current point
+
+* `Pₓ::SubspaceProjector`: projection operator onto `T(x)` (see [`SubspaceProjector`](@ref))
+
+* `p`: index of the norm computed (default is `Inf`)
+
+**On return** 
+
+* value of `||Pₓ(g)||ₚ`
+"""
 function criticality_measure(
     g::Vector{T},
     proj_op::SubspaceProjector{T};
