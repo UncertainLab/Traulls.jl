@@ -61,8 +61,9 @@ function GN(
     C::AbstractMatrix{T},
     mu::T) where T
 
-    n = size(J,2)
-    return GN(J,C,mu,zeros(n))
+    m = size(J,1)
+    p = size(C,1)
+    return GN(copy(J),copy(C),mu,zeros(max(m,p)))
 end
 
 """
@@ -74,19 +75,20 @@ Hessian-vector without doing matrix-matrix multiplications.
 
 function mul!(Hv::Vector{T}, gn_op::GN{T}, v::Vector{T}) where T
 
-    # Buffer vectors for intermediate computations
-    temp = gn_op.temp
-
+    m = size(gn_op.J,1)
+    p = size(gn_op.C,1)
+    
     # Reset result values to make sure it is zero
     Hv .= 0.0
     # JᵀJv term
-    mul!(temp, gn_op.J, v) # form Jv
-    mul!(Hv, gn.op.J', temp, 1, 1) # add JᵀJv to result Hv
+    temp_Jv = view(gn_op.temp,1:m)
+    mul!(temp_Jv, gn_op.J, v) # form Jv
+    mul!(Hv, gn_op.J', temp_Jv, 1, 1) # add JᵀJv to result Hv
 
     # μCᵀCv term
-    mul!(temp, sr1_op.C, v) # form Cv
-    mul!(Hv, sr1_op.C', temp, sr1_op.mu, 1) # add μCᵀCv to result Hv
-
+    temp_Cv = view(gn_op.temp,1:p)
+    mul!(temp_Cv, gn_op.C, v) # form Cv
+    mul!(Hv, gn_op.C', temp_Cv, gn_op.mu, 1) # add μCᵀCv to result Hv
 
     return
 end
@@ -98,7 +100,7 @@ matrix-matrix multiplication
 """
 function Base.:*(H::GN{T}, v::Vector{T}) where T
     Hv = Vector{T}(undef,size(v,1))
-    mul!()
+    mul!(Hv,H,v)
     return H.J' * (H.J*v) + H.C' * (H.mu*H.C*v)
 end
 
@@ -160,12 +162,6 @@ mutable struct SR1{T<:Real} <: ALHessian{T}
     temp::Vector{T}
 end
 
-# Constructor for `SR1` Hessian approximation.
-# Takes jacobians and penalty parameters as inputs.
-# Second order terms are initialized to `0`.
-# Secant equations components and the buffer vector are
-# set to `0`.
-
 """
     SR1(J,C,μ)
 
@@ -174,7 +170,7 @@ Constructor method for the [`GN`](@ref) structure.
 Takes jacobians and a penalty parameter as inputs and initializes the other
 attributes to `0`.
 
-** Arguments
+**Arguments**
 
 * `J`: Jacobian matrix of the residuals
 
@@ -187,9 +183,10 @@ function SR1(
     C::AbstractMatrix,
     mu::Float64)
 
-    n = size(J,2)
+    (m,n) = size(J)
+    p = size(C,1)
 
-    return SR1(J,C,zeros(n,n),mu,zeros(n),zeros(n),zeros(n),zeros(n),zeros(n))
+    return SR1(copy(J),copy(C),zeros(n,n),mu,zeros(n),zeros(n),zeros(max(n,m,p)))
 end
 
 """ Base.:*(H::SR1, v)
@@ -213,18 +210,20 @@ Hessian-vector without doing matrix-matrix multiplications.
 """
 function mul!(Hv::Vector{T}, sr1_op::SR1{T}, v::Vector{T}) where T
 
-    # Buffer vectors for intermediate computations
-    temp = sr1_op.temp
+    m = size(sr1_op.J,1)
+    p = size(sr1_op.C,1)
 
     # Reset result values to make sure it is zero
     Hv .= 0.0
     # JᵀJv term
-    mul!(temp, sr1_op.J, v) # form Jv
-    mul!(Hv, sr1.op.J', temp, 1, 1) # add JᵀJv to result Hv
+    temp_Jv = view(sr1_op.temp,1:m)
+    mul!(temp_Jv, sr1_op.J, v) # form Jv
+    mul!(Hv, sr1_op.J', temp_Jv, 1, 1) # add JᵀJv to result Hv
 
     # μCᵀCv term
-    mul!(temp, sr1_op.C, v) # form Cv
-    mul!(Hv, sr1_op.C', temp, sr1_op.mu, 1) # add μCᵀCv to result Hv
+    temp_Cv = view(sr1_op.temp,1:p)
+    mul!(temp_Cv, sr1_op.C, v) # form Cv
+    mul!(Hv, sr1_op.C', temp_Cv, sr1_op.mu, 1) # add μCᵀCv to result Hv
 
     # Sv term
     mul!(Hv, sr1_op.S, v, 1, 1) # add Sv to result Hv
@@ -232,6 +231,26 @@ function mul!(Hv::Vector{T}, sr1_op::SR1{T}, v::Vector{T}) where T
     return
 end
 
+function update_hessian!(
+    sr1_op::SR1{T}, 
+    J_new::Matrix{T},
+    C_new::Matrix{T},
+    y::Vector{T},
+    s::Vector{T}) where T 
+
+    # Update Jacobians 
+    sr1_op.J .= J_new
+    sr1_op.C .= C_new
+
+    # Update components of the secant equation
+    sr1_op.secant_rhs .= y 
+    sr1_op.step .= s 
+
+    # Compute Second order terms
+    update_sr1_second_order!(sr1_op)
+
+    return
+end
 
 """
     update_sr1_second_order!(H::SR1)
@@ -242,7 +261,7 @@ Applies a structured SR1 update, with a safeguard check to prevent
 the approximation to break down.
 """
 
-function update_sr1_second_order!(sr1_op::SR1)
+function update_sr1_second_order!(sr1_op::SR1{T}) where T
 
     # Tolerance for the skipping update safeguard
     eps_safeguard = sqrt(eps(T))
@@ -252,13 +271,13 @@ function update_sr1_second_order!(sr1_op::SR1)
     s = sr1_op.step
 
     # Buffer to store y - Ss
-    ymSs = sr1_op.temp
+    ymSs = view(sr1_op.temp,1:size(s,1))
     ymSs .= y
     mul!(ymSs, sr1_op.S, s, -1, 1) # Form ymSs = y - Ss
 
     # Apply update if denominator (y - Ss)ᵀs not too small
     denom = dot(s,ymSs)
-    if abs(denom) > eps_safeguard * norm(s) * norm(ymSs)
+    if abs(denom) > max(eps_safeguard, eps_safeguard * norm(s) * norm(ymSs))
         # Add (y - Ss)(y - Ss)ᵀ / (y - Ss)ᵀs to second order terms approximation
         mul!(sr1_op.S, ymSs, ymSs', 1/denom, 1)
     end
