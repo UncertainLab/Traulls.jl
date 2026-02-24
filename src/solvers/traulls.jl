@@ -655,7 +655,7 @@ function solve_subproblem(
     alx = al_objgrad!(rx,cx,y,mu,J,C,g)
     g0 = copy(g) # save initial gradient for relative termination criteria
 
-    H = @match hessian_approx begin
+    hess_op = @match hessian_approx begin
         $gn     => GN(J,C,mu)
         $sr1    => SR1(J,C,mu)
     end
@@ -678,7 +678,7 @@ function solve_subproblem(
         s, pred = projected_gradient(
             x,
             g,
-            H,
+            hess_op,
             proj_op,
             x_low,
             x_upp,
@@ -727,30 +727,30 @@ function solve_subproblem(
             # Update gradient and Hessian approximation
 
             if hessian_approx == gn # Gauss-Newton case
-                # Implicitly modifies J and C fields in H
-                jac_residuals!(model,x,J)     # Implicitly modifies field J
-                jac_nlconstraints!(model,x,C) # Implicitly modifies field C
-                al_grad!(rx,cx,y,mu,J,C,g)
+                # Update Jacobians for form next iteration Gauss-Newton
+                # approximation
+                jac_residuals!(model,x,J)
+                jac_nlconstraints!(model,x,C)
+                update_hessian!(hess_op,J,C)
+
+                al_grad!(rx,cx,y,mu,J,C,g) # Evaluate gradient
 
             else # Quasi Newton update
                 # Update Jacobians and apply structured SR1 update to
                 # second order terms
 
-                # Form the terms of the structured secant equation
+                # Form right handside of the secant equation
 
-                H.secant_rhs .= -J'*rx .- C'*(y .+ mu.*cx)
-
-                jac_residuals!(model,x,J)     # Implicitly modifies field J
-                jac_nlconstraints!(model,x,C) # Implicitly modifies field C
+                y_a .= -J'*rx .- C'*(y .+ mu.*cx)
+                jac_residuals!(model,x,J)
+                jac_nlconstraints!(model,x,C)
                 al_grad!(rx,cx,y,mu,J,C,g)
+                y_a .+= g
 
-                H.secant_rhs .+= g
-                H.step .= s
+                update_hessian!(hess_op,J,C,y_a,s)
 
-                # Update second order terms
-                update_sr1_second_order!(H)
             end
-            #update_hessian!(H,J,C)
+
             pix = criticality_measure(g,proj_op)
 
         else
@@ -825,7 +825,7 @@ relative of the gradient projection method
 function projected_gradient(
     x::Vector{T},
     g::Vector{T},
-    H::ALHessian{T},
+    hess_op::ALHessian{T},
     proj_op::SubspaceProjector{T},
     x_low::Vector{T},
     x_upp::Vector{T},
@@ -836,8 +836,8 @@ function projected_gradient(
     s_low,s_upp = step_bounds(x,x_low,x_upp,radius)
 
     # Cauchy step
-    s = cauchy_step(s,g,H,proj_op,x_low,x_upp,s_low,s_upp)
-    Hs = H*s
+    s = cauchy_step(s,g,hess_op,proj_op,x_low,x_upp,s_low,s_upp)
+    Hs = hess_op*s
 
     # Apply conjugate gradient if at least one free variable
     saturated_active_set = nb_fixed(proj_op) < nbmax_fixed_bounds(proj_op)
@@ -850,11 +850,11 @@ function projected_gradient(
         cg_rhs = Hs .+ g
 
         # Compute search direction via  projected conjugate gradient
-        w, cg_status = pcg(cg_rhs,H,proj_op,s_low,s_upp,kappa_cg)
+        w, cg_status = pcg(cg_rhs,hess_op,proj_op,s_low,s_upp,kappa_cg)
 
         # Update the step
         s .+= w
-        Hs .= H*s
+        Hs .= hess_op*s
     end
 
     pred = dot(g,s) + 0.5*dot(s,Hs)
@@ -864,7 +864,8 @@ end
 
 """ next_breakpoint(d,s,dₗ,dᵤ,fix_bounds)
 
-Finds the smallest scalar `θ` such that one or more components not in `fix_bounds` of `s + θ*d` lie at one of their bounds `dₗ` or `dᵤ`.   
+Finds the smallest scalar `θ` such that one or more components not in `fix_bounds`
+of `s + θ*d` lie at one of their bounds `dₗ` or `dᵤ`.
 
 Returns the scalar `θ` and `idx`, the index of the components that becomes active.
 """
@@ -935,7 +936,7 @@ linear constraints
 function cauchy_step(
     x::Vector{T},
     g::Vector{T},
-    H::ALHessian{T},
+    hess_op::ALHessian{T},
     proj_op::SubspaceProjector{T},
     x_low::Vector{T},
     x_upp::Vector{T},
@@ -966,7 +967,7 @@ function cauchy_step(
     # Prepare the first interval 
     tb, idx = next_breakpoint(d,s,d_low,d_upp,proj_op.workspace_mat.fixvars)
     gtd = dot(g,d)
-    Hd = H*d
+    Hd = hess_op*d
     
     found = false
 
@@ -998,7 +999,7 @@ function cauchy_step(
 
             # Prepare for the next interval
             gtd = dot(g,d)
-            Hd .= H*d
+            Hd .= hess_op*d
             
             prev_tb = tb
             tb, idx = next_breakpoint(d,s,d_low,d_upp,proj_op.workpsace_mat.fixvars)
