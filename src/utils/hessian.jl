@@ -12,7 +12,8 @@
 """
     GN <: ALHessian 
 
-Mutable structure representing the Gauss-Newton approximation of the Augmented Lagrangian Hessian 
+Mutable structure representing the Gauss-Newton approximation of the Augmented
+Lagrangian Hessian
 
 **Attributes**
 
@@ -22,392 +23,264 @@ Mutable structure representing the Gauss-Newton approximation of the Augmented L
 
 * `μ`: penalty parameter
 
-The resulting approximation is `H = JᵀJ + μCᵀC`.
+* `temp`: buffer vector to avoid reallocations for intermediate
+quantities involved when computing matrix-vector products
 
-See [`Base.:*(H::GN, v)`](@ref), [`vthv(H::GN, v)`](@ref)
+The resulting approximation is `H = JᵀJ + μCᵀC`.
 """
-mutable struct GN <: ALHessian
-    J::Matrix
-    C::Matrix
-    mu::Float64 
+mutable struct GN{T<:Real} <: ALHessian{T}
+    J::AbstractMatrix{T}
+    C::AbstractMatrix{T}
+    mu::T
+    temp::AbstractVector{T}
 end
 
-""" vthv(H::GN,v::Vector)
-
-The quadratic term `vᵀHv` where `H = JᵀJ + μCᵀC` is the Gauss-Newton approximation of the augmented Lagrangian Hessian encoded into
-the [`GN`](@ref) type.
+# Constructor for Gauss-Newton approximation
+# Takes jacobians and a penalty parameter as inputs
+# Initializes the buffer vector to zero
+#
+#
 """
-function vthv(H::GN, v::Vector) 
-    Jv = H.J*v
-    Cv = H.C*v 
-    return dot(Jv,Jv) + H.mu*dot(Cv,Cv)
-end 
+    GN(J,C,μ)
+
+Constructor method for the [`GN`](@ref) structure.
+
+Takes jacobians and a penalty parameter as inputs and initializes the buffer
+vector to zero.
+
+* Arguments
+
+- `J`: Jacobian matrix of the residuals
+
+- `C`: Jacobian matrix of the nonlinear equality constraints
+
+- `μ`: Penalty parameter
+"""
+function GN(
+    J::AbstractMatrix{T},
+    C::AbstractMatrix{T},
+    mu::T) where T
+
+    m = size(J,1)
+    p = size(C,1)
+    return GN(copy(J),copy(C),mu,zeros(max(m,p)))
+end
+
+"""
+    mul!(Hv, H::GN, v)
+
+Overload the 3-argument `mul!` method to the type [`GN`](@ref) to compute
+Hessian-vector without doing matrix-matrix multiplications.
+"""
+
+function mul!(Hv::Vector{T}, gn_op::GN{T}, v::Vector{T}) where T
+
+    m = size(gn_op.J,1)
+    p = size(gn_op.C,1)
+    
+    # Reset result values to make sure it is zero
+    Hv .= 0.0
+    # JᵀJv term
+    temp_Jv = view(gn_op.temp,1:m)
+    mul!(temp_Jv, gn_op.J, v) # form Jv
+    mul!(Hv, gn_op.J', temp_Jv, 1, 1) # add JᵀJv to result Hv
+
+    # μCᵀCv term
+    temp_Cv = view(gn_op.temp,1:p)
+    mul!(temp_Cv, gn_op.C, v) # form Cv
+    mul!(Hv, gn_op.C', temp_Cv, gn_op.mu, 1) # add μCᵀCv to result Hv
+
+    return
+end
 
 """ Base.:*(H::GN, v)
 
-Overload the `*` operator to the type [`GN`](@ref) in order to avoid matrix-matrix multiplication
+Overload the `*` operator to the type [`GN`](@ref) in order to avoid
+matrix-matrix multiplication
 """
-function Base.:*(H::GN, v::Vector) 
+function Base.:*(H::GN{T}, v::Vector{T}) where T
+    Hv = Vector{T}(undef,size(v,1))
+    mul!(Hv,H,v)
     return H.J' * (H.J*v) + H.C' * (H.mu*H.C*v)
 end
 
 """
     update_hessian!(H,J₊,C₊)
 
-Updates the Gauss-Newton Hessian approximation `H` by modifiying the `J` and `C` attributes with, 
-respectively `J₊` and `C₊`.
+Updates the Gauss-Newton Hessian approximation `H` by modifiying the `J` and `C`
+attributes with, respectively `J₊` and `C₊`.
 """
 function update_hessian!(
-    H::GN,
-    J_new::Matrix,
-    C_new::Matrix) 
+    H::GN{T},
+    J_new::AbstractMatrix{T},
+    C_new::AbstractMatrix{T}) where T
     
-    H.J = J_new
-    H.C = C_new
+    H.J .= J_new
+    H.C .= C_new
     return
 end
 
+
 """
-    HybridSR1 <: ALHessian
+    SR1 <: ALHessian
 
-Mutable structure reprensenting the SR1 approximation of the Augmented Lagrangian Hessian
+Mutable structure encoding the SR1 approximation of the augmented Lagrangian Hessian.
 
-**Attributes**
+The approximation is of the form `H = JᵀJ + μCᵀC + S` where
+`J` and `C` are available first order quantities, `μ` is the penalty parameter
+ and `S` approximates the second order terms of the true Hessian.
+
+Matrix `S` is updated iteratively by a SR1 formula derived from a structured
+secant equation `Ss = y` where `s` is a step and right handside `y` is defined
+by first order quantities.
+
+** Attributes
 
 * `J`: Jacobian of the residuals
 
 * `C`: Jacobian of the nonlinear constraints
 
-* `S`: Approximation of the second order terms of the true Hessian
+* `S`: approximation of the second order terms of the true Hessian
 
-* `mu`: penalty parameter 
+* `mu`: penalty parameter
 
-* `small_res`: Boolean indicating if the second order terms `S` can be neglected in computations
+* `step`: step of the current iteration
 
-* `secant_rhs`: Right handside of the structured secant equation the SR1 is based on
+* `secant_rhs`: right handside of the structured secant equation
+
+* `temp`: buffer vector to avoid reallocations for intermediate
+quantities involved when computing matrix-vector products
 
 """
-mutable struct HybridSR1 <: ALHessian
-    J::Matrix
-    C::Matrix
-    S::Matrix
-    mu::Float64
-    small_res::Bool
-    secant_rhs::Vector
+mutable struct SR1{T<:Real} <: ALHessian{T}
+    J::AbstractMatrix{T}
+    C::AbstractMatrix{T}
+    S::AbstractMatrix{T}
+    mu::T
+    step::Vector{T}
+    secant_rhs::Vector{T}
+    temp::Vector{T}
 end
 
 """
-    HybridSR1(J,C,μ)
+    SR1(J,C,μ)
 
-Constructor for the [`HybridSR1`](@ref) structure. 
+Constructor method for the [`GN`](@ref) structure.
 
-One can initlize a `HybridSR1` with given Jacobians `J`, `C` and penalty parameter `mu`.
+Takes jacobians and a penalty parameter as inputs and initializes the other
+attributes to `0`.
 
-The remaining attributes are initialized as follows.
+**Arguments**
 
-* `S`: zero matrix of appropriate dimensions
+* `J`: Jacobian matrix of the residuals
 
-* `small_res`: `true`
+* `C`: Jacobian matrix of the nonlinear equality constraints
 
-* `secant_rhs`: zero vector of appropriate dimension
-
-This choice of initialization is tantamount to encode the Gauss-Newton approximation into a `HybridSR1`. 
+* `μ`: Penalty parameter
 """
-function HybridSR1(
-    J::Matrix,
-    C::Matrix,
+function SR1(
+    J::AbstractMatrix,
+    C::AbstractMatrix,
     mu::Float64)
 
-    n = size(J,2)
+    (m,n) = size(J)
+    p = size(C,1)
 
-    return HybridSR1(J,C,zeros(n,n),mu,true,zeros(n))
+    return SR1(copy(J),copy(C),zeros(n,n),mu,zeros(n),zeros(n),zeros(max(n,m,p)))
 end
 
-""" Base.:*(H::HybridSR1,v::Vector)
+""" Base.:*(H::SR1, v)
 
-Overloads the `*` operator to the type [`HybridSR1`](@ref) for better Hessian-vector product.
-Avoids to perform matrix-matrix multiplication. 
+Overload the `*` operator to the type [`GN`](@ref) in order to avoid
+matrix-matrix multiplication
 """
-function Base.:*(H::HybridSR1, v::Vector) 
-    
-    Hv = H.J' * (H.J*v) .+ H.mu*H.C' * (H.C*v)
-    
-    if !H.small_res Hv .+= H.S*v end 
+function Base.:*(sr1_op::SR1{T}, v::Vector{T}) where T
+
+    Hv = Vector{T}(undef,size(v,1))
+    mul!(Hv, sr1_op, v)
 
     return Hv
 end
 
 """
-     update_hessian!(H,s,φ,φ₊,κ_sos,κ_smlres)
+    mul!(Hv, H, v)
 
-Updates the `HybridSR1` Hessian `H` by applying the SR1 formula on the second order terms attribute `S`.
-
-After the update, a criterion is evaluated to assert wether or not the second order terms can be neglected.
-
-**Arguments**
-
-- `H`: current Hessian approximation
-- `s`: step for the current iteration
-- `φ`: value of the Augmented Lagrangian at current iterate
-- `φ₊`: value of the Augmented Lagrangian at next iterate
-- `κ_sos`: small positive constant used in the safeguard against small denominator
-- `κ_smlres`: small positive constant used to check if the second order terms can be neglected or not
-
-**On return**
-
-Modifies in place  the attributes `S` and `small_res` of `H`. 
+Overload the 3-argument `mul!` method to the type [`SR1`](@ref) to compute
+Hessian-vector without doing matrix-matrix multiplications.
 """
+function mul!(Hv::Vector{T}, sr1_op::SR1{T}, v::Vector{T}) where T
+
+    m = size(sr1_op.J,1)
+    p = size(sr1_op.C,1)
+
+    # Reset result values to make sure it is zero
+    Hv .= 0.0
+    # JᵀJv term
+    temp_Jv = view(sr1_op.temp,1:m)
+    mul!(temp_Jv, sr1_op.J, v) # form Jv
+    mul!(Hv, sr1_op.J', temp_Jv, 1, 1) # add JᵀJv to result Hv
+
+    # μCᵀCv term
+    temp_Cv = view(sr1_op.temp,1:p)
+    mul!(temp_Cv, sr1_op.C, v) # form Cv
+    mul!(Hv, sr1_op.C', temp_Cv, sr1_op.mu, 1) # add μCᵀCv to result Hv
+
+    # Sv term
+    mul!(Hv, sr1_op.S, v, 1, 1) # add Sv to result Hv
+
+    return
+end
+
 function update_hessian!(
-    H::HybridSR1,
-    s::Vector,
-    mx::Float64,
-    mx_next::Float64,
-    kappa_sos::Float64,
-    kappa_sml_res::Float64)
+    sr1_op::SR1{T}, 
+    J_new::Matrix{T},
+    C_new::Matrix{T},
+    y::Vector{T},
+    s::Vector{T}) where T 
 
-    # Update matrix fields of the Hessian
-    update_sr1_second_order(H,s,kappa_sos)
+    # Update Jacobians 
+    sr1_op.J .= J_new
+    sr1_op.C .= C_new
 
-    # In current version, Jacobians are implicitly updated when evaluated at trial point 
-    # TODO: think about a more modular way of handeling Jacobians in place modifications
-    # H.J .= J_next[:,:]
-    # H.C .= C_next[:,:]
+    # Update components of the secant equation
+    sr1_op.secant_rhs .= y 
+    sr1_op.step .= s 
 
-    # Update small_residuals field
-    # check_small_residuals(H,mx,mx_next,kappa_sml_res)
-    H.small_res = false
+    # Compute Second order terms
+    update_sr1_second_order!(sr1_op)
 
     return
 end
 
 """
-    update_sr1_second_order!(H,s,κ_sos)
+    update_sr1_second_order!(H::SR1)
 
-Update the second order terms of the Hessian approximation `H` with a SR1 formula based on
-the structured secant equation `Sᵀs = yₐ` where `yₐ` denotes the `secant_rhs` attribute of `H`.
+Updates the second order terms of the Hessian approximation `H`.
 
-First, a safeguard is tested to check if the denominator of the update formula is too small.
-
-The update is skipped if `Sᵀs = yₐ` or `|(Sᵀs-yₐ)ᵀs| < κ_sos *||s||*||Sᵀs-yₐ||`.
-
-If not, we add `(Sᵀs-yₐ)(Sᵀs-yₐ)ᵀ / (sᵀ(Sᵀs-yₐ))` to the current second order approximation
-
-**Arguments**
-
-- `H`: Structure of type [`HybridSR1`](@ref) encoding the current Hessian approximation
-- `s`: step of the current iteration
-- `κ_sos`: small positive constant used in the small denominator safeguard
-
-**On return**
-
-Modifies in place the attribute `S` of `H`.
+Applies a structured SR1 update, with a safeguard check to prevent
+the approximation to break down.
 """
-function update_sr1_second_order(
-    H::HybridSR1,
-    s::Vector,
-    kappa_sos::Float64)
 
-    atol = sqrt(eps(Float64))
+function update_sr1_second_order!(sr1_op::SR1{T}) where T
 
-    v = H.secant_rhs .- H.S*s
-    stv = dot(s,v)
-    norm_s = norm(s)
-    norm_v = norm(v)
+    # Tolerance for the skipping update safeguard
+    eps_safeguard = sqrt(eps(T))
 
-    # Safeguard: update skipped if the denominator `sᵀv` is too small
-    skip_update = norm(v,Inf) < atol || abs(stv) < kappa_sos * norm_s * norm_v
-    
-    if !skip_update H.S .+= (1/stv) .* v*v' end
-    
-    return
-end
+    # Vectors of the secant Equation Ss = y
+    y = sr1_op.secant_rhs
+    s = sr1_op.step
 
-"""
-    check_small_residuals(H,φ,φ₊,κ_smlres)
+    # Buffer to store y - Ss
+    ymSs = view(sr1_op.temp,1:size(s,1))
+    ymSs .= y
+    mul!(ymSs, sr1_op.S, s, -1, 1) # Form ymSs = y - Ss
 
-Tests if the relative reduction `(φ - φ₊) / φ` is below the treshold value `κ_smlres`.
-This heuristic estimates if the residuals are likely to be small at the solution,
-and hence if one can neglect the second order terms of the Hessian approximation.
-
-Sets `small_res` attribute of `H` to the boolean result of  `(φ - φ₊) / φ < κ_smlres`.
-
-**Arguments**
-
-- `H`: structure of type [`HybridSR1`](@ref) encoding the current Hessian approximation
-- `φ`: value of the objective function at current iterate
-- `φ₊`: value of the objective function at next iterate
-- `κ_smlres`: treshold value of the heuristic test
-
-**On return**
-
-Modifies in place the `small_res` attribute of `H`.
-"""
-function check_small_residuals(
-    H::HybridSR1,
-    mx::Float64,
-    mx_next::Float64,
-    kappa_sml_res::Float64)
-
-    H.small_res = (mx - mx_next) < kappa_sml_res * mx
-    return  
-end
-
-"""
-    AlSR1Hessian <: ALHessian 
-
-Mutable structure representing the strutured SR1 approximation of the Augmented Lagrangian Hessian.
-
-**Attributes**
-
-* `J`: Jacobian of the residuals 
-
-* `C`: Jacobian of the nonlinear constraints 
-
-* `S`: approximation of the second order terms in the true Hessian
-
-* `μ`: penalty parameter  
-
-The resulting approximation is `H = JᵀJ + μCᵀC + S`.
-
-In order to not explicitely form the matrix-matrix terms, frequent operations are overloaded and take advantage of the Hessian structure. 
-
-If `v` is a vector, this includes the computation of the matrix-vector product `Hv` or the quadratic term `vᵀHv`.
-
-See [`Base.:*(H::AlSR1Hessian, v)`](@ref), [`vthv(H::AlSR1Hessian, v)`](@ref)
-"""
-mutable struct AlSR1Hessian <: ALHessian
-    J::Matrix
-    C::Matrix
-    S::Matrix
-    mu::Float64 
-end
-
-""" vthv(H::AlSR1Hessian,v)
-
-The quadratic term `vᵀHv` where `H = JᵀJ + μCᵀC + S` is an SR1 approximation of the augmented Lagrangian Hessian encoded into
-the [`AlSR1Hessian`](@ref) type.
-"""
-function vthv(H::AlSR1Hessian, v::Vector) 
-    Jv = H.J*v
-    Cv = H.C*v 
-    return dot(Jv,Jv) + H.mu*dot(Cv,Cv) + dot(v,H.S*v)
-end 
-
-
-
-""" Base.:*(H::AlSr1Hessian, v)
-
-Overload the `*` operator to the type [`SR1Hessian`](@ref) in order to avoid matrix-matrix multiplication 
-"""
-function Base.:*(H::AlSR1Hessian, v::Vector) 
-    Jv = H.J*v 
-    muCv = H.mu*H.C*v 
-    return H.J' * Jv + H.C' * muCv + H.S*v
-end
-
-# Compute the approximated 2nd order terms of Hessian with SR1 method  
-
-"""
-    sr1_update
-
-Update the SR1 approximation of the second order terms of the Augmented Lagrangian Hessian.
-
-Uses a safeguard to avoid the small denominator degenerate cases.
-
-Returns the updated matrix.
-"""
-function sr1_update(
-    s::Vector,
-    g_next::Vector,
-    r_next::Vector,
-    y_bar_next::Vector,
-    J::Matrix,
-    C::Matrix,
-    S::Matrix,
-    kappa_sfg::Float64) 
-
-    y_a = g_next - J'*r_next - C'*y_bar_next
-    v = y_a - S*s
-    stv = dot(s,v)
-    sfg_treshold = kappa_sfg*dot(v,v) 
-    S_next = deepcopy(S)
-
-  
-    if stv >= sfg_treshold
-        S_next .+= (1/stv) .* (v*v')
+    # Apply update if denominator (y - Ss)ᵀs not too small
+    denom = dot(s,ymSs)
+    if abs(denom) > max(eps_safeguard, eps_safeguard * norm(s) * norm(ymSs))
+        # Add (y - Ss)(y - Ss)ᵀ / (y - Ss)ᵀs to second order terms approximation
+        mul!(sr1_op.S, ymSs, ymSs', 1/denom, 1)
     end
-    return S_next
-end
 
-"""
-    hybrid_update_hessian
-
-Updates the approximation of the Augmented Lagrangian Hessian using a hybrid strategy.
-
-First, the SR1 update is computed and a heuristic test is then used to detect if the residuals are small or not, and so if the second order terms can be neglected.
-
-For small residuals, the Hessian is updated with the Gauss-Newton approximation.
-
-In the other case, the Hessian is updated with the SR1 approximation.
-
-**On return**
-
-* `H`: Updated approximation of the Hessian 
-
-* `S_next`: Approximated second order terms with updated with the SR1 update formula
-"""
-function update_hybrid_hessian(
-    s::Vector,
-    mx::Float64,
-    mx_next::Float64,
-    g_next::Vector,
-    r_next::Vector,
-    J_next::Matrix,
-    C_next::Matrix,
-    mu::Float64,
-    y_bar_next::Vector,
-    J::Matrix,
-    C::Matrix,
-    S::Matrix,
-    kappa_smlres::Float64,
-    kappa_sfg::Float64)  
-
-    S_next = sr1_update(s,g_next,r_next,y_bar_next,J,C,S,kappa_sfg)
-    small_residuals = (mx-mx_next) / mx < kappa_smlres
-    H = (small_residuals ? GN(J_next,C,mu) : AlSR1Hessian(J_next,C_next,S_next,mu))
-    
-    return H, S_next
-end
-
-"""
-    update_hessian_w_sr1
-
-Updates the approximation of the Hessian of the Augmented Lagrangian with the SR1 approach.
-
-**On return**
-
-* `H`: Updated approximation of the Hessian 
-
-* `S_next`: Approximated second order terms with updated with the SR1 update formula
-"""
-function update_hessian_w_sr1(
-    s::Vector,
-    g_next::Vector,
-    r_next::Vector,
-    J_next::Matrix,
-    C_next::Matrix,
-    mu::Float64,
-    y_bar_next::Vector,
-    J::Matrix,
-    C::Matrix,
-    S::Matrix,
-    kappa_sfg::Float64) 
-
-
-    verbose = false
-    S_next = sr1_update(s,g_next,r_next,y_bar_next,J,C,S,kappa_sfg)
-    verbose && println("[update_hessian]")
-    verbose && @show S_next 
-    H = AlSR1Hessian(J_next,C_next,S_next,mu)
-    return H, S_next
+    return
 end

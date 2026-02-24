@@ -18,7 +18,7 @@ of vectors must equal `0` whereas `fixvars[i] = false` means that component `i` 
 with such a matrix efficient and without explicitly storing the matrix `Z`.
 """
 mutable struct SubspaceMatrix{T<:Real} <: AbstractMatrix{T} 
-    mat::AbstractMatrix{T}
+    eqmat::AbstractMatrix{T}
     fixvars::BitVector
 end
 
@@ -58,23 +58,25 @@ of vectors must equal `0` whereas `fixvars[i] = false` means that component `i` 
 
 """
 struct TransposeSubspaceMatrix{T<:Real,S<:AbstractMatrix{T}} <: AbstractMatrix{T}
-    mat::Transpose{T,S}
+    eqmat::Transpose{T,S}
     fixvars::BitVector
 end
 
 # Overloads the `transpose` function for `SubspaceMatrix`.
-transpose(submat::SubspaceMatrix{T}) where T = TransposeSubspaceMatrix(transpose(submat.mat), submat.fixvars)
+transpose(M::SubspaceMatrix{T}) where T =
+    TransposeSubspaceMatrix(transpose(M.eqmat),
+                            M.fixvars)
 
 # Overloads matrix vector product
-Base.:*(A::SubspaceMatrix{T},x::Vector{T}) where T = vcat(A.mat*x,x[A.fixvars])
+Base.:*(M::SubspaceMatrix{T},x::Vector{T}) where T = vcat(M.eqmat*x,x[M.fixvars])
 
 # overloads matrix vector product with transposition
 function Base.:*(A::TransposeSubspaceMatrix{T,S},x::Vector{T}) where {T,S}
     
-    (n,m) = size(A.mat)
+    (n,m) = size(A.eqmat)
     res = Vector{T}(undef,n)
     
-    mul!(res,A.mat,x[1:m])
+    mul!(res,A.eqmat,x[1:m])
     
     if any(A.fixvars)
         res[A.fixvars] .+= x[m+1:end]
@@ -82,39 +84,50 @@ function Base.:*(A::TransposeSubspaceMatrix{T,S},x::Vector{T}) where {T,S}
 
     return res
 end
+"""
+
+Add the bounds corresponding to indices in array `vᵢ = 0` for `i ∈ newly_active`
+to the subspace encoded in `SubspaceMatrix` `M`.
+"""
+function update_subspace!(M::SubspaceMatrix{T}, newly_active::Vector{Int}) where T
+
+    M.fixvars[newly_active] .= true
+    return
+end
 
 # Returns the number of fixed variables in the subsspace represented by the `SubspaceMatrix` `A`
-nb_fixed(submat::SubspaceMatrix{T}) where T = count(submat.fixvars)
+nb_fixed(submat::SubspaceMatrix) = count(submat.fixvars)
 
-#= Mutable struct to encode the operator that computes projections onto the subspace
-`{v | Av = 0, vᵢ = 0 for i ∈ fixvars}`,
-using the normal equations approach.
-=#
 
 """
     SubspaceProjector{T}
 
-This structure encodes the projector operator onto a subspace of the form `{v | Av = 0, vᵢ = 0 for i ∈ fixvars}`
-where `A` is a full row rank `m × n` ('m < n') matrix and `fixvars = [i₁,...iₚ]`, (`p ≤ n - m`) is a subset of `[1,2,...,n]`.
+This structure encodes the projector operator onto a subspace of the form 
+`{v | Av = 0, vᵢ = 0 for i ∈ fixvars}`
+where `A` is a full row rank `m × n` ('m < n') matrix and `fixvars = [i₁,...iₚ]`, (`p ≤ n - m`)
+is a subset of `[1,2,...,n]`.
 
-The subspace is merely the null space of the matrix `A₊` defined as the concatenation of `A` with `Z` defined as the
+The subspace is the null space of the matrix `A₊` defined as the concatenation of `A` with `Z`, a
 `p × n` matrix whose row `k` is the row `iₖ` of the `n × n` identity matrix.
 
-The projection is computed by solving the normal equations associated to the projection quadratic program,
-which involves the Cholesky decomposition of the augmented matrix `A₊A₊ᵀ`.
+The projection is computed by solving the normal equations associated to the 
+projection quadratic program, which involves the Cholesky decomposition of 
+the augmented Gram matrix `A₊A₊ᵀ`.
 
 ** Attributes
 
-* `mat`: `SubspaceMatrix` representing matrix `A₊`
+* `workspace_mat`: `SubspaceMatrix` representing matrix `A₊`
 
-* `chol`: `Factorization` storing the Cholesky decomposition of `A₊A₊ᵀ`
+* `chol_gram_augmat`: `Factorization` storing the Cholesky decomposition of `A₊A₊ᵀ`
+
+* `chol_gram_eqmat`: `Factorization` storing the Cholesky decomposition of `AAᵀ`
 """
 mutable struct SubspaceProjector{T<:Real} <: Projector{T}
-    mat::SubspaceMatrix{T}
-    chol::Cholesky{T,Matrix{T}}
+    workspace_mat::SubspaceMatrix{T}
+    chol_gram_augmat::Cholesky{T,Matrix{T}}
+    chol_gram_eqmat::Cholesky{T,Matrix{T}}
 end
 
-# Constructor for polyhedra with no active bounds
 """
     SubspaceProjector(A,chol_AAᵀ)
 
@@ -126,14 +139,21 @@ Constructor for the `SubspaceProjector` corresponding to the projection operator
 
 * `chol_AAᵀ`: `Factorization` storing the Cholesky decomposition of `AAᵀ`
 """
-SubspaceProjector(A::Matrix{T},chol::Cholesky{T,Matrix{T}}) where T = SubspaceProjector(SubspaceMatrix(A),chol)
+function SubspaceProjector(
+    A::Matrix{T},
+    chol_aat::Cholesky{T,Matrix{T}}) where T
 
-# Constructor for polyhedra with some active bounds
+    SubspaceProjector(SubspaceMatrix(A),chol_aat,chol_aat)
+end
+
+# Constructor for polyhedra with initial active bounds
 """
     SubspaceProjector
 
-Constructor for the `SubspaceProjector` corresponding to the projection operator onto the subspace `{v | Av = 0, vᵢ = 0 for i ∈ fixvars}`
-where `A` is a full row rank `m × n` ('m < n') matrix and `fixvars = [i₁,...iₚ]`, (`p ≤ n - m`) is a subset of `[1,2,...,n]`.
+Constructor for the `SubspaceProjector` corresponding to the projection operator
+onto the subspace `{v | Av = 0, vᵢ = 0 for i ∈ fixvars}`
+where `A` is a full row rank `m × n` ('m < n') matrix and
+`fixvars = [i₁,...iₚ]`, (`p ≤ n - m`) is a subset of `[1,2,...,n]`.
 
 ** Arguments
 
@@ -143,25 +163,109 @@ where `A` is a full row rank `m × n` ('m < n') matrix and `fixvars = [i₁,...i
 
 * `chol_AAᵀ`: `Factorization` storing the Cholesky decomposition of `AAᵀ`
 """
-function SubspaceProjector(A::Matrix{T},fixvars::BitVector,chol_aat::Cholesky{T,Matrix{T}}) where T
+function SubspaceProjector(
+    A::Matrix{T},
+    fixvars::BitVector,
+    chol_aat::Cholesky{T,Matrix{T}}) where T
 
     subA = SubspaceMatrix(A,fixvars)
-    chol = cholesky_aug_aat(A,fixvars,chol_aat)
-    
-    SubspaceProjector(subA,chol)
+    chol = cholesky_augmented_gram_mat(A,fixvars,chol_aat)
+
+    SubspaceProjector(subA,chol,chol_aat)
 end
 
-# Overload of the `mul!` method to make projections behave as matrix-vector products
+
+# Update the Cholesky decomposition of the Gram matrix when adding one bound constraint 
+# to the active set 
+"""
+    cholesky_augmented_gram_mat(A,fix_bounds,chol_AAᵀ)
+
+Forms the Cholesky decomposition of the augmented Gram matrix `A₊A₊ᵀ`  with
+`A₊` defined as the concatenation of `A`, full line rank `m × n`, with rows
+of the `n × n` identity. The indices of the selected rows
+`{i₁,...,iₚ} ⊂ {1,...n}`, with `p < n-m` are encoded into the `BitVector`
+`fix_bounds`.
+
+The computations exploits the block structure of `A₊A₊ᵀ` and the availability of
+the Cholesky decomposition of `AAᵀ`.
+
+**Arguments**
+
+* `A`: full line rank matrix
+
+* `fix_bounds`: `BitVector` encoding the fixed variables.
+`fix_bounds[i] = true` means that a bound on component `i` is active
+
+* `chol_AAᵀ`: Cholesky decomposition of `AAᵀ`
+
+* On return
+
+The Cholesky decomposition `A₊A₊ᵀ` in a `Factorization` type.
+"""
+function cholesky_augmented_gram_mat(
+    A::Matrix,
+    fix_bounds::BitVector,
+    chol_aat::Cholesky)
+
+    (m,n) = size(A)
+    p = count(fix_bounds)
+    mpp = m+p
+    @assert mpp <= n
+
+    # Auxiliary buffer arrays
+    H = Matrix{Float64}(I,p,p)
+    L = LowerTriangular(Matrix{Float64}(undef, mpp, mpp))
+
+    A_act_cols = view(A,:,fix_bounds)
+    G = chol_aat.L \ A_act_cols
+    mul!(H, G', G, -1, 1) # forms I - GᵀG
+
+    # Forms the L factor of ÃÃᵀ Cholesy decomposition
+    L[1:m,1:m] .= chol_aat.L
+    L[m+1:end,1:m] .= G'
+    L[m+1:end,m+1:end] .= cholesky(H).L
+
+    return Cholesky(L)
+end
+
+"""
+    update_subspace_projector!(proj_op, newly_active)
+
+Add constraints `vᵢ = 0` for `i ∈ newly_active` to the subspace encoded in
+`proj_op` and forms the corresponding projection operator by modifying the
+Cholesky decomposition involved in the normal equations solving.
+
+**Arguments**
+
+* `proj_op`: `SubspaceProjector`
+
+* `newly_active`: `Vector` containing the indices of the variables that are set
+active
+"""
+function update_subspace_projector!(proj_op::SubspaceProjector, newly_active::Vector{Int})
+
+    # Set new constraints active
+    update_subspace!(proj_op.workspace_mat, newly_active)
+
+    # Update the Cholesky decomposition involved in the normal equations solving
+    proj_op.chol_gram_augmat = cholesky_augmented_gram_mat(
+        proj_op.workspace_mat.eqmat,
+        proj_op.workspace_mat.fixvars,
+        proj_op.chol_gram_eqmat)
+    return
+end
+
 """
     mul!(r,P,x)
 
-Computes the matrix-vector product `Px` and stores the result in `r`, where `P` is the projection operator onto
-the subspace `{v | Av = 0, vᵢ = 0 for i ∈ fixvars}`
-where `A` is a full row rank `m × n` ('m < n') matrix and `fixvars = [i₁,...iₚ]`, (`p ≤ n - m`) is a subset of `[1,2,...,n]`.
+Computes the matrix-vector product `Px` and stores the result in `r`, where `P`
+ is the projection operator onto the subspace
+`{v | Av = 0, vᵢ = 0 for i ∈ fixvars}` where `A` is a full row rank `m × n` ('m < n') matrix
+and `fixvars = [i₁,...iₚ]` (`p ≤ n - m`) is a subset of `[1,2,...,n]`.
 
 Overloads the `LinearAlgebra.mul!` method.
 
-** Arguments
+**Arguments**
 
 * `r`: Buffer vector to store the result of the projection operation
 
@@ -175,11 +279,11 @@ Nothing is returned, the result is stored in vector `r`.
 """
 function mul!(r::Vector{T},P::SubspaceProjector{T},x::Vector{T}) where T
 
-    temp = P.mat*x # form Ãv
-    ldiv!(P.chol,temp) # solve for y (ÃÃᵀ)y = Ãv
-    r .= x .- transpose(P.mat)*temp # form r = v - Ãᵀy
-    
-    return r 
+    temp = P.workspace_mat * x # form A₊x
+    ldiv!(P.chol_gram_augmat,temp) # solve for y (A₊A₊ᵀ)y = A₊x
+    r .= x .- transpose(P.workspace_mat)*temp # form r = x - A₊ᵀy
+
+    return r
 end
 
 """
@@ -187,11 +291,12 @@ end
 
 Computes the matrix-vector product `Px`, where `P` is the projection operator onto
 the subspace `{v | Av = 0, vᵢ = 0 for i ∈ fixvars}`
-where `A` is a full row rank `m × n` ('m < n') matrix and `fixvars = [i₁,...iₚ]`, (`p ≤ n - m`) is a subset of `[1,2,...,n]`.
+where `A` is a full row rank `m × n` ('m < n') matrix
+and `fixvars = [i₁,...iₚ]`, (`p ≤ n - m`) is a subset of `[1,2,...,n]`.
 
 Overloads the base multiplication `*` method.
 
-** Arguments
+**Arguments**
 
 * `P`: Projection operator encoded as a `SubspaceProjector`
 
@@ -201,59 +306,34 @@ Overloads the base multiplication `*` method.
 
 * `res`: `Vector` containing the result of the projection operation
 """
-function Base.:*(P::SubspaceProjector{T}, x::Vector{T}) where T 
+function Base.:*(P::SubspaceProjector{T}, x::Vector{T}) where T
 
     res = Vector{T}(undef,size(x,1))
     mul!(res,P,x)
-    return res 
+    return res
 end
 
-# Reset the projector operator by setting all bounds as inactive 
-function reset_projector!(P::SubspaceProjector{T}, chol_aat::Cholesky{T,Matrix{T}}) where T 
+# Reset the projector operator by setting all bounds as inactive
+function reset_projector!(P::SubspaceProjector)
 
-    P.mat.fixvars .= false
-    P.chol = chol_aat 
-    return
-end
-# Add the constraints `xᵢ=0 for i ∈ idx` to the subspace matrix 
-# Modifes accordingly the projection operator    
-# Temporary version using the Cholesky decomposition of the initial augmented matrix 
-function add_active_bounds!(P::SubspaceProjector, idx::Vector{Int},chol_aat::Cholesky)
-    P.mat.fixvars[idx] .= true
-    P.chol = cholesky_aug_aat(P.mat.mat,P.fixvars,chol_aat)
+    P.workspace_mat.fixvars .= false
+    P.chol_gram_augmat = P.chol_gram_eqmat
     return
 end
 
-# Add the constraint `xᵢ=0 for some i` to the subspace matrix 
-# Modifes accordingly the projection operator    
-# Temporary version using the Cholesky decomposition of the initial augmented matrix 
-function add_active_bound!(P::SubspaceProjector, idx::Int, chol_aat::Cholesky)
-    add_active_bounds!(P, [idx], chol_aat)
-    return
+# Returns the number of active constraints in subspace
+nb_fixed(proj_op::SubspaceProjector) = nb_fixed(proj_op.workspace_mat)
+
+# Returns the maximum number of bounds that can become active
+# Equals `dimension - number of equality constraints`
+function nbmax_fixed_bounds(proj_op::SubspaceProjector)
+
+    (n,m) = size(proj_op.workspace_mat.eqmat)
+    return n-m
 end
 
-# Returns the number of fixed variables in the subspace the operator `P` projects on
-nb_fixed(P::SubspaceProjector) = nb_fixed(P.mat)
+##################### DEPRECATED CODE #########################################
 
-# Identify the bounds active at `x` up to `atol` and update the projection operator
-
-function active_bounds!(
-    x::Vector{T},
-    P::SubspaceProjector{T},
-    chol_aat::Cholesky,
-    x_low::Vector{T},
-    x_upp::Vector{T};
-    atol::Float64 = sqrt(eps(T))) where T
-
-
-
-    active = BitVector(undef,size(x,1))
-    for i in axes(x,1)
-        active[i] = P.mat.fixvars[i] || (x[i] <= x_low[i] + atol) || (x_upp[i] - atol <= x[i])
-    end
-    add_active_bounds(P,findall(active),chol_aat)
-    return
-end
 
 """ MixedConstraints <: PolyhedralConstraints
 
@@ -601,8 +681,6 @@ function sort_breakpoints(
         end 
     end
 
-    
-
     # Form sorted breakpoints values and corresponding indices 
     sorted_breakpoints, grouped_indices = group_breakpoints(breakpoints)
 
@@ -663,6 +741,7 @@ function active_idx(
     return active
 end
 
+# Returns the indices of bounds that stay active at `x` when taking direction `d`
 function initial_active_bounds(
     x::Vector,
     d::Vector,
@@ -673,9 +752,9 @@ function initial_active_bounds(
     fix_vars = falses(size(x,1))
 
     for i in axes(x,1)
-        
-        fix_vars[i] = (x_upp[i]-atol < x[i] && d[i] > atol) || # positive direction at active upper bound 
-            (x_low[i]+atol > x[i] && d[i] < -atol) ||          # negative direction at active lower bound 
+
+        fix_vars[i] = (x_upp[i]-atol < x[i] && d[i] > atol) || # positive direction at active upper bound
+            (x_low[i]+atol > x[i] && d[i] < -atol) ||          # negative direction at active lower bound
             (abs(d[i]) < atol)                                 # zero direction
     end
 

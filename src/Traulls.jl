@@ -9,7 +9,7 @@ import LinearAlgebra.mul!, LinearAlgebra.transpose
 
 abstract type TralcnllsData end
 
-abstract type ALHessian end
+abstract type ALHessian{T} end
 
 abstract type AbstractCnlsModel end
 

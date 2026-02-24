@@ -26,23 +26,35 @@ using the projected conjugate gradient method.
 Termination cases: 
 
 - the norm of the preconditionned gradient has been reduced by a factor `κ_cg`
-- direction of negative curvature is encountered (can happen when the Hessian is updated with SR1 formula)
+
+- direction of negative curvature is encountered (can happen when the Hessian is
+ updated with SR1 formula)
+
 - a conjugate direction goes beyond the feasible domain
+
 - a maximum number of iterations  have been done (defined to be twice the number of free variables)
 
 # Arguments
 
 - `b`: Initial right handside vector
+
 - `H`: Operator associated to the Hessian matrix
+
 - `w_l`: Lower bounds for the variables
+
 - `w_u`: Upper bounds for the variables
-- `fix_vars`: Boolean vector indicating which variables are fixed 
+
+- `fix_vars`: Boolean vector indicating which variables are fixed
+ 
 - `kappa_cg`: Tolerance parameter for convergence
-- `atol`: Absolute tolerance for negative curvature detection (optional, default: square root double relative precision)
+
+- `atol`: Optionnal argument. Corresponds to absolute tolerance for negative
+curvature detection (default: square root double relative precision)
 
 # Returns
 
 - `w`: The computed descent direction
+
 - `status`: The termination status, encoded in the `CG_status` Enum (see [`CG_status`](@ref))
 """
 function pcg(
@@ -63,7 +75,7 @@ function pcg(
     v = zeros(n)
     
     # Form the preconditionner 
-    # TODO: add preconditionning option
+    # TODO: Encode P into a `Projector`
     free_vars = .!fix_vars
     P = Diagonal(free_vars) 
 
@@ -134,21 +146,61 @@ function pcg(
     return w, status
 end
 
-# Projected gradient method for the case with general linear equality constraints
-#= Apply the projected conjugate gradient method to approximately solves the QP
+"""
+    pcg(b,H,w_l,w_u,proj_op,κ_cg;atol)
 
-`minₚ 0.5*pᵀHp + bᵀp`
+Approximately solves, w.r.t. `w` the subproblem:
 
-`s.t. Ap = 0`
+`min 0.5 wᵀHw + wᵀb`
 
-`pᵢ = 0, for i ∈ fixvars`
+`s.t. Aw = 0`
 
-with early stopping if the iterations generate a direction of negative curvature
-or that goes beyond implicit bounds on the free variables
-=#                       
+`s.t. wᵢ = 0, i ∈ fix_vars`
+
+`wₗ ≤ w ≤ wᵤ,`
+
+using the projected conjugate gradient method.
+
+Termination cases:
+
+- the norm of the preconditionned gradient has been reduced by a factor `κ_cg`
+
+- direction of negative curvature is encountered (can happen when the Hessian is
+ updated with SR1 formula)
+
+- a conjugate direction goes beyond the feasible domain
+
+- a maximum number of iterations  have been done (defined to be twice the number of free variables)
+
+# Arguments
+
+- `b`: Right handside vector
+
+- `H`: Operator associated to the Hessian matrix
+
+- `w_l`: Lower bounds for the variables
+
+- `w_u`: Upper bounds for the variables
+
+- `proj_op`: Object of type [`SubspaceProjector`](@ref) encoding the linear
+equality constraints of the subproblem. Used to project the directions at every
+iteration
+
+- `κ_cg`: Tolerance parameter for convergence
+
+- `atol`: Optional argument. Corresponds to the absolute tolerance used to detect
+ negative curvature detection (default: square root double relative precision)
+
+# Returns
+
+- `w`: The computed descent direction
+
+- `status`: The termination status, encoded in the `CG_status` Enum
+(see [`CG_status`](@ref))
+"""
 function pcg(
     b::Vector{T},
-    H::ALHessian,
+    H::ALHessian{T},
     P::SubspaceProjector{T},
     w_l::Vector{T},
     w_u::Vector{T},
@@ -172,7 +224,8 @@ function pcg(
     tol_negcurve = atol
 
     iter = 1
-    max_iter = 2*(n-count(fix_vars))
+    max_iter = 2*(nbmax_fix_bounds(P)-nb_fixed(P))
+
     # approx_solved = abs(rtv) < tol_cg
     approx_solved = false
     neg_curvature = false

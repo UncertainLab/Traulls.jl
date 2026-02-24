@@ -14,11 +14,24 @@
 
     Hv_test = H_test*v
     @test H*v ≈ Hv_test
-    @test Traulls.vthv(H,v) ≈ dot(v,Hv_test)
+
+    # Update 
+    J .+= 1.0
+    C .+= 1.0
+
+
+    @test H.J ≠ J 
+    @test H.C ≠ C
+    Traulls.update_hessian!(H,J,C)
+    H_test = J'*J + mu*C'*C
+
+    Hv_test = H_test*v
+    @test H*v ≈ Hv_test
 end
 
 @testset "SR1 Hessian structure test" begin
 
+    atol = sqrt(eps(Float64)) # tolerance
     n = 5   # parameters 
     m = 10  # residuals
     p = 3   # nonlinear constraints
@@ -28,46 +41,44 @@ end
     mu = 10.0
     v = rand(n)
 
-    H = Traulls.HybridSR1(J,C,mu)
+    H = Traulls.SR1(J,C,mu)
     H_test = J'*J + mu*C'*C
 
     
     @test H*v ≈  H_test*v
-    @test H.small_res
 
-    # Update test 
-    y = 0.5*ones(p)     # Lagrange multipliers
-    s = ones(n)         # step 
-    g = 0.8*ones(n)     # gradient
-    rx = rand(m)        # residuals
-    cx = rand(p)        # nonlinear constraints 
+    # Updated jacobians 
+    J .+= 1.0
+    C .+= 1.0
 
-    # value of the objective beforer and after taking step
-    mx = 10. 
-    mx_next = 8. 
+    @test H.J ≠ J 
+    @test H.C ≠ C
 
-    # update jacobians 
-    J_next = J .+ 1
-    C_next = C .+ 1
+    # Normal case update
+    y = ones(n)     # Lagrange multipliers
+    s = ones(n)      # step 
+    denom_test = dot(y-H.S*s,s)
 
-    H.secant_rhs = g - J'*rx - C'*(y+mu*cx)
-    J .+= 1
-    C .+= 1
+    Traulls.update_hessian!(H,J,C,y,s)
 
-    @test H.J ≈ J_next && H.C ≈ C_next
-
-   Traulls.update_hessian!(H,s,mx,mx_next,1e-8,0.1)
-
-    @test !H.small_res
-    @test any(!≈(0.0), H.S)
-    @test H.J ≈ J_next && H.C ≈ C_next
-
-    # Computations with nonzero seocnd order terms 
-    H.small_res = false 
-    S = ones(n,n)
-    H.S = S
-    H_test = J_next'*J_next + mu*C_next'*C_next + S 
+    @test H.J ≈ J && H.C ≈ C
+    @test abs(denom_test) > atol * norm(s) * norm(y-H.S*s) && all(≠(0.0), H.S)
     
-    @test H*v ≈  H_test*v
+    # Failed safeguard update
+    old_S = H.S
+    J .+= 1.0
+    C .+= 1.0
 
+    denom_test = dot(y-H.S*s,s)
+
+    Traulls.update_hessian!(H,J,C,y,s)
+    @test !(abs(denom_test) > max(atol, atol * norm(s) * norm(y-H.S*s))) 
+    @test H.S ≈ old_S
+
+    v .+= 1.0
+    H_test = J'*J + mu*C'*C + old_S
+    @test H*v ≈ H_test*v
+
+
+    
 end

@@ -738,8 +738,14 @@ function solve_subproblem(
     verbose::Bool=false,
     io::IO=stdout) 
 
+    # Dimensions
     n, n_slack, p = model.n, model.n_slack, model.p
+
+    # Buffer to save previous iterate and functions evaluations
     x_prev, rx_prev, cx_prev = copy(x), copy(rx), copy(cx)
+
+    # Buffer for the secant equation right handside
+    y_a = zeros(n)
 
     # Evaluate objective, first derivatives and Hessian of the AL at current point (x,y)
     # residuals!(model,x,rx); nlconstraints!(model,x,cx)
@@ -748,9 +754,9 @@ function solve_subproblem(
 
     alx = al_objgrad!(rx,cx,y,mu,J,C,g)
 
-    H = @match hessian_approx begin
+    hess_op = @match hessian_approx begin
         $gn     => GN(J,C,mu)
-        $sr1    => HybridSR1(J,C,mu)
+        $sr1    => SR1(J,C,mu)
     end
 
     set_initial_radius!(tr,g)
@@ -775,7 +781,7 @@ function solve_subproblem(
         s, pred = projected_gradient(
             x,
             g,
-            H,
+            hess_op,
             x_low,
             x_upp,
             radius,
@@ -789,50 +795,68 @@ function solve_subproblem(
 
         if short_circuit continue end
 
-        # Evaluate and analyze the reduction at trial point x+s
+        # Evaluate the objective at trial point
         x .+= s
-        residuals!(model,x,rx); nlconstraints!(model,x,cx)
+        residuals!(model,x,rx)
+        nlconstraints!(model,x,cx)
         alx = al_obj(rx,cx,y,mu)
 
         # Step taken on the slack variables, if any
         if n_slack > 0
+
+            # Add "magical" step to current point x
+            step_slack!(x,y,cx,mu,n_slack,p)
+
+            # Adjust the step vector
             slack_idx = n - n_slack + 1 : n
             ineq_idx = p - n_slack + 1 : p
+            s[slack_idx] .= x[slack_idx] .- x_prev[slack_idx] .- s[slack_idx]
+
+            # Update the constraints involving slack variables without evaluating
+            cx[ineq_idx] .-= s[slack_idx]
             
-            step_slack!(x,y,cx,mu,n_slack,p)
-            s[slack_idx] .= x[slack_idx] .- x_prev[slack_idx] .- s[slack_idx] # Adjust the step 
-            cx[ineq_idx] .-= s[slack_idx] # Update the constraints involving slack variables without evaluating
-            
-            # Add reduction of the true objective function after taking second step to pred  
+            # Add reduction of the true objective function after taking second
+            # step to pred
             pred -= alx
             alx = al_obj(rx,cx,y,mu)
             pred += alx
 
         end
 
+        # Compute the ratio actual reduction / predicted reduction
         ratio = step_ratio(alx_prev, alx, pred)
         # verbose && println("[solve_subproblem] ared = $ared, pred = $pred, ratio = $ratio")
 
         if accept_step(tr,ratio)
             
-            # Update the Hessian 
+            # Update gradient and Hessian approximation
 
             if hessian_approx == gn # Gauss-Newton case
-                jac_residuals!(model,x,J); jac_nlconstraints!(model,x,C) # Implicitly modifies J and C fields in H
-                al_grad!(rx,cx,y,mu,J,C,g)
-            
+                # Update Jacobians for form next iteration Gauss-Newton
+                # approximation
+                jac_residuals!(model,x,J)
+                jac_nlconstraints!(model,x,C)
+                update_hessian!(hess_op,J,C)
+
+                al_grad!(rx,cx,y,mu,J,C,g) # Evaluate gradient
+
             else # Quasi Newton update
-                # Form right handside of the structured secant equation
-                H.secant_rhs .= -J'*rx .- C'*(y .+ mu.*cx)
-                jac_residuals!(model,x,J); jac_nlconstraints!(model,x,C) # Implicitly modifies J and C fields in H
+                # Update Jacobians and apply structured SR1 update to
+                # second order terms
+
+                # Form right handside of the secant equation
+
+                y_a .= -J'*rx .- C'*(y .+ mu.*cx)
+                jac_residuals!(model,x,J)
+                jac_nlconstraints!(model,x,C)
                 al_grad!(rx,cx,y,mu,J,C,g)
-                H.secant_rhs .+= g
-                update_hessian!(H,s,alx_prev,alx,kappa_sos,kappa_sml_res)
+                y_a .+= g
+
+                update_hessian!(hess_op,J,C,y_a,s)
+
             end
 
-            #update_hessian!(H,J,C)
             pix = criticality_measure(x,g,x_low,x_upp)
-            
 
         else
             x .= x_prev
@@ -842,7 +866,6 @@ function solve_subproblem(
         end
 
         norm_step = norm(s,Inf)
-        # norm_step = norm(s)
         update_radius!(tr,ratio,norm_step)
 
         verbose && print_inner_iter(iter,alx_prev,norm_step,radius,ratio;io=io)
@@ -889,7 +912,7 @@ In the QP model, `||.||` denotes the `∞`-norm `||s|| = maxᵢ |sᵢ|`.
 function projected_gradient(
     x::Vector,
     g::Vector,
-    H::ALHessian,
+    hess_op::ALHessian,
     x_low::Vector,
     x_upp::Vector,
     radius::Float64,
@@ -903,8 +926,8 @@ function projected_gradient(
     s_low, s_upp = step_bounds(x,x_low,x_upp,radius)
     w_low, w_upp = Vector{Float64}(undef,n), Vector{Float64}(undef,n)
 
-    s, fix_vars = cauchy_step(x,g,H,x_low,x_upp,radius)
-    Hs = H*s
+    s, fix_vars = cauchy_step(x,g,hess_op,x_low,x_upp,radius)
+    Hs = hess_op*s
     b = Hs .+ g
     
     optimal, cg_stop = false, false
@@ -918,14 +941,14 @@ function projected_gradient(
 
         w, cg_status = pcg(
             b,
-            H,
+            hess_op,
             w_low,
             w_upp,
             fix_vars,
             kappa_cg)
 
         s .+= w
-        Hs .= H*s
+        Hs .= hess_op*s
         b .= Hs .+ g 
 
         # Compute norms of reduced gradients ||Zᵀg|| and ||Zᵀ(Hs+g)||
@@ -963,7 +986,7 @@ Follows the procedure of algorithm 17.3.1 from Trust Regions Methods (Conn, Goul
 function cauchy_step(
     x::Vector,
     g::Vector,
-    H::ALHessian,
+    hess_op::ALHessian,
     x_low::Vector,
     x_upp::Vector,
     radius::Float64) 
@@ -991,7 +1014,7 @@ function cauchy_step(
 
 
     gtd = dot(g,d)
-    Hd = H*d
+    Hd = hess_op*d
     
     for (i, tb) in enumerate(breakpoints)
         
@@ -1019,7 +1042,7 @@ function cauchy_step(
         s .+= d .* l_interval
         d .= -g .* .!fix_vars
         gtd = dot(g,d)
-        Hd = H*d
+        Hd = hess_op*d
     end
 
     

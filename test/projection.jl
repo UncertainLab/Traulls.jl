@@ -4,9 +4,12 @@
     A = rand(m,n)
     chol_aat = cholesky(A*A')
     B = Traulls.SubspaceMatrix(A)
-    
+
+    @test B.eqmat ≈ A
+    @test all(.!(B.fixvars))
     fix_bounds = [1,3,5,7]
-    B.fixvars[[1,3,5,7]] .= true
+    Traulls.update_subspace!(B,fix_bounds)
+    @test all(B.fixvars[fix_bounds]) && all(.!(B.fixvars[setdiff(1:n,fix_bounds)]))
     p = size(fix_bounds,1)
 
     
@@ -40,22 +43,29 @@ end
     m=4; n = 8
     A = rand(m,n)
     chol_aat = cholesky(A*A')
+    active = [1,3]
     fix_bounds = BitVector([true,false,true,false,false,false,false,false])
     
     Z = Matrix{Float64}(I,n,n)[findall(fix_bounds),:]
     greedy_B = vcat(A,Z)
 
-    scratch_chol = Traulls.cholesky_aug_aat(A,fix_bounds,chol_aat)
+    scratch_chol = Traulls.cholesky_augmented_gram_mat(A,fix_bounds,chol_aat)
 
-    P = Traulls.SubspaceProjector(A,fix_bounds,chol_aat)
+    P = Traulls.SubspaceProjector(A,chol_aat)
+
+    @test all(.!(P.workspace_mat.fixvars))
+    Traulls.update_subspace_projector!(P,active)
+
+    @test all(P.workspace_mat.fixvars[active]) &&
+        all(.!(P.workspace_mat.fixvars[setdiff(1:n,active)]))
 
     x = Vector{Float64}(collect(1:n))
     proj_x = Vector{Float64}(undef,n)
 
     Traulls.mul!(proj_x,P,x)
 
-    @test P.chol.L ≈ scratch_chol.L
-    @test P.mat*x ≈ greedy_B*x
+    @test P.chol_gram_augmat.L ≈ scratch_chol.L
+    @test P.workspace_mat*x ≈ greedy_B*x
     @test norm(proj_x[findall(fix_bounds)]) < 1e-12
-    @test norm(P.mat*proj_x) < 1e-12
+    @test norm(P.workspace_mat*proj_x) < 1e-12
 end
