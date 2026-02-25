@@ -19,12 +19,12 @@ abstract type Projector{T} end
 
 # Utils
 for f in ["misc", "polyhedral_constraints", "trust_region", "cg", "hessian", "al_utils"]
-    include("./utils/$f.jl")
+    include("$f.jl")
 end
 
 # Solvers
 for f in ["boconls"]
-    include("./solvers/$f.jl")
+    include("$f.jl")
 end
 
 
