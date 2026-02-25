@@ -49,6 +49,8 @@ inequality constraints
 
 * `x_upp::Vector`: vector of upper bounds on the parameters 
 
+* `x::Vector`: initial guess for the solution
+
 * `n_slack::Int`: number of slack variables (size of `z`)
 
 * `m::Int`: number of residuals (size of `r(x)`)
@@ -77,6 +79,7 @@ mutable struct PolyhedralCnls <: AbstractCnlsModel
     eqrhs::Vector
     x_low::Vector
     x_upp::Vector
+    x::Vector
     n::Int
     n_slack::Int
     m::Int
@@ -137,6 +140,8 @@ function PolyhedralCnls(
     m::Int,
     p_eq::Int,
     p_ineq::Int)
+
+    println("coucou")
 
     # Dimensions
     n_slack = p_ineq
@@ -204,6 +209,7 @@ function PolyhedralCnls(
     p::Int,
     only_equalities::Bool)
 
+    
     return if only_equalities
         PolyhedralCnls(r,c,nothing,jac_r,jac_c,nothing,A,b,low,upp,x_start,
         n_var,0,m,p)

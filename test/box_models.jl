@@ -1,4 +1,4 @@
-@testset "Model with only inequality constraints" begin
+@testset "Model with nonlinear inequalities and box constraints" begin
     
     # Problem 65 form Hock-Schittkowski
     n = 3
@@ -35,7 +35,7 @@
         0. 0. 1. 0;]
     @test Traulls.jac_nlconstraints(model,x) ≈ hcat(jac_c(x0),[-1])
     @test Traulls.nlconstraints(model,x) ≈ zeros(1)
-    @test model.nleq === nothing && model.jac_nleq === nothing
-
-    
+    @test model.nleq === nothing && model.jac_nleq === nothing 
 end
+
+
