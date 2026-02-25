@@ -84,6 +84,147 @@ mutable struct PolyhedralCnls <: AbstractCnlsModel
 end
 
 """
+    PolyhedralCnls(r,h,g,jac_r,jac_h,jac_g,A,b,low,upp,n_var,m,p_eq,p_ineq)
+
+Constructor for the [`BoxCnls`](@ref) structure.
+
+Encodes a nonlinear least-squares problems of the form
+
+`minₓ 1/2 * r(x)ᵀr(x)`
+
+`s.t. h(x) = 0`
+
+`g(x) ≥ 0`
+
+`Ax = b`
+
+`low ≤ x ≤ upp.`
+
+Nonlinear inequality constraints are converted as equality constraints by
+adding slack variables`g(x) - u = 0` with `u ≥ 0`.
+ 
+**Arguments**
+
+* `r`: Function evaluating the residuals
+* `h`: Function evaluating the nonlinear equality constraints
+* `g`: Function evaluating the nonlinear inequality constraints
+* `jac_r`: Function evaluating the Jacobian of the residuals
+* `jac_h`: Function evaluating the Jacobian of the nonlinear equality constraints
+* `jac_g`: Function evaluating the Jacobian of the nonlinear inequality constraints
+* `A`: MAtrix of the linear equality constraints 
+* `b`: Right handside vector of the linear equality constraints 
+* `low`: Lower bounds on the variables
+* `upp`: Upper bounds on the variables
+* `x_start`: Initial solution
+* `n_var`: Number of variables
+* `m`: Number of residuals
+* `p_eq`: Number of nonlinear equality constraints
+* `p_ineq`: Number of nonlinear inequality constraints
+"""
+function PolyhedralCnls(
+    r,
+    h,
+    g,
+    jac_r,
+    jac_h,
+    jac_g,
+    A,
+    b,
+    low,
+    upp,
+    x_start,
+    n_var::Int,
+    m::Int,
+    p_eq::Int,
+    p_ineq::Int)
+
+    # Dimensions
+    n_slack = p_ineq
+    n = n_var + n_slack
+    p = p_eq + p_ineq
+
+    # Form linear constraints to take into account slack variables
+    x_low = vcat(low, zeros(n_slack))
+    x_upp = vcat(upp, fill(Inf,n_slack))
+
+    eqmat = hcat(A,zeros(size(A,1),n_slack))
+
+    return PolyhedralCnls(r,h,g,jac_r,jac_h,jac_g,eqmat,b,x_low,x_upp,x_start,
+    n,n_slack,m,p)
+end
+
+"""
+    PolyhedralCnls(r,c,jac_r,jac_c,A,b,low,upp,n_var,m,p,only_equalities)
+
+Constructor for the [`PolyhedralCnls`](@ref) structure.
+
+Encodes a nonlinear least-squares problems of the form
+
+`minₓ 1/2 * r(x)ᵀr(x)`
+
+`s.t. c(x) = 0 or c(x) ≥ 0`
+
+`Ax = b`
+
+`low ≤ x ≤ upp.`
+
+Nonlinear inequality constraints are converted as equality constraints by
+adding slack variables`c(x) - u = 0` with `u ≥ 0`.
+ 
+**Arguments**
+
+* `r`: Function evaluating the residuals
+* `c`: Function evaluating the nonlinear constraints
+* `jac_r`: Function evaluating the Jacobian of the residuals
+* `jac_c`: Function evaluating the Jacobian of the nonlinear constraints
+* `A`: Linear equality constraints matrix 
+* `b`: Right handside vector of the linear equality constraints 
+* `low`: Lower bounds on the variables
+* `upp`: Upper bounds on the variables
+* `x_start`: Initial values of the variables
+* `n_var`: Number of variables
+* `m`: Number of residuals
+* `p`: Number of nonlinear constraints
+* `only_equalities`: Boolean indicating the nature of the nonlinear constraints.
+The latter are treated as equalities if set to `true` and as inequalities if 
+set to false
+"""
+function PolyhedralCnls(
+    r,
+    c,
+    jac_r,
+    jac_c,
+    A,
+    b,
+    low,
+    upp,
+    x_start,
+    n_var::Int,
+    m::Int,
+    p::Int,
+    only_equalities::Bool)
+
+    return if only_equalities
+        PolyhedralCnls(r,c,nothing,jac_r,jac_c,nothing,A,b,low,upp,x_start,
+        n_var,0,m,p)
+    
+    else begin
+
+        # Adjust dimensions, starting point and linear constraints to take into 
+        # account the slack variables 
+        n_slack = p
+        n = n_var + n_slack
+        eqmat = hcat(A,zeros(size(A,1),n_slack))
+        x_low = vcat(low, zeros(n_slack))
+        x_upp = vcat(upp, fill(Inf,n_slack))
+        x0 = vcat(x_start,c(x_start))
+
+        PolyhedralCnls(r,nothing,c,jac_r,nothing,jac_c,eqmat,b,x_low,x_upp,x0,n,
+        n_slack,m,p) 
+    end
+    end
+end
+"""
     residuals!(model::PolyhedralCnls, x::Vector, v::Vector)
 
 Compute the residuals for the given model and input vector `x`, storing the result in `v`.

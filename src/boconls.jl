@@ -123,7 +123,8 @@ adding slack variables`c(x) - u = 0` with `u ≥ 0`.
 * `m`: Number of residuals
 * `p`: Number of nonlinear constraints
 * `only_equalities`: Boolean indicating the nature of the nonlinear constraints.
- The latter are treated as equalities if set to `true` and as inequalities if not
+The latter are treated as equalities if set to `true` and as inequalities if 
+set to false
 """
 function BoxCnls(
     r,
