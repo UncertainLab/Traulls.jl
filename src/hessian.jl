@@ -35,11 +35,6 @@ mutable struct GN{T<:Real} <: ALHessian{T}
     temp::AbstractVector{T}
 end
 
-# Constructor for Gauss-Newton approximation
-# Takes jacobians and a penalty parameter as inputs
-# Initializes the buffer vector to zero
-#
-#
 """
     GN(J,C,μ)
 
@@ -101,7 +96,8 @@ matrix-matrix multiplication
 function Base.:*(H::GN{T}, v::Vector{T}) where T
     Hv = Vector{T}(undef,size(v,1))
     mul!(Hv,H,v)
-    return H.J' * (H.J*v) + H.C' * (H.mu*H.C*v)
+
+    return Hv
 end
 
 """
