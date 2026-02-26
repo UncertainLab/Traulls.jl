@@ -242,12 +242,14 @@ function step_slack!(
     return
 end
 
+@enum CriticalityStatus first_order_critical feasible_non_critical infeasible_non_critical
+
 """
     PrimalDualSolution
 
 Mutable structure gathering the informations about a solution computed by a solver. Each function associated to a solver returns a struct of this type.
 
-# Fields 
+# Attributes
 
 - `primal_vars`: Optimal solution of the optimization problem found by the solver
 - `lagrange_mults`: Lagrange multipliers associated to the equality constraints at the solution
@@ -261,6 +263,7 @@ struct PrimalDualSolution
     objective::Float64
     criticality::Float64
     feasibility::Float64
+    status::CriticalityStatus
 end
 
 
@@ -273,6 +276,7 @@ function print_solution(sol::PrimalDualSolution;io::IO=stdout)
     println(io, "Squared sum of residuals............................: ", @sprintf("%.6e", sol.objective))
     println(io, "Criticality measure.................................: ", @sprintf("%.6e", sol.criticality))
     println(io, "Feasibility of equality constraints.................: ", @sprintf("%.6e", sol.feasibility))
+    println(io, "Termination status..................................: $(sol.status)")
 
     println(io, "\nPrimal solution...................................")
     (t -> @printf(io, " %.7e ",t)).(sol.primal_vars)

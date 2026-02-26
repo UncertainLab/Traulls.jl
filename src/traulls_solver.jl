@@ -416,7 +416,6 @@ Returns the solution vector and additional information encoded in a [`PrimalDual
 """
 function solve(
     model::PolyhedralCnls;
-    x::Vector{Float64}=zeros(model.n),
     mu::Float64 = 10.0,
     tau::Float64 = 10.0,
     omega0::Float64 = 1.0,
@@ -435,6 +434,7 @@ function solve(
     kappa_step::Float64 = 0.1,
     kappa_cg::Float64 = 0.1,
     hessian_approx::HessianApprox = gn,
+    mu_max::Float64 = 1e6,
     max_iter::Int = 100,
     max_inner_iter::Int = 100,
     max_cg_iter::Int = 50,
@@ -501,10 +501,10 @@ function solve(
         return
     end
 
-
+    x = model.x
     n, m, p = model.n, model.m, model.p
-    x_low, x_upp = model.x_low, model.x_upp
 
+    x_low, x_upp = model.x_low, model.x_upp
     A = model.eqmat
     chol_aat = cholesky(A*A')
 
@@ -538,12 +538,12 @@ function solve(
 
     # TODO: compute a more precise initial criticality measure
     pix = criticality_measure(g0,proj_op)
-    first_order_critical = pix <= crit_rtol
+    solved = pix <= crit_rtol
 
     iter = 1
 
 
-    while !first_order_critical && iter <= max_iter
+    while !solved && iter <= max_iter
 
         verbose && print_outer_iter_header(iter,fx,feas_measure,mu,pix,omega; io=output_stream)
 
@@ -574,18 +574,18 @@ function solve(
             
             pix0 = criticality_measure(g0,proj_op)
             crit_tol = max(crit_rtol, crit_rtol*pix0)
-            first_order_critical = feas_measure <= feas_atol && pix <= crit_tol
+            solved = feas_measure <= feas_atol && pix <= crit_tol
 
             first_order_multipliers!(y,cx,mu)
 
-            if !first_order_critical
+            if !solved
                 # Update the iterate, multipliers and decrease tolerances (penalty parameter is unchanged)
                 omega = max(omega / mu^beta_crit, crit_rtol)
                 eta = max(eta / mu^beta_feas, feas_atol)
             end
         else
             # Increase the penalty parameter lesser decrease of the tolerances (iterate and multipliers are unchanged)
-            mu *= tau
+            mu = min(mu_max, mu * tau)
             omega = max(omega0 / mu^k_crit, crit_rtol)
             eta = max(eta0 / mu^k_feas, feas_atol)
         end
@@ -597,7 +597,15 @@ function solve(
     verbose && print_termination_info(iter,x,y,mu,fx,pix,feas_measure;io=stream)
     verbose && close(output_stream)
 
-    PrimalDualSolution(x,y,fx,pix,feas_measure)
+    solving_status = if solved
+        first_order_critical
+        elseif feas_measure <= feas_tol
+        feasible_non_critical
+        else
+        infeasible_non_critical
+    end
+
+    return PrimalDualSolution(x,y,fx,pix,feas_measure,solving_status)
 
     end
 

@@ -74,16 +74,16 @@ function mul!(Hv::Vector{T}, gn_op::GN{T}, v::Vector{T}) where T
     p = size(gn_op.C,1)
     
     # Reset result values to make sure it is zero
-    Hv .= 0.0
+    # Hv .= 0.0
     # JᵀJv term
     temp_Jv = view(gn_op.temp,1:m)
     mul!(temp_Jv, gn_op.J, v) # form Jv
-    mul!(Hv, gn_op.J', temp_Jv, 1, 1) # add JᵀJv to result Hv
+    mul!(Hv, gn_op.J', temp_Jv, 1, 0) # Hv ← JᵀJv
 
     # μCᵀCv term
     temp_Cv = view(gn_op.temp,1:p)
     mul!(temp_Cv, gn_op.C, v) # form Cv
-    mul!(Hv, gn_op.C', temp_Cv, gn_op.mu, 1) # add μCᵀCv to result Hv
+    mul!(Hv, gn_op.C', temp_Cv, gn_op.mu, 1) # Hv ← Hv + μCᵀCv
 
     return
 end
@@ -210,20 +210,19 @@ function mul!(Hv::Vector{T}, sr1_op::SR1{T}, v::Vector{T}) where T
     p = size(sr1_op.C,1)
 
     # Reset result values to make sure it is zero
-    Hv .= 0.0
+    # Hv .= 0.0
     # JᵀJv term
     temp_Jv = view(sr1_op.temp,1:m)
     mul!(temp_Jv, sr1_op.J, v) # form Jv
-    mul!(Hv, sr1_op.J', temp_Jv, 1, 1) # add JᵀJv to result Hv
+    mul!(Hv, sr1_op.J', temp_Jv, 1, 0) # Hv ← JᵀJv
 
     # μCᵀCv term
     temp_Cv = view(sr1_op.temp,1:p)
     mul!(temp_Cv, sr1_op.C, v) # form Cv
-    mul!(Hv, sr1_op.C', temp_Cv, sr1_op.mu, 1) # add μCᵀCv to result Hv
+    mul!(Hv, sr1_op.C', temp_Cv, sr1_op.mu, 1) # Hv ← Hv + μCᵀCv
 
     # Sv term
-    mul!(Hv, sr1_op.S, v, 1, 1) # add Sv to result Hv
-
+    mul!(Hv, sr1_op.S, v, 1, 1) # Hv ← Hv + Sv
     return
 end
 

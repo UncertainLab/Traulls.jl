@@ -364,6 +364,7 @@ Similarly, `c(x)` must be of size `p`, `J(x)` of size `m × n` and `C(x)` of siz
 
 - `kappa_step::Float64`: Constant to define the tolerance for the projection gradient method  (default: `0.1`)
 - `kappa_cg::Float64`: Constant to define the tolerance for the projected conjugate gradient method (default: `0.1`)
+- `mu_max::Float64`: maximum value of the penalty parameter (default: `1e6`)
 - `max_outer_iter`: Maximum number of outer iterations, i.e. number of minimization of the Augmented Lagrangian (default: `200`)
 - `max_inner_iter`: Maximum number of iterations when solving each subproblem with the gradient projection method (default: `100`)
 - `max_cg_iter`: Maximum number of conjugate gradient iterations (default: `50`)
@@ -394,6 +395,7 @@ function boconls(
     kappa_sos::Float64 = sqrt(eps(Float64)),
     kappa_sml_res::Float64 = 0.1,
     hessian_approx::HessianApprox = gn,
+    mu_max::Float64=1e6,
     max_iter::Int = 100,
     max_inner_iter::Int = 100,
     max_cg_iter::Int = 50,
@@ -411,7 +413,7 @@ function boconls(
 
     # Solve the model 
 
-    y, fx, criticality, feasibility = solve(
+    y, fx, criticality, feasibility, status = solve(
         model,
         mu0,
         tau,
@@ -429,6 +431,7 @@ function boconls(
         kappa_sos,
         kappa_sml_res,
         hessian_approx,
+        mu_max,
         max_iter,
         max_inner_iter,
         max_cg_iter,
@@ -438,7 +441,7 @@ function boconls(
     # Close output stream 
     output_file_name != "" && close(output_io)
 
-    return PrimalDualSolution(model.x, y, fx, criticality, feasibility)
+    return PrimalDualSolution(model.x, y, fx, criticality, feasibility, status)
 end
 
 """
@@ -476,7 +479,8 @@ in the case of good improvement of the feasibility (default: `1.0`)
 in the case of good improvement of the feasibility (default: `0.9`)
 - `tr::TrustRegion`: Encodes a trust region constraint and its update parameters throughout the algorithm
 - `kappa_step::Float64`: Constant to define the tolerance for the projection gradient method  
-- `kappa_cg::Float64`: Constant to define the tolerance for the projected conjugate gradient method 
+- `kappa_cg::Float64`: Constant to define the tolerance for the projected conjugate gradient method
+- `mu_max::Float64`: maximum value of the penalty parameter (default: `1e6`)
 - `max_outer_iter`: Maximum number of outer iterations, i.e. number of minimization of the Augmented Lagrangian 
 - `max_inner_iter`: Maximum number of iterations when solving each subproblem with the gradient projection method 
 - `max_cg_iter`: Maximum number of conjugate gradient iterations 
@@ -518,6 +522,7 @@ function solve(
     kappa_sos::Float64,
     kappa_sml_res::Float64,
     hessian_approx::HessianApprox,
+    mu_max::Float64,
     max_outer_iter::Int,
     max_inner_iter::Int,
     max_cg_iter::Int,
@@ -554,7 +559,7 @@ function solve(
 
     iter = 1
 
-    while !first_order_critical && iter <= max_outer_iter
+    while !solved && iter <= max_outer_iter
 
         verbose && print_outer_iter_header(iter,fx,feas_measure,mu,pix,omega; io=output_io)
         
@@ -585,28 +590,40 @@ function solve(
         feas_measure = norm(cx,Inf)
 
         if feas_measure <= eta
-            first_order_critical = feas_measure <= feas_tol && pix <= crit_tol
+
+            solved = feas_measure <= feas_tol && pix <= crit_tol
             first_order_multipliers!(y,cx,mu)
-            if !first_order_critical
+
+            if !solved
                 # Update the iterate, multipliers and decrease tolerances (penalty parameter is unchanged)
                 omega = max(omega / mu^beta_crit, omega_rel)
                 eta = max(eta / mu^beta_feas, feas_tol)
             end
         else
             # Increase the penalty parameter lesser decrease of the tolerances (iterate and multipliers are unchanged)
-            mu *= tau
+            mu = min(mu_max, tau * mu)
             omega = max(omega0 / mu^k_crit, omega_rel)
             eta = max(eta0 / mu^k_feas, feas_tol)
         end
 
         iter += 1
-        fx  = dot(rx,rx)
+
+        fx  = dot(rx,rx) # Evaluate objective
     end
     
     verbose && print_termination_info(iter,x,y,mu,fx,pix,feas_measure;io=output_io)
 
     model.x .= x
-    return y, fx, pix, feas_measure
+
+    solving_status = if solved
+        first_order_critical
+        elseif feas_measure <= feas_tol
+        feasible_non_critical
+        else
+        infeasible_non_critical
+    end
+
+    return y, fx, pix, feas_measure, solving_status
 end
 
 """
