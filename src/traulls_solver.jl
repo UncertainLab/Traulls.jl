@@ -404,6 +404,7 @@ extend the trust region (default: `0.75`)
 gradient method  (default: `0.1`)
 - `kappa_cg::Float64`: constant to define the tolerance for the projected
 conjugate gradient method (default: `0.1`)
+- `mu_max::Float64`: maximum value of the penalty parameter (default: `1e6`)
 - `max_outer_iter`: maximum number of outer iterations, i.e. number of
 minimization of the Augmented Lagrangian (default: `200`)
 - `max_inner_iter`: maximum number of iterations when solving each subproblem

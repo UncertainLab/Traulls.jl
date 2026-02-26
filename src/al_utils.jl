@@ -277,11 +277,5 @@ function print_solution(sol::PrimalDualSolution;io::IO=stdout)
     println(io, "Criticality measure.................................: ", @sprintf("%.6e", sol.criticality))
     println(io, "Feasibility of equality constraints.................: ", @sprintf("%.6e", sol.feasibility))
     println(io, "Termination status..................................: $(sol.status)")
-
-    println(io, "\nPrimal solution...................................")
-    (t -> @printf(io, " %.7e ",t)).(sol.primal_vars)
-    println(io, "\n\nLagrange multipliers............................")
-    (t -> @printf(io, " %.7e ",t)).(sol.lagrange_mults)
-
 end
 

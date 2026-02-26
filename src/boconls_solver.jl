@@ -555,7 +555,7 @@ function solve(
     g = al_grad(rx,cx,y,mu,J,C)
     pix = criticality_measure(x,g,x_low,x_upp)
     crit_tol = max(omega_rel, omega_rel*pix)
-    first_order_critical = feas_measure <= feas_tol && pix <= crit_tol
+    solved = feas_measure <= feas_tol && pix <= crit_tol
 
     iter = 1
 
