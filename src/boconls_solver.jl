@@ -558,9 +558,6 @@ function solve(
 
         verbose && print_outer_iter_header(iter,fx,feas_measure,mu,pix,omega; io=output_io)
         
-        verbose && println("\n=== outer iter $iter ===")
-
-    
         pix = solve_subproblem(
             model,
             x,
@@ -826,7 +823,6 @@ function solve_subproblem(
 
         # Compute the ratio actual reduction / predicted reduction
         ratio = step_ratio(alx_prev, alx, pred)
-        # verbose && println("[solve_subproblem] ared = $ared, pred = $pred, ratio = $ratio")
 
         if accept_step(tr,ratio)
             
