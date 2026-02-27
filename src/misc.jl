@@ -131,10 +131,5 @@ function print_termination_info(
     println(io, "Feasibility of equality constraints.................: ", @sprintf("%.6e", feasibility))
     println(io, "Final value of the penalty parameter................: ", @sprintf("%.3e", mu))
 
-    println(io, "\nPrimal solution...................................")
-    (t -> @printf(io, " %.7e ",t)).(x)
-    println(io, "\n\nLagrange multipliers............................")
-    (t -> @printf(io, " %.7e ",t)).(y)
-
     return
 end
