@@ -20,15 +20,22 @@
 * `p`: Total of nonlinear  constraints (equalities + inequalities)
 """
 mutable struct BoxCnls <: AbstractCnlsModel
+    # Functions 
     res
     nleq
     nlineq
     jac_res
     jac_nleq
     jac_nlineq
+
+    # Bounds 
     x_low::Vector
     x_upp::Vector
+
+    # Starting point 
     x::Vector
+
+    # Dimensions
     n::Int
     n_slack::Int
     m::Int

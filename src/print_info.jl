@@ -15,14 +15,14 @@ function print_tralcnllss_header(
     io::IO=stdout) 
 
     print(io,"\n\n")
-    println(io, '*'^64)
-    println(io, "*",' '^62,"*")
+    println(io, '*'^80)
+    println(io, "*",' '^78,"*")
 
-    println(io, "*"," "^23,"BEnlsip.jl v-DEV"," "^23,"*")
+    println(io, "*"," "^32,"Traulls.jl v-DEV"," "^32,"*")
     println(io, "*",' '^62,"*")
-    println(io, "*                   Better version of ENLSIP                   *")
-    println(io, "*",' '^62,"*")
-    println(io, '*'^64)
+    println(io, "*       Trust Region Augmented Lagrangian nonLinear Least-squares Solver       *")
+    println(io, "*",' '^78,"*")
+    println(io, '*'^80)
 
     println(io, "\nProblem dimensions")
     println(io, "Number of parameters.................: ", @sprintf("%5i", n))
@@ -56,14 +56,14 @@ function print_boconls_header(
     io::IO=stdout) 
 
     print(io,"\n\n")
-    println(io, '*'^64)
-    println(io, "*",' '^62,"*")
+    println(io, '*'^80)
+    println(io, "*",' '^78,"*")
 
-    println(io, "*"," "^23,"BEnlsip.jl v-DEV"," "^23,"*")
-    println(io, "*",' '^62,"*")
-    println(io, "*                   Better version of ENLSIP                   *")
-    println(io, "*",' '^62,"*")
-    println(io, '*'^64)
+    println(io, "*"," "^32,"Traulls.jl v-DEV"," "^32,"*")
+    println(io, "*",' '^78,"*")
+    println(io, "*       Trust Region Augmented Lagrangian nonLinear Least-squares Solver       *")
+    println(io, "*",' '^78,"*")
+    println(io, '*'^80)
 
     println(io, "\nProblem dimensions")
     println(io, "Number of parameters.................: ", @sprintf("%5i", n))
@@ -116,8 +116,6 @@ end
 
 function print_termination_info(
     iter::Int,
-    x::Vector,
-    y::Vector,
     mu::Float64,
     obj::Float64,
     criticality::Float64,

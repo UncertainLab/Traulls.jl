@@ -18,7 +18,7 @@ abstract type PolyhedralConstraints end
 abstract type Projector{T} end
 
 # Utils
-for f in ["misc", "polyhedral_constraints", "trust_region", "cg", "hessian", 
+for f in ["print_info", "polyhedral_constraints", "trust_region", "cg", "hessian", 
     "al_utils"]
 
     include("$f.jl")
