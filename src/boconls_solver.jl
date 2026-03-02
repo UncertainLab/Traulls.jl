@@ -288,9 +288,10 @@ function jac_nlconstraints(model::BoxCnls,x::Vector)
 end
 
 """
-    boconls(model; kwargs...)
+    solve(model; kwargs...)
 
-Solve a bound-constrained nonlinear least-squares problem with equality constraints of the form
+Solve a bound-constrained nonlinear least-squares problem with equality 
+constraints of the form
 
 `minₓ 1/2 * r(x)ᵀr(x)`
 
@@ -300,86 +301,236 @@ Solve a bound-constrained nonlinear least-squares problem with equality constrai
 
 with an iterative Augmented Lagrangian method.
 
-Starting from an initial guess `x₀` and an initial estimate of the vector of Lagrange multipliers associated to the equality constraints `y₀`, 
-each new iterate `xₖ₊₁` is an approximate solution, with respect to a tolerance `ωₖ > 0`, of the subproblem
+Starting from an initial guess `x₀` and an initial estimate of the vector of 
+Lagrange multipliers associated to the equality constraints `y₀`, 
+each new iterate `xₖ₊₁` is an approximate solution, with respect to a tolerance 
+`ωₖ > 0`, of the subproblem
 
 `minₓ Lₐ(x,yₖ,μₖ) = 1/2 * r(xₖ)ᵀr(xₖ) + c(xₖ)ᵀ[yₖ + μₖ/2 * c(xₖ)]`²`
 
 `s.t. ℓ ≤ x ≤ u,`
 
-for some penalty parameter `μₖ > 0`, a current estimate of the Lagrange multipliers `yₖ` and using `xₖ` as a starting point.
+for some penalty parameter `μₖ > 0`, a current estimate of the Lagrange 
+    multipliers `yₖ` and using `xₖ` as a starting point.
 
-If the new iterate satisfies `||c(xₖ₊₁)||₂ ≤ ηₖ`, for some `ηₖ > 0`, then the Lagrange multipliers are updated by `yₖ₊₁ = yₖ + μₖc(xₖ)` and the tolerances `ωₖ` and `ηₖ` are tightened.
+If the new iterate satisfies `||c(xₖ₊₁)||₂ ≤ ηₖ`, for some `ηₖ > 0`, then the 
+Lagrange multipliers are updated by `yₖ₊₁ = yₖ + μₖc(xₖ)` and the tolerances `ωₖ` and `ηₖ` are tightened.
 
-On the contrary, if xₖ₊₁ fails to satisfies the feasibility inequality, the iterate is unchanged, i.e. `(xₖ₊₁,yₖ₊₁) = (xₖ,yₖ)` and the minimization of the subproblem is restarted with 
-a higher penalty parameter `μₖ₊₁ = τμₖ`, with `τ > 1`. The tolerances `ωₖ` and `ηₖ` are still reduced but in a weaker maner.
+On the contrary, if xₖ₊₁ fails to satisfies the feasibility inequality, the 
+iterate is unchanged, i.e. `(xₖ₊₁,yₖ₊₁) = (xₖ,yₖ)` and the minimization of the 
+subproblem is restarted with 
+a higher penalty parameter `μₖ₊₁ = τμₖ`, with `τ > 1`. The tolerances `ωₖ` and 
+`ηₖ` are still reduced but in a weaker maner.
 
-Subproblems are solved by the gradient projection method (see [`projected_gradient`](@ref)). 
+Subproblems are solved by the gradient projection method 
+see [`projected_gradient`](@ref)). 
 
 This solver works in double relative precision.
 
-# Arguments
+# Arguments 
 
-- `r`: Function that computes the residuals
-- `J`: Jacobian operator of the residuals
-- `c`: Function that computes the equality constraints
-- `C`: Jacobian operator of the equality constraints
-- `n::Int`: Number of variables
-- `m::Int`: Number of residuals
-- `p::Int`: Number of equality constraints
-
-## Notes 
-
-Arguments `r`, `J`, `c` and `C` must be functions of a single `Vector` argument of size `n`, say `x`, and return a `Vector` or `Matrix` of appropriate dimensions.
-
-For instance, evaluating the residuals must be done by calling `r(x)` and the output must be a `Vector` of size `m`. 
-Similarly, `c(x)` must be of size `p`, `J(x)` of size `m × n` and `C(x)` of size `p × n`.
-
- 
+- `model::BoxCnls`: Encodes the model of the problem to be solved (see [`BoxCnls`](@ref)).
 
 # Keyword Arguments
-
-- `x0::Vector`: Initial guess for the variables (default: `zeros(n)`)
-- `x_low::Vector`: Lower bounds for the variables (default: `fill(-Inf, n)`)
-- `x_upp::Vector`: Upper bounds for the variables (default: `fill(Inf, n)`)
-- `output_file_name`: Name of the output file for logging (default: `""` which makes `stdout` the default output stream)
-- `verbose`: Boolean. If set to `true`, execution and iterations detail are printed into the output file (default: false)
 
 ## Augmented Lagrangian parameters 
 
 - `mu0::Float64`: Initial penalty parameter (default: `10.0`)
 - `tau::Float64`: Increase factor for the penalty parameter (default: `100.0`)
-- `omega0::Float64`: Constant to set the initial criticality tolerance (default: `1.0`)
-- `eta0::Float64`: Constant to set the initial feasibility tolerance (default: `1.0`)
-- `feas_tol::Float64`: Tolerance for feasibility of equality constraints (default: `1e-6`)
-- `crit_tol::Float64`: Tolerance for criticality (default: `1e-5`)
-- `k_crit::Float64`: Positive constant used to initialize and update the subproblem criticality tolerance in the case of poor improvement of the feasibility (default: `1.0`)
-- `k_feas::Float64`: Positive constant used to initialize and update the subproblem feasibility tolerance in the case of poor improvement of the feasibility (default: `0.1`)
-- `beta_crit::Float64`: Positive constant used to reduce the subproblem criticality tolerance in the case of good improvement of the feasibility (default: `1.0`)
-- `beta_feas::Float64`: Positive constant used to reduce the subproblem feasibility tolerance in the case of good improvement of the feasibility (default: `0.9`)
-
+- `omega0::Float64`: Constant to set the initial criticality tolerance 
+(default: `1.0`)
+- `eta0::Float64`: Constant to set the initial feasibility tolerance 
+(default: `1.0`)
+- `feas_atol::Float64`: Absolute olerance for feasibility of equality 
+constraints (default: `1e-6`)
+- `crit_tol::Float64`: Relative tolerance for criticality (default: `1e-7`)
+- `k_crit::Float64`: Positive constant used to initialize and update the 
+subproblem criticality tolerance in the case of poor improvement of the 
+feasibility (default: `1.0`)
+- `k_feas::Float64`: Positive constant used to initialize and update the 
+subproblem feasibility tolerance in the case of poor improvement of the 
+feasibility (default: `0.1`)
+- `beta_crit::Float64`: Positive constant used to reduce the subproblem 
+criticality tolerance in the case of good improvement of the feasibility 
+(default: `1.0`)
+- `beta_feas::Float64`: Positive constant used to reduce the subproblem 
+feasibility tolerance in the case of good improvement of the feasibility (default: `0.9`)
 
 ## Trust region parameters
 
 - `accept_treshold::Float64`: Threshold for accepting a step (default: `0.25`)
-- `increase_treshold::Float64`: Threshold for very successful steps in order to extend the trust region (default: `0.75`)
-- `decrease_factor::Float64`: Reducing factor of the trust region (default: `0.5`)
-- `increase_factor::Float64`: Extension factor of the trust region (default: `2.5`)
+- `increase_treshold::Float64`: Threshold for very successful steps in order 
+to extend the trust region (default: `0.75`)
+- `decrease_factor::Float64`: Reducing factor of the trust region 
+(default: `0.5`)
+- `increase_factor::Float64`: Extension factor of the trust region 
+(default: `2.5`)
 
+## Solver related constants
 
-## Other solver related constants
-
-- `kappa_step::Float64`: Constant to define the tolerance for the projection gradient method  (default: `0.1`)
-- `kappa_cg::Float64`: Constant to define the tolerance for the projected conjugate gradient method (default: `0.1`)
+- `kappa_step::Float64`: Constant to define the tolerance for the projection 
+gradient method  (default: `0.1`)
+- `kappa_cg::Float64`: Constant to define the tolerance for the projected 
+conjugate gradient method (default: `0.1`)
 - `mu_max::Float64`: maximum value of the penalty parameter (default: `1e6`)
-- `max_outer_iter`: Maximum number of outer iterations, i.e. number of minimization of the Augmented Lagrangian (default: `200`)
-- `max_inner_iter`: Maximum number of iterations when solving each subproblem with the gradient projection method (default: `100`)
+- `max_outer_iter`: Maximum number of outer iterations, i.e. number of 
+minimization of the Augmented Lagrangian (default: `200`)
+- `max_inner_iter`: Maximum number of iterations when solving each subproblem 
+with the gradient projection method (default: `100`)
 - `max_cg_iter`: Maximum number of conjugate gradient iterations (default: `50`)
 
-# Return
+## Miscellaneous
 
-Returns the solution vector and additional information encoded in a [`PrimalDualSolution`](@ref).
+- `output_file_name`: Name of the output file for logging (default: `""` which 
+makes `stdout` the default output stream)
+- `verbose`: Boolean. If set to `true`, execution and iterations detail are 
+printed into the output file (default: false)
+
+# On return
+
+Returns the solution vector and additional information encoded in a 
+[`PrimalDualSolution`](@ref).
 """
+function solve(model::BoxCnls;
+    mu::Float64 = 10.0,
+    tau::Float64 = 10.0,
+    omega0::Float64 = 1.0,
+    eta0::Float64 = 1.0,
+    feas_atol::Float64 = 1e-6,
+    crit_rtol::Float64 = 1e-7,
+    k_crit::Float64 = 1.0,
+    k_feas::Float64 = 0.1,
+    beta_crit::Float64 = 1.0,
+    beta_feas::Float64 = 0.9,
+    accept_treshold::Float64 = 0.25,
+    increase_treshold::Float64 = 0.75,
+    decrease_factor::Float64 = 0.5,
+    increase_factor::Float64 = 2.5,
+    neg_ratio_factor::Float64 = 0.0625,
+    kappa_step::Float64 = 0.1,
+    kappa_cg::Float64 = 0.1,
+    hessian_approx::HessianApprox = gn,
+    mu_max::Float64 = 1e6,
+    max_iter::Int = 100,
+    max_inner_iter::Int = 100,
+    max_cg_iter::Int = 50,
+    output_file_name::String="",
+    verbose::Bool=false)
+
+    # Sanity checks on arguments 
+    # Trust region parameters
+    !(0 < accept_treshold <= increase_treshold < 1 && 
+    0 < decrease_factor < 1 < increase_factor) && 
+    error("ArgumentError: trust regions parameters are not valid")
+
+    # Prepare output stream to log iteration detail
+    output_io = (output_file_name == "" ? stdout : open(output_file_name,"w"))
+
+    n, m, p = model.n, model.m, model.p
+    x = model.x
+    x_low, x_upp = model.x_low, model.x_upp
+
+    # Make starting point feasible wrt bounds
+    x .= max.(model.x_low, min.(x, model.x_upp))
+
+    # Set up trust region
+    tr = TrustRegion(accept_treshold, increase_treshold, decrease_factor, 
+    increase_factor, neg_ratio_factor)
+
+    # Allocate buffers for functions evaluations (residuals, constraints,
+    # Lagrange multipliers, jacobians and gradient)
+    rx = residuals(model, x)
+    cx = nlconstraints(model, x)
+    J = jac_residuals(model, x)
+    C = jac_nlconstraints(model, x)
+    y = least_squares_multipliers(rx, J, C)
+    g = al_grad(rx,cx,y,mu,J,C)
+
+    # Set up tolerances 
+    omega_rel, eta = initial_tolerances(mu, omega0, eta0, k_crit, k_feas)
+    
+    # Initial values of objective, feasibility and criticality
+    fx = dot(rx,rx)
+    feas_measure = norm(cx,Inf)
+    pix = criticality_measure(x,g,x_low,x_upp)
+    crit_tol = max(crit_rtol, crit_rtol*pix)
+
+    solved = solved = feas_measure <= feas_atol && pix <= crit_tol
+    iter = 1 
+
+    verbose && print_boconls_header(n,m,p,x_low,x_upp,crit_tol,feas_atol,tau; io=output_io)
+    verbose && print_tr_header(tr;io=output_io)
+
+    while !solved && iter <= max_iter
+
+        verbose && print_outer_iter_header(iter,fx,feas_measure,mu,pix,omega_rel; io=output_io)
+
+        pix = solve_subproblem(
+            model,
+            x,
+            x_low, 
+            x_upp,
+            y,
+            mu,
+            rx,
+            cx,
+            J,
+            C,
+            g,
+            tr,
+            omega_rel,
+            kappa_step,
+            kappa_cg,
+            hessian_approx,
+            max_inner_iter,
+            max_cg_iter;
+            verbose=verbose,
+            io=output_io)
+
+            feas_measure = norm(cx,Inf)
+
+            if feas_measure <= eta
+
+                solved = feas_measure <= feas_atol && pix <= crit_tol
+                first_order_multipliers!(y,cx,mu)
+
+                if !solved
+                    # Update the iterate, multipliers and decrease tolerances (penalty parameter is unchanged)
+                    omega_rel = max(omega_rel / mu^beta_crit, crit_rtol)
+                    eta = max(eta / mu^beta_feas, feas_atol)
+                end
+            else
+                # Increase the penalty parameter lesser decrease of the tolerances (iterate and multipliers are unchanged)
+                mu = min(mu_max, tau * mu)
+                omega_rel = max(omega0 / mu^k_crit, crit_rtol)
+                eta = max(eta0 / mu^k_feas, feas_atol)
+            end
+
+        iter += 1
+
+        fx  = dot(rx,rx) # Evaluate objective
+    end
+    
+    verbose && print_termination_info(iter,mu,fx,pix,feas_measure;io=output_io)
+
+    model.x .= x
+
+    solving_status = if solved
+        first_order_critical
+        elseif feas_measure <= feas_tol
+        feasible_non_critical
+        else
+        infeasible_non_critical
+    end
+
+    # Close output stream 
+    output_file_name != "" && close(output_io)
+
+    return PrimalDualSolution(model.x, y, fx, pix, feas_measure, solving_status)
+
+end
+
+#### DEPRECATED ####
 function boconls(
     model::BoxCnls;
     mu0::Float64 = 10.0,
@@ -451,66 +602,7 @@ function boconls(
     return PrimalDualSolution(model.x, y, fx, criticality, feasibility, status)
 end
 
-"""
-    solve(model,args...)
-
-Solve a bound-constrained nonlinear least-squares problem with equality constraints of the form
-
-`minₓ 1/2 * ||r(x)||²`
-
-`s.t. c(x) = 0`
-
-` ` ` ` ` ` `ℓ ≤ x ≤ u,`
-
-encoded in a [`BoxCnls`](@ref) `model` with an iterative Augmented Lagrangian method.
-
-For a more general description of the algorithm, see [`boconls(r,J,c,C,n,m,p; kwargs...)`](@ref).
-
-# Arguments 
-
-- `model::BoxCnls`: Encodes the problem to be solved
-- `x0::Vector{Float64}`: Initial guess for the variables 
-- `mu0::Float64`: Initial penalty parameter (default: `10.0`)
-- `tau::Float64`: Increase factor for the penalty parameter (default: `10.0`)
-- `omega0::Float64`: Constant to set the initial criticality tolerance (default: `1.0`)
-- `eta0::Float64`: Constant to set the initial feasibility tolerance (default: `1.0`)
-- `feas_tol::Float64`: Tolerance for feasibility of equality constraints (default: `1e-6`)
-- `crit_tol::Float64`: Tolerance for criticality (default: `1e-5`)
-- `k_crit::Float64`: Positive constant used to initialize and update the subproblem criticality tolerance 
-in the case of poor improvement of the feasibility (default: `1.0`)
-- `k_feas::Float64`: Positive constant used to initialize and update the subproblem feasibility tolerance 
-in the case of poor improvement of the feasibility (default: `0.1`)
-- `beta_crit::Float64`: Positive constant used to reduce the subproblem criticality tolerance 
-in the case of good improvement of the feasibility (default: `1.0`)
-- `beta_feas::Float64`: Positive constant used to reduce the subproblem feasibility tolerance 
-in the case of good improvement of the feasibility (default: `0.9`)
-- `tr::TrustRegion`: Encodes a trust region constraint and its update parameters throughout the algorithm
-- `kappa_step::Float64`: Constant to define the tolerance for the projection gradient method  
-- `kappa_cg::Float64`: Constant to define the tolerance for the projected conjugate gradient method
-- `mu_max::Float64`: maximum value of the penalty parameter (default: `1e6`)
-- `max_outer_iter`: Maximum number of outer iterations, i.e. number of minimization of the Augmented Lagrangian 
-- `max_inner_iter`: Maximum number of iterations when solving each subproblem with the gradient projection method 
-- `max_cg_iter`: Maximum number of conjugate gradient iterations 
-- `output_io`: IO stream to print iteration details
-- `verbose`: Boolean. If set to `true`, execution and iterations detail are printed into the output file
-
-## Note 
-
-When calling this function, the arguments must be ordered as in the above list.
-
-# Return
-
-The argument `x` is updated in place troughout the execution so when the optimization process stops, 
-it corresponds to the solution found by the algorithm.
-
-In addition, the following are also returned: 
-
-- `y::Vector{Float64}`: Vector of Lagrange multipliers at the solution found by the algorithm
-- `fx::Float64`: Squared sum of the residuals at the solution
-- `pix::Float64`: Value of the criticality measure at the solution
-- `feas_measure::Float64`: Norm of the equality constraints vector at the solution
-
-"""
+###### DEPRECATED #######
 function solve(
     model::BoxCnls,
     mu0::Float64,
@@ -586,8 +678,6 @@ function solve(
             omega,
             kappa_step,
             kappa_cg,
-            kappa_sos,
-            kappa_sml_res,
             hessian_approx,
             max_inner_iter,
             max_cg_iter;
@@ -618,7 +708,7 @@ function solve(
         fx  = dot(rx,rx) # Evaluate objective
     end
     
-    verbose && print_termination_info(iter,x,y,mu,fx,pix,feas_measure;io=output_io)
+    verbose && print_termination_info(iter,mu,fx,pix,feas_measure;io=output_io)
 
     model.x .= x
 
@@ -752,8 +842,6 @@ function solve_subproblem(
     omega_rel::Float64,
     kappa_step::Float64,
     kappa_cg::Float64,
-    kappa_sos::Float64,
-    kappa_sml_res::Float64,
     hessian_approx::HessianApprox,
     max_iter::Int,
     max_cg_iter::Int;

@@ -444,7 +444,9 @@ function solve(
 
     
     # Sanity check on parameters
-    @assert (0 < accept_treshold <= increase_treshold < 1) && (0 < decrease_factor < 1 < increase_factor) "Invalid trust region paramaters"
+    (0 < accept_treshold <= increase_treshold < 1) && 
+    (0 < decrease_factor < 1 < increase_factor) && 
+    error("ArgumentError: trust regions parameters are not valid")
 
     # Local scope evaluation methods 
 
