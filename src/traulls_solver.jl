@@ -587,7 +587,8 @@ function solve(
                 eta = max(eta / mu^beta_feas, feas_atol)
             end
         else
-            # Increase the penalty parameter lesser decrease of the tolerances (iterate and multipliers are unchanged)
+            # Increase the penalty parameter lesser decrease of the tolerances 
+            # (iterate and multipliers are unchanged)
             mu = min(mu_max, mu * tau)
             omega = max(omega0 / mu^k_crit, crit_rtol)
             eta = max(eta0 / mu^k_feas, feas_atol)

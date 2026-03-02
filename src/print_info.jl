@@ -1,49 +1,3 @@
-function print_tralcnllss_header(
-    n::Int,
-    d::Int,
-    p::Int,
-    m::Int,
-    x_l::Vector{Float64},
-    x_u::Vector{Float64},
-    crit_tol::Float64,
-    feas_tol::Float64,
-    tau::Float64,
-    eta1::Float64,
-    eta2::Float64,
-    gamma1::Float64,
-    gamma2::Float64;
-    io::IO=stdout) 
-
-    print(io,"\n\n")
-    println(io, '*'^80)
-    println(io, "*",' '^78,"*")
-
-    println(io, "*"," "^32,"Traulls.jl v-DEV"," "^32,"*")
-    println(io, "*",' '^62,"*")
-    println(io, "*       Trust Region Augmented Lagrangian nonLinear Least-squares Solver       *")
-    println(io, "*",' '^78,"*")
-    println(io, '*'^80)
-
-    println(io, "\nProblem dimensions")
-    println(io, "Number of parameters.................: ", @sprintf("%5i", n))
-    println(io, "Number of residuals..................: ", @sprintf("%5i", d))
-    println(io, "Number of nonlinear constraints......: ", @sprintf("%5i", p))
-    println(io, "Number of linear constraints.........: ", @sprintf("%5i", m))
-    println(io, "Number of lower bounds...............: ", @sprintf("%5i", count(isfinite, x_l)))
-    println(io, "Number of upper bounds...............: ", @sprintf("%5i", count(isfinite, x_u)))
-    println(io, "\nAlgorithm parameters")
-    println(io, "Relative criticality tolerance.......................: ", @sprintf("%.6e", crit_tol))
-    println(io, "Nonlinear constraints feasibility tolerance..........: ", @sprintf("%.6e", feas_tol))
-    println(io, "Increase penalty parameter factor....................: ", @sprintf("%5f", tau))
-    println(io, "Step acceptance treshold.............................: ", @sprintf("%5f", eta1))
-    println(io, "Great step acceptance treshold.......................: ", @sprintf("%5f", eta2))
-    println(io, "Trust region increase factor.........................: ", @sprintf("%5f", gamma2))
-    println(io, "Trust region decrease factor.........................: ", @sprintf("%5f", gamma1))
-    println(io,"\n\n")
-
-    return
-end
-
 function print_boconls_header(
     n::Int,
     m::Int,
@@ -59,7 +13,7 @@ function print_boconls_header(
     println(io, '*'^80)
     println(io, "*",' '^78,"*")
 
-    println(io, "*"," "^32,"Traulls.jl v-DEV"," "^32,"*")
+    println(io, "*"," "^31,"Traulls.jl v-DEV"," "^31,"*")
     println(io, "*",' '^78,"*")
     println(io, "*       Trust Region Augmented Lagrangian nonLinear Least-squares Solver       *")
     println(io, "*",' '^78,"*")
@@ -68,7 +22,7 @@ function print_boconls_header(
     println(io, "\nProblem dimensions")
     println(io, "Number of parameters.................: ", @sprintf("%5i", n))
     println(io, "Number of residuals..................: ", @sprintf("%5i", m))
-    println(io, "Number of equality constraints.......: ", @sprintf("%5i", p))
+    println(io, "Number of nonlinear constraints......: ", @sprintf("%5i", p))
     println(io, "Number of lower bounds...............: ", @sprintf("%5i", count(isfinite, x_l)))
     println(io, "Number of upper bounds...............: ", @sprintf("%5i", count(isfinite, x_u)))
     println(io, "\nAlgorithm parameters")
