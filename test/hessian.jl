@@ -27,6 +27,15 @@
 
     Hv_test = H_test*v
     @test H*v ≈ Hv_test
+
+    # Reset procedure 
+    J .= 10
+    C .= 10
+    new_mu = 10.0
+
+    Traulls.reset_hessian!(H,J,C,new_mu)
+    @test H.J ≈ J && H.C ≈ C
+    @test H.mu ≠ mu
 end
 
 @testset "SR1 Hessian structure test" begin
@@ -79,6 +88,12 @@ end
     H_test = J'*J + mu*C'*C + old_S
     @test H*v ≈ H_test*v
 
-
-    
+    # Reset procedure 
+    J .= 10
+    C .= 10
+    new_mu = 100.0
+    Traulls.reset_hessian!(H,J,C,new_mu)
+    @test H.J ≈ J && H.C ≈ C
+    @test H.S ≈ zeros(n,n)
+    @test H.mu ≠ mu
 end

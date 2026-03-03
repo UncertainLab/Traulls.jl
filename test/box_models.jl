@@ -36,6 +36,8 @@
     @test Traulls.jac_nlconstraints(model,x) ≈ hcat(jac_c(x0),[-1])
     @test Traulls.nlconstraints(model,x) ≈ zeros(1)
     @test model.nleq === nothing && model.jac_nleq === nothing 
+
+    Traulls.solve(model; verbose=true, hessian_approx=Traulls.sr1, output_file_name = "updated_hs65.out")
 end
 
 

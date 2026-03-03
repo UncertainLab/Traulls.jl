@@ -116,6 +116,23 @@ function update_hessian!(
     return
 end
 
+"""
+    reset_hessian!(H,J₀,C₀)
+
+Reset the Gauss-Newton approximation `H` by setting the `J` and `C`
+attributes with, respectively `J₀` and `C₀`.
+"""
+function reset_hessian!(
+    H::GN{T},
+    J0::AbstractMatrix{T},
+    C0::AbstractMatrix{T},
+    mu0::T) where T
+    
+    H.J .= J0
+    H.C .= C0
+    H.mu = mu0
+    return
+end
 
 """
     SR1 <: ALHessian
@@ -279,3 +296,17 @@ function update_sr1_second_order!(sr1_op::SR1{T}) where T
 
     return
 end
+
+function reset_hessian!(
+    H::SR1{T},
+    J0::AbstractMatrix{T},
+    C0::AbstractMatrix{T},
+    mu0::T) where T
+
+    H.J .= J0
+    H.C .= C0
+    H.mu = mu0
+    H.S .= 0
+
+    return
+end 

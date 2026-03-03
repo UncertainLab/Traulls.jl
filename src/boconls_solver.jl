@@ -443,8 +443,16 @@ function solve(model::BoxCnls;
     cx = nlconstraints(model, x)
     J = jac_residuals(model, x)
     C = jac_nlconstraints(model, x)
-    y = least_squares_multipliers(rx, J, C)
-    g = al_grad(rx,cx,y,mu,J,C)
+
+    y = least_squares_multipliers(rx, J, C) # Initial Lagrange mutipliers 
+                                            # estimates
+    g = al_grad(rx,cx,y,mu,J,C)             # Gradient of the AL
+    
+    # Ininitialize Hessian approximation
+    hess_op = @match hessian_approx begin
+        $gn     => GN(J,C,mu)
+        $sr1    => SR1(J,C,mu)
+    end
 
     # Set up tolerances 
     omega_rel, eta = initial_tolerances(mu, omega0, eta0, k_crit, k_feas)
@@ -477,6 +485,7 @@ function solve(model::BoxCnls;
             J,
             C,
             g,
+            hess_op,
             tr,
             omega_rel,
             kappa_step,
@@ -531,197 +540,197 @@ function solve(model::BoxCnls;
 end
 
 #### DEPRECATED ####
-function boconls(
-    model::BoxCnls;
-    mu0::Float64 = 10.0,
-    tau::Float64 = 10.0,
-    omega0::Float64 = 1.0,
-    eta0::Float64 = 1.0,
-    feas_tol::Float64 = 1e-6,
-    omega_rel::Float64 = 1e-7,
-    k_crit::Float64 = 1.0,
-    k_feas::Float64 = 0.1,
-    beta_crit::Float64 = 1.0,
-    beta_feas::Float64 = 0.9,
-    accept_treshold::Float64 = 0.25,
-    increase_treshold::Float64 = 0.75,
-    decrease_factor::Float64 = 0.5,
-    increase_factor::Float64 = 2.5,
-    neg_ratio_factor::Float64 = 0.0625,
-    kappa_step::Float64 = 0.1,
-    kappa_cg::Float64 = 0.1,
-    kappa_sos::Float64 = sqrt(eps(Float64)),
-    kappa_sml_res::Float64 = 0.1,
-    hessian_approx::HessianApprox = gn,
-    mu_max::Float64=1e6,
-    max_iter::Int = 100,
-    max_inner_iter::Int = 100,
-    max_cg_iter::Int = 50,
-    output_file_name::String="",
-    verbose::Bool=false)
+# function boconls(
+#     model::BoxCnls;
+#     mu0::Float64 = 10.0,
+#     tau::Float64 = 10.0,
+#     omega0::Float64 = 1.0,
+#     eta0::Float64 = 1.0,
+#     feas_tol::Float64 = 1e-6,
+#     omega_rel::Float64 = 1e-7,
+#     k_crit::Float64 = 1.0,
+#     k_feas::Float64 = 0.1,
+#     beta_crit::Float64 = 1.0,
+#     beta_feas::Float64 = 0.9,
+#     accept_treshold::Float64 = 0.25,
+#     increase_treshold::Float64 = 0.75,
+#     decrease_factor::Float64 = 0.5,
+#     increase_factor::Float64 = 2.5,
+#     neg_ratio_factor::Float64 = 0.0625,
+#     kappa_step::Float64 = 0.1,
+#     kappa_cg::Float64 = 0.1,
+#     kappa_sos::Float64 = sqrt(eps(Float64)),
+#     kappa_sml_res::Float64 = 0.1,
+#     hessian_approx::HessianApprox = gn,
+#     mu_max::Float64=1e6,
+#     max_iter::Int = 100,
+#     max_inner_iter::Int = 100,
+#     max_cg_iter::Int = 50,
+#     output_file_name::String="",
+#     verbose::Bool=false)
 
-    # Sanity check
-    @assert (0 < accept_treshold <= increase_treshold < 1) && (0 < decrease_factor < 1 < increase_factor) "Invalid trust region paramaters"
+#     # Sanity check
+#     @assert (0 < accept_treshold <= increase_treshold < 1) && (0 < decrease_factor < 1 < increase_factor) "Invalid trust region paramaters"
 
-    # Trust Region object 
-    tr = TrustRegion(accept_treshold, increase_treshold, decrease_factor, increase_factor, neg_ratio_factor)
+#     # Trust Region object 
+#     tr = TrustRegion(accept_treshold, increase_treshold, decrease_factor, increase_factor, neg_ratio_factor)
 
-    # Prepare output stream to log iteration detail
-    output_io = (output_file_name == "" ? stdout : open(output_file_name,"w"))
+#     # Prepare output stream to log iteration detail
+#     output_io = (output_file_name == "" ? stdout : open(output_file_name,"w"))
 
-    # Solve the model 
+#     # Solve the model 
 
-    y, fx, criticality, feasibility, status = solve(
-        model,
-        mu0,
-        tau,
-        omega0,
-        eta0,
-        feas_tol,
-        omega_rel,
-        k_crit,
-        k_feas,
-        beta_crit,
-        beta_feas,
-        tr,
-        kappa_step,
-        kappa_cg,
-        kappa_sos,
-        kappa_sml_res,
-        hessian_approx,
-        mu_max,
-        max_iter,
-        max_inner_iter,
-        max_cg_iter,
-        output_io,
-        verbose)
+#     y, fx, criticality, feasibility, status = solve(
+#         model,
+#         mu0,
+#         tau,
+#         omega0,
+#         eta0,
+#         feas_tol,
+#         omega_rel,
+#         k_crit,
+#         k_feas,
+#         beta_crit,
+#         beta_feas,
+#         tr,
+#         kappa_step,
+#         kappa_cg,
+#         kappa_sos,
+#         kappa_sml_res,
+#         hessian_approx,
+#         mu_max,
+#         max_iter,
+#         max_inner_iter,
+#         max_cg_iter,
+#         output_io,
+#         verbose)
 
-    # Close output stream 
-    output_file_name != "" && close(output_io)
+#     # Close output stream 
+#     output_file_name != "" && close(output_io)
 
-    return PrimalDualSolution(model.x, y, fx, criticality, feasibility, status)
-end
+#     return PrimalDualSolution(model.x, y, fx, criticality, feasibility, status)
+# end
 
-###### DEPRECATED #######
-function solve(
-    model::BoxCnls,
-    mu0::Float64,
-    tau::Float64,
-    omega0::Float64,
-    eta0::Float64,
-    feas_tol::Float64,
-    omega_rel::Float64,
-    k_crit::Float64,
-    k_feas::Float64,
-    beta_crit::Float64,
-    beta_feas::Float64,
-    tr::TrustRegion,
-    kappa_step::Float64,
-    kappa_cg::Float64,
-    kappa_sos::Float64,
-    kappa_sml_res::Float64,
-    hessian_approx::HessianApprox,
-    mu_max::Float64,
-    max_outer_iter::Int,
-    max_inner_iter::Int,
-    max_cg_iter::Int,
-    output_io::IO,
-    verbose::Bool)  
+# ###### DEPRECATED #######
+# function solve(
+#     model::BoxCnls,
+#     mu0::Float64,
+#     tau::Float64,
+#     omega0::Float64,
+#     eta0::Float64,
+#     feas_tol::Float64,
+#     omega_rel::Float64,
+#     k_crit::Float64,
+#     k_feas::Float64,
+#     beta_crit::Float64,
+#     beta_feas::Float64,
+#     tr::TrustRegion,
+#     kappa_step::Float64,
+#     kappa_cg::Float64,
+#     kappa_sos::Float64,
+#     kappa_sml_res::Float64,
+#     hessian_approx::HessianApprox,
+#     mu_max::Float64,
+#     max_outer_iter::Int,
+#     max_inner_iter::Int,
+#     max_cg_iter::Int,
+#     output_io::IO,
+#     verbose::Bool)  
 
     
-    n, m, p = model.n, model.m, model.p
-    x, x_low, x_upp = model.x, model.x_low, model.x_upp
+#     n, m, p = model.n, model.m, model.p
+#     x, x_low, x_upp = model.x, model.x_low, model.x_upp
     
-    x .= max.(model.x_low, min.(x, model.x_upp)) # Make starting point feasible wrt the bound variable
+#     x .= max.(model.x_low, min.(x, model.x_upp)) # Make starting point feasible wrt the bound variable
 
-    verbose && print_boconls_header(n,m,p,x_low,x_upp,omega_rel,feas_tol,tau; io=output_io)
-    verbose && print_tr_header(tr;io=output_io)
+#     verbose && print_boconls_header(n,m,p,x_low,x_upp,omega_rel,feas_tol,tau; io=output_io)
+#     verbose && print_tr_header(tr;io=output_io)
    
-    # Buffers 
-    rx = residuals(model, x)
-    cx = nlconstraints(model, x)
-    J = jac_residuals(model, x)
-    C = jac_nlconstraints(model, x)
+#     # Buffers 
+#     rx = residuals(model, x)
+#     cx = nlconstraints(model, x)
+#     J = jac_residuals(model, x)
+#     C = jac_nlconstraints(model, x)
    
-    mu = mu0
-    omega, eta = initial_tolerances(mu0, omega0, eta0, k_crit, k_feas)  # Initial tolerances 
-    y = least_squares_multipliers(rx, J, C)                            # Initial Lagrange multipliers 
+#     mu = mu0
+#     omega, eta = initial_tolerances(mu0, omega0, eta0, k_crit, k_feas)  # Initial tolerances 
+#     y = least_squares_multipliers(rx, J, C)                            # Initial Lagrange multipliers 
 
-    fx = dot(rx,rx)
-    feas_measure = norm(cx,Inf)
-    # feas_measure = norm(cx)
+#     fx = dot(rx,rx)
+#     feas_measure = norm(cx,Inf)
+#     # feas_measure = norm(cx)
 
-    g = al_grad(rx,cx,y,mu,J,C)
-    pix = criticality_measure(x,g,x_low,x_upp)
-    crit_tol = max(omega_rel, omega_rel*pix)
-    solved = feas_measure <= feas_tol && pix <= crit_tol
+#     g = al_grad(rx,cx,y,mu,J,C)
+#     pix = criticality_measure(x,g,x_low,x_upp)
+#     crit_tol = max(omega_rel, omega_rel*pix)
+#     solved = feas_measure <= feas_tol && pix <= crit_tol
 
-    iter = 1
+#     iter = 1
 
-    while !solved && iter <= max_outer_iter
+#     while !solved && iter <= max_outer_iter
 
-        verbose && print_outer_iter_header(iter,fx,feas_measure,mu,pix,omega; io=output_io)
+#         verbose && print_outer_iter_header(iter,fx,feas_measure,mu,pix,omega; io=output_io)
         
-        pix = solve_subproblem(
-            model,
-            x,
-            x_low, 
-            x_upp,
-            y,
-            mu,
-            rx,
-            cx,
-            J,
-            C,
-            g,
-            tr,
-            omega,
-            kappa_step,
-            kappa_cg,
-            hessian_approx,
-            max_inner_iter,
-            max_cg_iter;
-            verbose=verbose,
-            io=output_io)
+#         pix = solve_subproblem(
+#             model,
+#             x,
+#             x_low, 
+#             x_upp,
+#             y,
+#             mu,
+#             rx,
+#             cx,
+#             J,
+#             C,
+#             g,
+#             tr,
+#             omega,
+#             kappa_step,
+#             kappa_cg,
+#             hessian_approx,
+#             max_inner_iter,
+#             max_cg_iter;
+#             verbose=verbose,
+#             io=output_io)
 
-        feas_measure = norm(cx,Inf)
+#         feas_measure = norm(cx,Inf)
 
-        if feas_measure <= eta
+#         if feas_measure <= eta
 
-            solved = feas_measure <= feas_tol && pix <= crit_tol
-            first_order_multipliers!(y,cx,mu)
+#             solved = feas_measure <= feas_tol && pix <= crit_tol
+#             first_order_multipliers!(y,cx,mu)
 
-            if !solved
-                # Update the iterate, multipliers and decrease tolerances (penalty parameter is unchanged)
-                omega = max(omega / mu^beta_crit, omega_rel)
-                eta = max(eta / mu^beta_feas, feas_tol)
-            end
-        else
-            # Increase the penalty parameter lesser decrease of the tolerances (iterate and multipliers are unchanged)
-            mu = min(mu_max, tau * mu)
-            omega = max(omega0 / mu^k_crit, omega_rel)
-            eta = max(eta0 / mu^k_feas, feas_tol)
-        end
+#             if !solved
+#                 # Update the iterate, multipliers and decrease tolerances (penalty parameter is unchanged)
+#                 omega = max(omega / mu^beta_crit, omega_rel)
+#                 eta = max(eta / mu^beta_feas, feas_tol)
+#             end
+#         else
+#             # Increase the penalty parameter lesser decrease of the tolerances (iterate and multipliers are unchanged)
+#             mu = min(mu_max, tau * mu)
+#             omega = max(omega0 / mu^k_crit, omega_rel)
+#             eta = max(eta0 / mu^k_feas, feas_tol)
+#         end
 
-        iter += 1
+#         iter += 1
 
-        fx  = dot(rx,rx) # Evaluate objective
-    end
+#         fx  = dot(rx,rx) # Evaluate objective
+#     end
     
-    verbose && print_termination_info(iter,mu,fx,pix,feas_measure;io=output_io)
+#     verbose && print_termination_info(iter,mu,fx,pix,feas_measure;io=output_io)
 
-    model.x .= x
+#     model.x .= x
 
-    solving_status = if solved
-        first_order_critical
-        elseif feas_measure <= feas_tol
-        feasible_non_critical
-        else
-        infeasible_non_critical
-    end
+#     solving_status = if solved
+#         first_order_critical
+#         elseif feas_measure <= feas_tol
+#         feasible_non_critical
+#         else
+#         infeasible_non_critical
+#     end
 
-    return y, fx, pix, feas_measure, solving_status
-end
+#     return y, fx, pix, feas_measure, solving_status
+# end
 
 """
     solve_subproblem(model, args...)
@@ -838,6 +847,7 @@ function solve_subproblem(
     J::Matrix,
     C::Matrix,
     g::Vector,
+    hess_op::ALHessian,
     tr::TrustRegion,
     omega_rel::Float64,
     kappa_step::Float64,
@@ -864,9 +874,10 @@ function solve_subproblem(
 
     alx = al_objgrad!(rx,cx,y,mu,J,C,g)
 
-    hess_op = @match hessian_approx begin
-        $gn     => GN(J,C,mu)
-        $sr1    => SR1(J,C,mu)
+    # Reset Hessian approximation 
+    @match hessian_approx begin
+        $gn     => reset_hessian!(hess_op,J,C,mu)
+        $sr1    => reset_hessian!(hess_op,J,C,mu)
     end
 
     set_initial_radius!(tr,g)
