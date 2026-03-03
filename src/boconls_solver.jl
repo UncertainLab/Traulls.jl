@@ -880,14 +880,8 @@ function solve_subproblem(
     # Buffer to save previous iterate and functions evaluations
     x_prev, rx_prev, cx_prev = copy(x), copy(rx), copy(cx)
 
-    # Buffer for the secant equation right handside
-    y_a = zeros(n)
-
-    # Evaluate objective, first derivatives and Hessian of the AL at current point (x,y)
-    # residuals!(model,x,rx); nlconstraints!(model,x,cx)
-    # jac_residuals!(model,x,J); jac_nlconstraints!(model,x,C)
-
-
+    # Evaluate objective and gradient of the AL at current point (x,y)
+ 
     alx = al_objgrad!(rx,cx,y,mu,J,C,g)
 
     # Reset Hessian approximation 
@@ -982,13 +976,11 @@ function solve_subproblem(
 
                 # Form right handside of the secant equation
 
-                y_a .= -J'*rx .- C'*(y .+ mu.*cx)
                 jac_residuals!(model,x,J)
                 jac_nlconstraints!(model,x,C)
                 al_grad!(rx,cx,y,mu,J,C,g)
-                y_a .+= g
 
-                update_hessian!(hess_op,J,C,y_a,s)
+                update_hessian!(hess_op,J,C,rx,cx,g,y,s)
 
             end
 
