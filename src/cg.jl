@@ -125,7 +125,7 @@ function pcg(
                 v .= P*r
                 rtv_next = dot(r,v)
                 beta = rtv_next / rtv
-                axpby!(-one(Float64), v, beta, p)         # p ← -v + βp
+                axpby!(-1, v, beta, p)         # p ← -v + βp
                 rtv = rtv_next
                 approx_solved = sqrt(rtv) < tol_cg  # ⟺ ||vₖ₊₁|| ≤ ε ||v₀||
                 iter += 1

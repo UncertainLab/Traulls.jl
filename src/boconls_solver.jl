@@ -3,14 +3,17 @@
 """
     BoxCnls <: AbstractCnlsModel
 
- Structure representing a nonlinear least-squares problem subject to nonlinear equality constraints and box constraints
+ Structure representing a nonlinear least-squares problem subject to nonlinear
+equality constraints and box constraints
 
 * `res`: Function evaluating the residuals
 * `nleq`: Function evaluating the nonlinear equality constraints
 * `nlineq`: Function evaluating the nonlinear inequality constraints
 * `jac_res`: Function evaluating the Jacobian of the residuals
-* `jac_nleq`: Function evaluating the Jacobian of the nonlinear equality constraints
-* `jac_nlineq`: Function evaluating the Jacobian of the nonlinear inequality constraints
+* `jac_nleq`: Function evaluating the Jacobian of the nonlinear equality
+constraints
+* `jac_nlineq`: Function evaluating the Jacobian of the nonlinear inequality
+constraints
 * `x_low`: Lower bounds on the variables
 * `x_upp`: Upper bounds on the variables
 * `x`: Initial solution
@@ -67,7 +70,8 @@ adding slack variables`g(x) - u = 0` with `u ≥ 0`.
 * `g`: Function evaluating the nonlinear inequality constraints
 * `jac_r`: Function evaluating the Jacobian of the residuals
 * `jac_h`: Function evaluating the Jacobian of the nonlinear equality constraints
-* `jac_g`: Function evaluating the Jacobian of the nonlinear inequality constraints
+* `jac_g`: Function evaluating the Jacobian of the nonlinear inequality
+constraints
 * `low`: Lower bounds on the variables
 * `upp`: Upper bounds on the variables
 * `x_start`: Initial solution
@@ -164,11 +168,11 @@ end
 Methods are implemented in both in place and out of place versions  =#
 
 
-
 """
     residuals!(model::BoxCnls, x::Vector, v::Vector)
 
-Compute the residuals for the given model and input vector `x`, storing the result in `v`.
+Compute the residuals for the given model and input vector `x`, storing the
+result in `v`.
 """
 function residuals!(model::BoxCnls, x::Vector, v::Vector)
     v[:] .= model.res(x[1:model.n-model.n_slack])
@@ -190,7 +194,8 @@ end
 """
     nlconstraints!(model::BoxCnls, x::Vector, v::Vector) 
 
-Compute the nonlinear constraints for the given model and input vector `x`, storing the result in `v`.
+Compute the nonlinear constraints for the given model and input vector `x`,
+storing the result in `v`.
 """
 function nlconstraints!(model::BoxCnls, x::Vector, v::Vector) 
     n, n_slack, p = model.n, model.n_slack, model.p
@@ -212,7 +217,8 @@ end
 """
     nlconstraints(model::BoxCnls, x::Vector) 
 
-Return the nonlinear constraints for the given model and input vector `x` as a new vector.
+Return the nonlinear constraints for the given model and input vector `x` as a
+new vector.
 """
 function nlconstraints(model::BoxCnls,x::Vector)  
     cx = Vector{eltype(x)}(undef,model.p)
@@ -223,7 +229,8 @@ end
 """
     jac_residuals!(model::BoxCnls, x::Vector, J::Matrix) 
 
-Compute the Jacobian of the residuals for the given model and input vector `x`, storing the result in matrix `J`.
+Compute the Jacobian of the residuals for the given model and input vector
+`x`, storing the result in matrix `J`.
 """
 function jac_residuals!(model::BoxCnls, x::Vector, J::Matrix) 
     n, n_slack, m = model.n, model.n_slack, model.m
@@ -241,7 +248,8 @@ end
 """
     jac_residuals(model::BoxCnls, x::Vector) 
 
-Return the Jacobian of the residuals for the given model and input vector `x` as a new matrix.
+Return the Jacobian of the residuals for the given model and input vector `x` as
+a new matrix.
 """
 function jac_residuals(model::BoxCnls, x::Vector)  
     Jx = Matrix{eltype(x)}(undef,model.m, model.n)
@@ -252,8 +260,8 @@ end
 """
     jac_nlconstraints!(model::BoxCnls, x::Vector, C::Matrix) 
 
-Compute the Jacobian of the nonlinear constraints for the given model and input vector `x`, 
-storing the result in matrix `C`.
+Compute the Jacobian of the nonlinear constraints for the given model and input
+vector `x`, storing the result in matrix `C`.
 """
 function jac_nlconstraints!(model::BoxCnls, x::Vector, C::Matrix) 
 
@@ -279,12 +287,71 @@ end
 """
     jac_nlconstraints(model::BoxCnls, x::Vector) 
 
-Return the Jacobian of the nonlinear constraints for the given model and input vector `x` as a new matrix.
+Return the Jacobian of the nonlinear constraints for the given model and input
+vector `x` as a new matrix.
 """
 function jac_nlconstraints(model::BoxCnls,x::Vector)  
     Cx = Matrix{eltype(x)}(undef,model.p,model.n)
     jac_nlconstraints!(model, x, Cx)
     return Cx
+end
+
+# Workspace structure whose attributes are the buffers vectors involved into
+# intermediate computations.
+# Avoids doing unnecessary reallocations of memory throughout the execution.
+
+mutable struct Workspace{T<:Real}
+
+    # Current and previous point info
+    x_prev::Vector{T}
+    rx_prev::Vector{T}
+    cx_prev::Vector{T}
+
+    # Inner minimization related
+    proj_g::Vector{T}
+    step::Vector{T}
+    search_dir::Vector{T}
+    step_low::Vector{T}
+    step_upp::Vector{T}
+    hess_vec::Vector{T}
+    cg_rhs::Vector{T}
+    r::Vector{T}
+    v::Vector{T}
+    p::Vector{T}
+end
+
+# Constructor for `Workspace` structure
+# n: numbers of variables
+# m: number of residuals
+# p: number of nonlinear constraints
+
+function Workspace(T::DataType,n::Int,m::Int,p::Int)
+
+    Workspace{T}(zeros(T,n),zeros(T,m),zeros(T,p),zeros(T,n),zeros(T,n),zeros(T,n),
+              zeros(T,n),zeros(T,n),zeros(T,n),zeros(T,n),zeros(T,n),zeros(T,n),
+              zeros(T,n))
+end
+
+# Reset the values of the field of `Workspace` to 0
+
+function reset_workspace(wrkspc::Workspace{T}) where T
+    zero_T = T(0.0)
+
+    wkrspc.x_prev .= zero_T
+    wkrspc.rx_prev .= zero_T
+    wkrspc.cx_prev .= zero_T
+    wkrspc.proj_g .= zero_T
+    wkrspc.step .= zero_T
+    wkrspc.search_dir .= zero_T
+    wkrspc.step_low .= zero_T
+    wkrspc.step_upp .= zero_T
+    wkrspc.hess_vec .= zero_T
+    wkrspc.cg_rhs .= zero_T
+    wkrspc.r .= zero_T
+    wkrspc.v .= zero_T
+    wkrspc.p .= zero_T
+
+    return
 end
 
 """
@@ -426,19 +493,16 @@ function solve(model::BoxCnls;
     # Prepare output stream to log iteration detail
     output_io = (output_file_name == "" ? stdout : open(output_file_name,"w"))
 
-    n, m, p = model.n, model.m, model.p
+    # Make starting point feasible wrt bounds
     x = model.x
     x_low, x_upp = model.x_low, model.x_upp
-
-    # Make starting point feasible wrt bounds
     x .= max.(model.x_low, min.(x, model.x_upp))
 
-    # Set up trust region
-    tr = TrustRegion(accept_treshold, increase_treshold, decrease_factor, 
-    increase_factor, neg_ratio_factor)
+    # Allocate memory for buffer vectors involved in inner minimization
+    n, m, p = model.n, model.m, model.p
+    inner_workspace = Workspace(Float64,n,m,p)
 
-    # Allocate buffers for functions evaluations (residuals, constraints,
-    # Lagrange multipliers, jacobians and gradient)
+    # Allocate buffers for functions and first derivatives evaluation
     rx = residuals(model, x)
     cx = nlconstraints(model, x)
     J = jac_residuals(model, x)
@@ -454,13 +518,18 @@ function solve(model::BoxCnls;
         $sr1    => SR1(J,C,mu)
     end
 
+    # Set up trust region
+    tr = TrustRegion(accept_treshold, increase_treshold, decrease_factor,
+    increase_factor, neg_ratio_factor)
+
     # Set up tolerances 
     omega_rel, eta = initial_tolerances(mu, omega0, eta0, k_crit, k_feas)
     
     # Initial values of objective, feasibility and criticality
     fx = dot(rx,rx)
     feas_measure = norm(cx,Inf)
-    pix = criticality_measure(x,g,x_low,x_upp)
+    gproj = inner_workspace.proj_g
+    pix = criticality_measure(x,g,gproj,x_low,x_upp)
     crit_tol = max(crit_rtol, crit_rtol*pix)
 
     solved = solved = feas_measure <= feas_atol && pix <= crit_tol
@@ -492,7 +561,8 @@ function solve(model::BoxCnls;
             kappa_cg,
             hessian_approx,
             max_inner_iter,
-            max_cg_iter;
+            max_cg_iter,
+            inner_workspace;
             verbose=verbose,
             io=output_io)
 
@@ -526,7 +596,7 @@ function solve(model::BoxCnls;
 
     solving_status = if solved
         first_order_critical
-        elseif feas_measure <= feas_tol
+        elseif feas_measure <= feas_atol
         feasible_non_critical
         else
         infeasible_non_critical
@@ -870,15 +940,21 @@ function solve_subproblem(
     kappa_cg::Float64,
     hessian_approx::HessianApprox,
     max_iter::Int,
-    max_cg_iter::Int;
+    max_cg_iter::Int,
+    workspace::Workspace;
     verbose::Bool=false,
     io::IO=stdout) 
 
     # Dimensions
     n, n_slack, p = model.n, model.n_slack, model.p
 
-    # Buffer to save previous iterate and functions evaluations
-    x_prev, rx_prev, cx_prev = copy(x), copy(rx), copy(cx)
+    # Buffers to save previous iterate and functions evaluations
+    x_prev = workspace.x_prev
+    rx_prev = workspace.rx_prev
+    cx_prev = workspace.cx_prev
+
+    s = workspace.step       # step
+    gproj = workspace.proj_g # projected gradient
 
     # Evaluate objective and gradient of the AL at current point (x,y)
  
@@ -892,7 +968,7 @@ function solve_subproblem(
 
     set_initial_radius!(tr,g)
 
-    pix = criticality_measure(x,g,x_low,x_upp)
+    pix = criticality_measure(x,g,gproj,x_low,x_upp)
     omega_crit = max(omega_rel, omega_rel*pix)
     solved = pix <= omega_crit
     
@@ -909,16 +985,19 @@ function solve_subproblem(
 
         radius = tr.radius 
 
-        s, pred = projected_gradient(
+        pred = projected_gradient(
             x,
+            s,
             g,
+            gproj,
             hess_op,
             x_low,
             x_upp,
             radius,
             max_cg_iter,
             kappa_step,
-            kappa_cg)
+            kappa_cg,
+            workspace)
 
         # Trial point undistinguishable from current solution or too small radius
         
@@ -984,7 +1063,7 @@ function solve_subproblem(
 
             end
 
-            pix = criticality_measure(x,g,x_low,x_upp)
+            pix = criticality_measure(x,g,gproj,x_low,x_upp)
 
         else
             x .= x_prev
@@ -1011,9 +1090,9 @@ Approximately solves the quadratic program
 
 `minₛ 1/2 sᵀHs + sᵀg`
 
-`s.t. xₗ ≤ x + s ≤ u`
+`s.t. xₗ ≤ x + s ≤ xᵤ`
 
-` ` ` ` ` ` `||s|| ≤ Δ`
+`||s|| ≤ Δ`
 
 by the gradient projection method.
 
@@ -1036,39 +1115,52 @@ the conjugate gradient method
 
 # On return 
 
-- `s::Vector`: Trial step
-- `pred::Float64`: Reduction of the quadratic model after taking step `s`. 
+- `s::Vector`: This argument is modified in place and contains the trial step
+- `pred::Float64`: Reduction of the quadratic model after taking step `s`
 
 """
 function projected_gradient(
     x::Vector,
+    s::Vector,
     g::Vector,
+    gproj::Vector,
     hess_op::ALHessian,
     x_low::Vector,
     x_upp::Vector,
     radius::Float64,
     max_cg_iter::Int,
     kappa_step::Float64,
-    kappa_cg::Float64)  
+    kappa_cg::Float64,
+    workspace::Workspace)
 
 
-    n = size(x,1)
-    
-    s_low, s_upp = step_bounds(x,x_low,x_upp,radius)
-    w_low, w_upp = Vector{Float64}(undef,n), Vector{Float64}(undef,n)
+    # Hessian-vector product buffer
+    Hs = workspace.hess_vec
 
-    s, fix_vars = cauchy_step(x,g,hess_op,x_low,x_upp,radius)
-    Hs = hess_op*s
-    b = Hs .+ g
+    fix_vars = cauchy_step(x,
+                           s,
+                           g,
+                           gproj,
+                           hess_op,
+                           Hs,
+                           x_low,
+                           x_upp,
+                           radius)
+
+    # Form implicit bounds on the search direction
+    w_low, w_upp = workspace.step_low, workspace.step_upp                     
+    w_low .= (t -> max(-radius, t)).(x_low-x) .- s
+    w_upp .= (t -> min(radius,t)).(x_upp-x) .- s
+
+    # Set up for conjugate gradient iterations
+    Hs .= hess_op*s
+    b = workspace.cg_rhs
+    b .= Hs .+ g
     
     optimal, cg_stop = false, false
     iter = 1
     
     while !optimal && !cg_stop && iter <= max_cg_iter && !all(fix_vars)
-
-        # Lower and upper bounds for the search direction
-        w_low .= s_low .- s 
-        w_upp .= s_upp .- s
 
         w, cg_status = pcg(
             b,
@@ -1078,20 +1170,27 @@ function projected_gradient(
             fix_vars,
             kappa_cg)
 
+        # Increment total step 
         s .+= w
+        
+        # Update implicit bounds
+        w_low .-= w 
+        w_upp .-= w
+
+        # Prepare for next CG iterations
         Hs .= hess_op*s
         b .= Hs .+ g 
 
         # Compute norms of reduced gradients ||Zᵀg|| and ||Zᵀ(Hs+g)||
-        norm_reduced_g = norm_reduced_v(g, fix_vars)
-        norm_reduced_gnext = norm_reduced_v(b, fix_vars)
+        norm_reduced_g = norm_reduced_v(g,fix_vars)
+        norm_reduced_gnext = norm_reduced_v(b,fix_vars)
 
         # Evaluate termination criteria 
         optimal = norm_reduced_gnext <= kappa_step * norm_reduced_g
         cg_stop = cg_status == negative_curvature
 
         # Update the set of fixed variables (implicitly updates the null space matrix Z)
-        active_bounds!(s, s_low, s_upp, fix_vars)
+        active_bounds!(s,x,x_low,x_upp,radius,fix_vars)
 
         iter += 1
     end
@@ -1099,7 +1198,7 @@ function projected_gradient(
     # Predicted reduction of the model taking step s
     pred = dot(g,s) + 0.5*dot(s,Hs)
 
-    return s, pred
+    return pred
 end
 
 """ cauchy_step(x,g,H,ℓ,u,Δ)
@@ -1115,23 +1214,29 @@ This method finds the first local minimum of the quadratic model along the
 projected gradient path, i.e. the first local minimum of `t ↦ q(s(t))` 
 on `[0, ∞)`.
 
-Returns the associated Cauchy step `s` and `fix_vars`, a `BitVector` encoding 
-the indices of active bounds at the Cauchy point `x + s`.
+The associated Cauchy step is computed in place into vector `s`
+Returns the `BitVector` `fix_vars` that encodes the indices of active bounds
+at the Cauchy point `x + s`.
 
 Follows the procedure of algorithm 17.3.1 from Trust Regions Methods 
 (Conn, Gould and Toint, SIAM, 2000). 
 """
 function cauchy_step(
     x::Vector,
+    s::Vector,
     g::Vector,
+    d::Vector,
     hess_op::ALHessian,
+    Hd::Vector,
     x_low::Vector,
     x_upp::Vector,
     radius::Float64) 
 
     n = size(x,1)
-    d = Vector{Float64}(undef,n)                    # projected gradient direction
-    s = zeros(n)                                    # accumulated Cauchy step
+    # d = Vector{Float64}(undef,n)                    # projected gradient direction
+    # s = zeros(n)
+    # accumulated Cauchy step
+    s .= 0.0
     fix_vars = falses(n)                   # indices of fixed variables
 
     # Breakpoints values and group indices
@@ -1150,9 +1255,8 @@ function cauchy_step(
         d .= -g .* .!fix_vars
     end
 
-
     gtd = dot(g,d)
-    Hd = hess_op*d
+    Hd .= hess_op*d
     
     for (i, tb) in enumerate(breakpoints)
         
@@ -1166,7 +1270,7 @@ function cauchy_step(
 
         if phi_p >= 0
             break 
-        elseif phi_pp > 0 && delta_t < l_interval    # local minimum at t = tb - phi_p / phi_pp
+        elseif phi_pp > 0 && delta_t < l_interval # local minimum at t = tb - phi_p / phi_pp
             s .+= delta_t .* d 
             break
         end
@@ -1184,7 +1288,7 @@ function cauchy_step(
     end
 
     
-    return s, fix_vars
+    return fix_vars
 end
 
 """
@@ -1222,19 +1326,20 @@ iterate `(x,y)`
 
 - `πₓ = ||P[x-g] - x||` where `P` denotes the projection onto the box 
 `[xₗ, xᵤ]` and `||.||` is the `p`-norm for some `p > 1`. 
+
 In practice, either the `ℓ₂` or `∞` norms are used.
- 
 """
 function criticality_measure(
     x::Vector,
     g::Vector,
+    gproj::Vector,
     x_low::Vector,
     x_upp::Vector;
     p::Float64=Inf) 
 
-    proj_g = Vector{Float64}(undef,size(x,1))
-    project!(proj_g, x .- g, x_low, x_upp)
-    pix = norm(proj_g .- x, p)
+    # proj_g = Vector{Float64}(undef,size(x,1))
+    project!(gproj, x .- g, x_low, x_upp)
+    pix = norm(gproj .- x, p)
     
     return pix
 end
