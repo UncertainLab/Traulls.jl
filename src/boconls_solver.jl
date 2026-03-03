@@ -743,9 +743,11 @@ Solves the outer iteration subproblem
 
 using the gradient projection method with trust region. 
 
-The starting point `x₀` and optimality tolerance `ω` are given. The Lagrange multipliers `y` and penalty parameter `μ` are fixed.
+The starting point `x₀` and optimality tolerance `ω` are given. The Lagrange 
+multipliers `y` and penalty parameter `μ` are fixed.
 
-At iteration `k`, a quadratic model of the objective function around `xₖ` is formed by
+At iteration `k`, a quadratic model of the objective function around `xₖ` is
+formed by
 
 `qₖ(s) = 1/2 sᵀHₖs + sᵀgₖ,`
 
@@ -757,9 +759,10 @@ The step computation consists into approximately solving the quadratic program
 
 `s.t. ℓ ≤ xₖ + s ≤ u`
 
-` ` ` ` ` ` `||s|| ≤ Δₖ,`
+` ||s|| ≤ Δₖ,`
 
-where `Δₖ` is the trust region radius and `||.||` denotes the `∞`-norm `||x|| = maxᵢ |xᵢ|`. Because `||x|| ≤ Δₖ ⟺ -Δₖ ≤ xᵢ ≤ Δₖ` for all `i`, 
+where `Δₖ` is the trust region radius and `||.||` denotes the `∞`-norm 
+`||x|| = maxᵢ |xᵢ|`. Because `||x|| ≤ Δₖ ⟺ -Δₖ ≤ xᵢ ≤ Δₖ` for all `i`, 
 the feasible domain for the step can actually be formulated as the box 
     
 `Bₖ = [max(-Δₖe, ℓ-x), min(Δₖe, u-x)]`, with `e = (1,...,1)`.
@@ -768,27 +771,34 @@ the feasible domain for the step can actually be formulated as the box
 
 ## Cauchy point 
 
-We start by finding the first local minimizer of the model along the projected gradient path 
+We start by finding the first local minimizer of the model along the projected 
+gradient path 
 
 `s(t) = Pₖ[xₖ - tgₖ] - xₖ` for  `t ≥ 0,` 
     
 `Pₖ` denoting the projection over the feasible domain `Bₖ`.
-The corresponding scalar defines a Cauchy step that ensures a sufficient reduction of the objective function. This means that taking the Cauchy step at every iteration is enough to 
-solve the subproblem. 
+The corresponding scalar defines a Cauchy step that ensures a sufficient 
+reduction of the objective function. This means that taking the Cauchy step at
+every iteration is enough to solve the subproblem. 
 
 ## Beyond the Cauchy point 
 
-In order to provide a better reduction, we then apply the conjugate gradient method to the subspace where the components corresponding 
-to bounds active at the Cauchy point are fixed.
+In order to provide a better reduction, we then apply the conjugate gradient 
+method to the subspace where the components corresponding to bounds active at 
+the Cauchy point are fixed.
 
-The resulting `sₖ` step is then accepted or rejected depending on the value of the ratio of the actual reduction over the reduction predicted by the model
+The resulting `sₖ` step is then accepted or rejected depending on the value of
+ the ratio of the actual reduction over the reduction predicted by the model
 
 `ρ = (Lₐ(xₖ+sₖ,y,μ) - Lₐ(xₖ,y,μ)) / qₖ(sₖ) - qₖ(0)`.
 
-If `ρ ≥ η₁`, where `η₁ ∈ (0,1)` is a given parameter, then the step is accepted and the radius `Δₖ` is eventually increased.
-This translates the fact that there is a good agreement between the objective function and the model.
+If `ρ ≥ η₁`, where `η₁ ∈ (0,1)` is a given parameter, then the step is accepted
+and the radius `Δₖ` is eventually increased.
+This translates the fact that there is a good agreement between the objective
+function and the model.
 
-If `ρ < η₁` (poor agreement), the step is rejected and the minimization is restarted with a smaller trust region.
+If `ρ < η₁` (poor agreement), the step is rejected and the minimization is
+restarted with a smaller trust region.
 
 ## Trust region update
 
@@ -810,12 +820,14 @@ The minimization process is stopped once there is an iterate `xₖ` such that
 
 `|| P[xₖ - gₖ] - xₖ || ≤ ω`,
 
-where `P` here denotes the projection operator onto the initial feasible box `[ℓ,u]`.
+where `P` here denotes the projection operator onto the initial feasible box 
+`[ℓ,u]`.
 This quantity measures how close a point is from first-order criticality.
 
 # Arguments 
 
-- `model::BoxCnls`: Structure encoding the original constrained nonlinear least-squares problem to be solved 
+- `model::BoxCnls`: Structure encoding the original constrained nonlinear 
+least-squares problem to be solved 
 - `x::Vector`: Starting point the the outer iteration
 - `x_low::Vector`: Lower bounds on the variables
 - `x_upp::Vector`: Upper bounds on the variables
@@ -826,11 +838,15 @@ This quantity measures how close a point is from first-order criticality.
 - `J::Matrix`: Jacobian of the residuals evaluated at `x` 
 - `C::Matrix`: Jacobian of the equality constraints evaluated at `x`
 - `g::Vector`: Gradient of the Augmented Lagrangian at `x`
-- `tr::TrustRegion`: Encodes the trust region constraint and associated constants
+- `tr::TrustRegion`: Encodes the trust region constraint and associated 
 - `omega_crit::Float64`: Optimality tolerance
-- `kappa_step::Float64`: Constant used to define the stopping criteria of the gradient projection method
-- `kappa_cg::Float64`: Constant used to define the stopping criteria of the conjugate gradient iterations
-- `max_iter::Int`: maximum number of iterations to solve the outer iteration subproblem
+constants
+- `kappa_step::Float64`: Constant used to define the stopping criteria of the
+ gradient projection method
+- `kappa_cg::Float64`: Constant used to define the stopping criteria of the 
+conjugate gradient iterations
+- `max_iter::Int`: maximum number of iterations to solve the outer iteration 
+subproblem
 - `max_cg_iter::Int`: maximum number of uses of the conjugate gradient method 
 - `verbose::Bool=false`: Boolean to log details into a input/output stream
 - `io::IO=stdout`: input/output stream (default is `stdout`)
@@ -1015,13 +1031,16 @@ In the QP model, `||.||` denotes the `∞`-norm `||s|| = maxᵢ |sᵢ|`.
 
 - `x::Vector`: Current iterate 
 - `g::Vector`: Gradient of the Augmented Lagrangian at `x`
-- `H::ALHessian`: Approximation of the Hessian of the Augmented Lagrangian at `x`
+- `H::ALHessian`: Approximation of the Hessian of the Augmented Lagrangian at 
+`x`
 - `xₗ::Vector`: Lower bounds on `x`
 - `xᵤ::Vector`: Upper bounds on `x`
 - `Δ::Float64`: Trust region radius
 - `max_cg_iter::Int`: Number of maximum uses of the conjugate gradient method 
-- `κₛ::Float64`: Positive constant used to define the convergence criteria relative of the gradient projection method
-- `κᵪ::Float64`: Positve constant used to define the convergence criteria of the conjugate gradient method
+- `κₛ::Float64`: Positive constant used to define the convergence criteria 
+relative of the gradient projection method
+- `κᵪ::Float64`: Positve constant used to define the convergence criteria of 
+the conjugate gradient method
 
 # On return 
 
@@ -1093,15 +1112,22 @@ end
 
 """ cauchy_step(x,g,H,ℓ,u,Δ)
 
-Compute a Cauchy step that provides a sufficient reduction of the quadratic model `q(s) = <s,Hs> + <g,s>`.
+Compute a Cauchy step that provides a sufficient reduction of the quadratic 
+model `q(s) = <s,Hs> + <g,s>`.
 
-The step is defined by `s_c = s(t_c)` , where `s(t)`, for `t ≥ 0`, is the projected gradient step `P(x-t*g) - x` with `P` denoting the projection over `{v |  max(-Δe,ℓ-x) ≤ v ≤ min(Δe,u-x)}`.
+The step is defined by `s_c = s(t_c)` , where `s(t)`, for `t ≥ 0`, is the 
+projected gradient step `P(x-t*g) - x` with `P` denoting the projection over
+ `{v |  max(-Δe,ℓ-x) ≤ v ≤ min(Δe,u-x)}`.
 
-This method finds the first local minimum of the quadratic model along the projected gradient path, i.e. the first local minimum of `t ↦ q(s(t))` on `[0, ∞)`.
+This method finds the first local minimum of the quadratic model along the 
+projected gradient path, i.e. the first local minimum of `t ↦ q(s(t))` 
+on `[0, ∞)`.
 
-Returns the associated Cauchy step `s` and `fix_vars`, a `BitVector` encoding the indices of active bounds at the Cauchy point `x + s`.
+Returns the associated Cauchy step `s` and `fix_vars`, a `BitVector` encoding 
+the indices of active bounds at the Cauchy point `x + s`.
 
-Follows the procedure of algorithm 17.3.1 from Trust Regions Methods (Conn, Gould and Toint, SIAM, 2000). 
+Follows the procedure of algorithm 17.3.1 from Trust Regions Methods 
+(Conn, Gould and Toint, SIAM, 2000). 
 """
 function cauchy_step(
     x::Vector,
@@ -1172,8 +1198,10 @@ end
 """
     norm_reduced_v(v,fix_vars)
 
-Computes the norm of the reduced vector `Zᵀv` where `Z` is a null space matrix of the set `{v | vᵢ = 0 for i ∈ fix_vars}`
-Typically `v` is the gradient of some objective function and the norm of the reduced gradient is involed to evaluate termination criteria.
+Computes the norm of the reduced vector `Zᵀv` where `Z` is a null space matrix 
+of the set `{v | vᵢ = 0 for i ∈ fix_vars}`
+Typically `v` is the gradient of some objective function and the norm of the 
+    reduced gradient is involed to evaluate termination criteria.
 
 # Arguments
 
@@ -1186,19 +1214,22 @@ norm_reduced_v(v::Vector,fix_vars::BitVector) = norm(v[.!fix_vars])
 """
     criticality_measure(x,g,xₗ,xᵤ)
 
-Computes the criticality measure used to measure if a primal-dual solution `(x,y)` is a first-order critical point or not.
+Computes the criticality measure used to measure if a primal-dual solution 
+`(x,y)` is a first-order critical point or not.
     
 # Arguments 
 
 - `x::Vector`: Current iterate 
-- `g::Vector`: Gradient of the Augmented Lagrangian at current primal-dual iterate `(x,y)` 
+- `g::Vector`: Gradient of the Augmented Lagrangian at current primal-dual 
+iterate `(x,y)` 
 - `xₗ::Vector`: Lower bounds on `x`
 - `xᵤ::Vector`: Upper bounds on `x`
 - `p::Float64`: Nature of the norm computed (default is `Inf`).
 
 # Return 
 
-- `πₓ = ||P[x-g] - x||` where `P` denotes the projection onto the box `[xₗ, xᵤ]` and `||.||` is the `p`-norm for some `p > 1`. 
+- `πₓ = ||P[x-g] - x||` where `P` denotes the projection onto the box 
+`[xₗ, xᵤ]` and `||.||` is the `p`-norm for some `p > 1`. 
 In practice, either the `ℓ₂` or `∞` norms are used.
  
 """
