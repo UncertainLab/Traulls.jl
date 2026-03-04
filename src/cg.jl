@@ -60,9 +60,14 @@ curvature detection (default: square root double relative precision)
 function pcg(
     b::Vector,
     H::ALHessian,
+    w::Vector,
     w_l::Vector,
     w_u::Vector,
     fix_vars::BitVector,
+    r::Vector,
+    v::Vector,
+    p::Vector,
+    Hp::Vector,
     kappa_cg::Float64;
     atol::Float64 = sqrt(eps(Float64))) 
 
@@ -70,9 +75,10 @@ function pcg(
     n = size(b,1)
 
     # Buffers 
-    w = zeros(n)
-    r = zeros(n)
-    v = zeros(n)
+    # w = zeros(n)
+    # r = zeros(n)
+    # v = zeros(n)
+    w .= 0.0
     
     # Form the preconditionner 
     # TODO: Encode P into a `Projector`
@@ -82,7 +88,7 @@ function pcg(
     r .= b
     v .= P*r
     rtv = dot(r,v)
-    p = -v
+    p .= -v
 
     nrm_v = norm(v)
     tol_cg = nrm_v * min(kappa_cg, sqrt(nrm_v))
@@ -96,8 +102,9 @@ function pcg(
     outside_region = false
 
     while !approx_solved && !neg_curvature && !outside_region && iter <= max_iter
-        # println("[projected_cg] iter ", iter)
-        Hp = H*p
+
+        # Form Hp and pᵀHp
+        mul!(Hp,H,p)
         pHp = dot(p,Hp)
 
         if pHp <= tol_negcurve
@@ -116,12 +123,14 @@ function pcg(
 
             if outside_region
                 # Next direction goes beyond feasible box
-                # Compute direction that stops at the feasible box and stop cg iterations
+                # Compute direction that stops at the feasible box and stop cg
+                # iterations
                 w .+= p .* gamma
             else 
-                # Update search and conjugate directions, evaluate convergence criteria
-                w .+= p .* alpha
-                r .+= Hp .* alpha   
+                # Update search and conjugate directions, evaluate convergence
+                # criteria
+                w .+= alpha .* p
+                r .+= alpha .* Hp
                 v .= P*r
                 rtv_next = dot(r,v)
                 beta = rtv_next / rtv
@@ -143,7 +152,7 @@ function pcg(
         max_iter_reached
     end
 
-    return w, status
+    return status
 end
 
 """

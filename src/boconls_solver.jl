@@ -1156,18 +1156,26 @@ function projected_gradient(
     Hs .= hess_op*s
     b = workspace.cg_rhs
     b .= Hs .+ g
+
+    # Buffers
+    w,r,v,p = workspace.search_dir, workspace.r, workspace.v, workspace.p
     
     optimal, cg_stop = false, false
     iter = 1
     
     while !optimal && !cg_stop && iter <= max_cg_iter && !all(fix_vars)
 
-        w, cg_status = pcg(
+        cg_status = pcg(
             b,
             hess_op,
+            w,
             w_low,
             w_upp,
             fix_vars,
+            r,
+            v,
+            p,
+            Hs,
             kappa_cg)
 
         # Increment total step 
@@ -1178,7 +1186,7 @@ function projected_gradient(
         w_upp .-= w
 
         # Prepare for next CG iterations
-        Hs .= hess_op*s
+        mul!(Hs,hess_op,s) # form Hs
         b .= Hs .+ g 
 
         # Compute norms of reduced gradients ||Zᵀg|| and ||Zᵀ(Hs+g)||
