@@ -60,10 +60,10 @@ curvature detection (default: square root double relative precision)
 function pcg(
     b::Vector,
     H::ALHessian,
+    P::CoordinateSubspaceProjector,
     w::Vector,
     w_l::Vector,
     w_u::Vector,
-    fix_vars::BitVector,
     r::Vector,
     v::Vector,
     p::Vector,
@@ -82,8 +82,8 @@ function pcg(
     
     # Form the preconditionner 
     # TODO: Encode P into a `Projector`
-    free_vars = .!fix_vars
-    P = Diagonal(free_vars) 
+    #free_vars = .!fix_vars
+    #P = Diagonal(free_vars)
 
     r .= b
     v .= P*r
@@ -95,7 +95,7 @@ function pcg(
     tol_negcurve = atol
 
     iter = 1
-    max_iter = 2*(n-count(fix_vars))
+    max_iter = 2*(nb_degrees_of_freedom(P))
     # approx_solved = abs(rtv) < tol_cg
     approx_solved = false
     neg_curvature = false
@@ -112,13 +112,13 @@ function pcg(
             # Compute direction that stops at the feasible box and stop cg iterations
             neg_curvature = true
             if abs(pHp) > tol_negcurve # nonzero curvature
-                gamma = factor_to_boundary(p,w,w_l,w_u,free_vars)
+                gamma = factor_to_boundary(p,w,w_l,w_u,P)
                 w .+= p .* gamma
             end
         else
             rtv = dot(r,v)
             alpha = rtv / pHp
-            gamma = factor_to_boundary(p,w,w_l,w_u,free_vars)
+            gamma = factor_to_boundary(p,w,w_l,w_u,P)
             outside_region = alpha > gamma
 
             if outside_region
@@ -131,7 +131,7 @@ function pcg(
                 # criteria
                 w .+= alpha .* p
                 r .+= alpha .* Hp
-                v .= P*r
+                mul!(v,P,r) # v ← Pr
                 rtv_next = dot(r,v)
                 beta = rtv_next / rtv
                 axpby!(-1, v, beta, p)         # p ← -v + βp

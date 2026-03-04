@@ -522,6 +522,8 @@ function solve(model::BoxCnls;
     tr = TrustRegion(accept_treshold, increase_treshold, decrease_factor,
     increase_factor, neg_ratio_factor)
 
+    # Set up coordinate subspace projector
+    proj_op = CoordinateSubspaceProjector(n)
     # Set up tolerances 
     omega_rel, eta = initial_tolerances(mu, omega0, eta0, k_crit, k_feas)
     
@@ -555,6 +557,7 @@ function solve(model::BoxCnls;
             C,
             g,
             hess_op,
+            proj_op,
             tr,
             omega_rel,
             kappa_step,
@@ -934,6 +937,7 @@ function solve_subproblem(
     C::Matrix,
     g::Vector,
     hess_op::ALHessian,
+    proj_op::CoordinateSubspaceProjector,
     tr::TrustRegion,
     omega_rel::Float64,
     kappa_step::Float64,
@@ -960,14 +964,18 @@ function solve_subproblem(
  
     alx = al_objgrad!(rx,cx,y,mu,J,C,g)
 
-    # Reset Hessian approximation 
+    # Reset Hessian approximation and projector operator
     @match hessian_approx begin
         $gn     => reset_hessian!(hess_op,J,C,mu)
         $sr1    => reset_hessian!(hess_op,J,C,mu)
     end
 
+    reset_projector!(proj_op)
+
+    # Initialize trust region
     set_initial_radius!(tr,g)
 
+    # Prepare for inner minimization loop
     pix = criticality_measure(x,g,gproj,x_low,x_upp)
     omega_crit = max(omega_rel, omega_rel*pix)
     solved = pix <= omega_crit
@@ -991,6 +999,7 @@ function solve_subproblem(
             g,
             gproj,
             hess_op,
+            proj_op,
             x_low,
             x_upp,
             radius,
@@ -999,7 +1008,8 @@ function solve_subproblem(
             kappa_cg,
             workspace)
 
-        # Trial point undistinguishable from current solution or too small radius
+        # Check of the trial point is undistinguishable from current solution or
+        # if the radius is too small
         
         short_circuit = check_stalling(s,x,radius)
 
@@ -1125,6 +1135,7 @@ function projected_gradient(
     g::Vector,
     gproj::Vector,
     hess_op::ALHessian,
+    proj_op::CoordinateSubspaceProjector,
     x_low::Vector,
     x_upp::Vector,
     radius::Float64,
@@ -1137,15 +1148,19 @@ function projected_gradient(
     # Hessian-vector product buffer
     Hs = workspace.hess_vec
 
-    fix_vars = cauchy_step(x,
-                           s,
-                           g,
-                           gproj,
-                           hess_op,
-                           Hs,
-                           x_low,
-                           x_upp,
-                           radius)
+    # Reset active constraints
+    reset_projector!(proj_op)
+
+    cauchy_step!(x,
+                s,
+                g,
+                gproj,
+                hess_op,
+                proj_op,
+                Hs,
+                x_low,
+                x_upp,
+                radius)
 
     # Form implicit bounds on the search direction
     w_low, w_upp = workspace.step_low, workspace.step_upp                     
@@ -1153,25 +1168,26 @@ function projected_gradient(
     w_upp .= (t -> min(radius,t)).(x_upp-x) .- s
 
     # Set up for conjugate gradient iterations
-    Hs .= hess_op*s
+    mul!(Hs,hess_op,s)
     b = workspace.cg_rhs
     b .= Hs .+ g
 
     # Buffers
-    w,r,v,p = workspace.search_dir, workspace.r, workspace.v, workspace.p
+    w = workspace.search_dir
+    r, v, p = workspace.r, workspace.v, workspace.p
     
     optimal, cg_stop = false, false
     iter = 1
     
-    while !optimal && !cg_stop && iter <= max_cg_iter && !all(fix_vars)
+    while !optimal && !cg_stop && iter <= max_cg_iter && !saturated_subspace(proj_op)
 
         cg_status = pcg(
             b,
             hess_op,
+            proj_op,
             w,
             w_low,
             w_upp,
-            fix_vars,
             r,
             v,
             p,
@@ -1190,15 +1206,17 @@ function projected_gradient(
         b .= Hs .+ g 
 
         # Compute norms of reduced gradients ||Zᵀg|| and ||Zᵀ(Hs+g)||
-        norm_reduced_g = norm_reduced_v(g,fix_vars)
-        norm_reduced_gnext = norm_reduced_v(b,fix_vars)
+        # norm_reduced_g = norm_reduced_v(g,fix_vars)
+        # norm_reduced_gnext = norm_reduced_v(b,fix_vars)
+        norm_reduced_g = norm(proj_op*g)
+        norm_reduced_gnext = norm(proj_op*b)
 
         # Evaluate termination criteria 
         optimal = norm_reduced_gnext <= kappa_step * norm_reduced_g
         cg_stop = cg_status == negative_curvature
 
         # Update the set of fixed variables (implicitly updates the null space matrix Z)
-        active_bounds!(s,x,x_low,x_upp,radius,fix_vars)
+        active_bounds!(s,x,x_low,x_upp,radius,proj_op)
 
         iter += 1
     end
@@ -1229,12 +1247,13 @@ at the Cauchy point `x + s`.
 Follows the procedure of algorithm 17.3.1 from Trust Regions Methods 
 (Conn, Gould and Toint, SIAM, 2000). 
 """
-function cauchy_step(
+function cauchy_step!(
     x::Vector,
     s::Vector,
     g::Vector,
     d::Vector,
     hess_op::ALHessian,
+    proj_op::CoordinateSubspaceProjector,
     Hd::Vector,
     x_low::Vector,
     x_upp::Vector,
@@ -1245,7 +1264,7 @@ function cauchy_step(
     # s = zeros(n)
     # accumulated Cauchy step
     s .= 0.0
-    fix_vars = falses(n)                   # indices of fixed variables
+    #fix_vars = falses(n)                   # indices of fixed variables
 
     # Breakpoints values and group indices
     breakpoints, grp_idx  = sort_breakpoints(x,g,x_low,x_upp,radius)
@@ -1256,15 +1275,17 @@ function cauchy_step(
     # Handle the case where the first breakpoint is zero
     # Happens when bounds are active at x
     if iszero(breakpoints[1])
-        popfirst!(breakpoints)                      # get rid of breakpoint tb = zero 
+        popfirst!(breakpoints)                      # get rid of breakpoint tb = zero
         first_active_indx = popfirst!(grp_idx)
-        fix_vars[first_active_indx] .= true
-        fix_vars[setdiff(1:n,first_active_indx)] .= false
-        d .= -g .* .!fix_vars
+        update_projector!(proj_op,first_active_indx)
+        mul!(d,proj_op,-g)
+        # fix_vars[first_active_indx] .= true
+        # fix_vars[setdiff(1:n,first_active_indx)] .= false
+        # d .= -g .* .!fix_vars
     end
 
     gtd = dot(g,d)
-    Hd .= hess_op*d
+    mul!(Hd,hess_op,d)
     
     for (i, tb) in enumerate(breakpoints)
         
@@ -1287,16 +1308,19 @@ function cauchy_step(
         # Prepare for the next interval 
         prev_tb = tb
         newly_active = grp_idx[i]
-        fix_vars[newly_active] .= true
+        update_projector!(proj_op,newly_active)
+        # fix_vars[newly_active] .= true
 
         s .+= d .* l_interval
-        d .= -g .* .!fix_vars
+        mul!(d,proj_op,-g)
+        # d .= -g .* .!fix_vars
         gtd = dot(g,d)
-        Hd = hess_op*d
+        mul!(Hd,hess_op,d)
     end
 
     
-    return fix_vars
+    # return fix_vars
+    return
 end
 
 """

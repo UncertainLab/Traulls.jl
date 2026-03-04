@@ -404,6 +404,39 @@ function nb_degrees_of_freedom(P::CoordinateSubspaceProjector)
     return size(fixed,1) - count(fixed)
 end
 
+# Asserts whether or not a coordinate subspace is saturated or not
+# Returns `true` if they are no remaining degrees of freedom, `false` instead.
+
+saturated_subspace(P::CoordinateSubspaceProjector) = nb_degrees_of_freedom(P) == 0
+
+"""
+    factor_to_boundary(p,w,wₗ,wᵤ,P;atol)
+
+Computes the largest scalar `γ` such that `w + γp` stays in the box `[wₗ,wᵤ]`.
+The components considered are among free variables in a coordinate subspace
+encoded in `P`.
+"""
+function factor_to_boundary(
+    p::Vector{T},
+    w::Vector{T},
+    w_l::Vector{T},
+    w_u::Vector{T},
+    P::CoordinateSubspaceProjector{T};
+    atol::T = sqrt(eps(T))) where T
+
+    gamma = Inf
+    for i in axes(w,1)
+        if !P.fixvars[i]
+            if p[i] < -atol
+                gamma = min(gamma, (w_l[i] - w[i]) / p[i])
+            elseif p[i] > atol
+                gamma = min(gamma, (w_u[i] - w[i]) / p[i])
+            end
+        end
+    end
+    return gamma
+end
+
 # Reset a coordinate subspace projector `P` by setting all components free.
 # Elements of `fixvars` attribute are all set to false
 
@@ -420,6 +453,35 @@ end
 function update_projector!(P::CoordinateSubspaceProjector, newly_active::Vector{Int})
 
     P.fixvars[newly_active] .= true
+
+    return
+end
+
+# Identify which bounds from the box `[max(-Δ,ℓ), min(Δ,u)]` become active at
+# trial point `x + s` and set accordingly the coordinate subspace projector `P`.
+# Activity of bounds is measured up to positive tolerance `atol`.
+
+function active_bounds!(
+    s::Vector{T},
+    x::Vector{T},
+    x_low::Vector{T},
+    x_upp::Vector{T},
+    radius::T,
+    P::CoordinateSubspaceProjector{T};
+    atol::T=sqrt(eps(T))) where T
+
+    newly_active = Vector{Int}([])
+
+    for i in axes(x,1)
+        if !P.fixvars[i] &&
+            (s[i] <= atol + max(-radius,x_low[i] - x[i]) ||
+            min(radius,x_upp[i] - x[i]) - atol <= s[i])
+
+            push!(newly_active,i)
+        end
+    end
+
+    update_projector!(P,newly_active)
 
     return
 end

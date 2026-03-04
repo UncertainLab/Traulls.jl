@@ -176,33 +176,6 @@ function factor_to_boundary(x::Vector, d::Vector, delta::Float64; atol::Float64=
     return alpha
 end
 
-"""
-    factor_to_boundary(p,w,wₗ,wᵤ,free_vars;atol)
-
-Computes the largest scalar `γ` such that `w + γp` stays in the box `[wₗ,wᵤ]`. The only components considered
-are the one encoded in `free_vars`.
-"""
-function factor_to_boundary(
-    p::Vector,
-    w::Vector,
-    w_l::Vector,
-    w_u::Vector,
-    free_vars::BitVector;
-    atol::Float64 = sqrt(eps(Float64))) 
-
-    gamma = Inf
-    for i in axes(w,1)
-        if free_vars[i]
-            if p[i] < -atol 
-                gamma = min(gamma, (w_l[i] - w[i]) / p[i])
-            elseif p[i] > atol
-                gamma = min(gamma, (w_u[i] - w[i]) / p[i])
-            end
-        end
-    end
-    return gamma
-end
-
 function check_stalling(
     s::Vector,
     x::Vector,
