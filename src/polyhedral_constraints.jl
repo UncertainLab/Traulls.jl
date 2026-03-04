@@ -234,7 +234,7 @@ function cholesky_augmented_gram_mat(
     G = chol_aat.L \ A_act_cols
     mul!(H, G', G, -1, 1) # forms I - GᵀG
 
-    # Forms the L factor of ÃÃᵀ Cholesy decomposition
+    # Forms the L factor of A₊A₊ᵀ Cholesy decomposition
     L[1:m,1:m] .= chol_aat.L
     L[m+1:end,1:m] .= G'
     L[m+1:end,m+1:end] .= cholesky(H).L
@@ -346,6 +346,83 @@ function nbmax_fixed_bounds(proj_op::SubspaceProjector)
     return n-m
 end
 
+# Returns the number of degrees of freedom remaining into the restricted
+# supspace represented by operator `proj_op`
+
+function nb_degrees_of_freedom(proj_op::SubspaceProjector)
+
+    (m,n) = size(proj_op.workspace_mat.eqmat)
+
+    return n - m - count(proj_op.workspace_mat.fixvars)
+end
+
+
+# Structure encoding a coordinate subspace where components of vectors
+# corresponding to active bounds are set to 0
+mutable struct CoordinateSubspaceProjector{T<:Real} <: Projector{T}
+    fixvars::BitVector
+end
+
+# Constructor for `CoordinateSubspaceProjector` structure.
+# Returns a structure with `fixvars` attribute initalized to `falses(n)` where
+# `n` is an integer given as input.
+# This corresponds to define the underlying subspace to `ℝⁿ`.
+
+CoordinateSubspaceProjector(n::Int;T::DataType=Float64) = CoordinateSubspaceProjector{T}(falses(n))
+
+# Overload the `LinearAlgebra.mul!` method to compute projection of a vector `v`
+# onto a coordinate subspace represented by `P` as a matrix-vector product.
+# The result is stored in vector `r`.
+
+function mul!(r::Vector, P::CoordinateSubspaceProjector, v::Vector)
+
+    freevars = .!(P.fixvars)
+
+    r[P.fixvars] .= 0          # set rᵢ = 0 for fixed components
+    r[freevars] .= v[freevars] # set rᵢ = vᵢ for free components
+
+    return
+end
+
+# Overload the `Base.*` method to compute projection of a vector `v`
+# onto a coordinate subspace represented by `P` as a matrix-vector product.
+# The result is stored in vector `r`.
+
+function Base.:*(P::CoordinateSubspaceProjector, v::Vector)
+
+    res = Vector{eltype(v)}(undef,size(v,1))
+    mul!(res,P,v)
+
+    return res
+end
+
+# Returns the number of degrees of freedoms remaining in the coordinate subspace
+# represented by operator `P`.
+
+function nb_degrees_of_freedom(P::CoordinateSubspaceProjector)
+    fixed = P.fixvars
+    return size(fixed,1) - count(fixed)
+end
+
+# Reset a coordinate subspace projector `P` by setting all components free.
+# Elements of `fixvars` attribute are all set to false
+
+function reset_projector!(P::CoordinateSubspaceProjector)
+
+    P.fixvars .= false
+
+    return
+end
+
+# Set active the components of indices in `newly_active` into the projector
+# `P`
+
+function update_projector!(P::CoordinateSubspaceProjector, newly_active::Vector{Int})
+
+    P.fixvars[newly_active] .= true
+
+    return
+end
 
 """
     project!(v,x,ℓ,u)
