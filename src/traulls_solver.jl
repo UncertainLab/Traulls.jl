@@ -68,18 +68,18 @@ For instance, evaluating the residuals must be done by calling `r(x)` and the
 output must be a `Vector` of size `m`. Similarly, `c(x)` must be of size `p`, 
 `J(x)` of size `m × n` and `C(x)` of size `p × n`.
 """
-mutable struct PolyhedralCnls <: AbstractCnlsModel
+mutable struct PolyhedralCnls{T} <: AbstractCnlsModel{T}
     res
     nleq
     nlineq
     jac_res
     jac_nleq
     jac_nlineq
-    eqmat::Matrix
-    eqrhs::Vector
-    x_low::Vector
-    x_upp::Vector
-    x::Vector
+    eqmat::Matrix{T}
+    eqrhs::Vector{T}
+    x_low::Vector{T}
+    x_upp::Vector{T}
+    x::Vector{T}
     n::Int
     n_slack::Int
     m::Int

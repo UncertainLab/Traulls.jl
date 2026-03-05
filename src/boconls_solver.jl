@@ -1,18 +1,18 @@
 # Solver for nonlinear least-squares problems wuht nonlinear equality constraints and bound constraints 
 
 """
-    BoxCnls <: AbstractCnlsModel
+    BoxCnls{T} <: AbstractCnlsModel{T}
 
  Structure representing a nonlinear least-squares problem subject to nonlinear
 equality constraints and box constraints
 
-* `res`: Function evaluating the residuals
-* `nleq`: Function evaluating the nonlinear equality constraints
-* `nlineq`: Function evaluating the nonlinear inequality constraints
-* `jac_res`: Function evaluating the Jacobian of the residuals
-* `jac_nleq`: Function evaluating the Jacobian of the nonlinear equality
+* `res!`: Function evaluating the residuals
+* `nleq!`: Function evaluating the nonlinear equality constraints
+* `nlineq!`: Function evaluating the nonlinear inequality constraints
+* `jac_res!`: Function evaluating the Jacobian of the residuals
+* `jac_nleq!`: Function evaluating the Jacobian of the nonlinear equality
 constraints
-* `jac_nlineq`: Function evaluating the Jacobian of the nonlinear inequality
+* `jac_nlineq!`: Function evaluating the Jacobian of the nonlinear inequality
 constraints
 * `x_low`: Lower bounds on the variables
 * `x_upp`: Upper bounds on the variables
@@ -21,9 +21,10 @@ constraints
 * `n_slack`: Number of slack variables
 * `m`: Number of residuals
 * `p`: Total of nonlinear  constraints (equalities + inequalities)
+
 """
-mutable struct BoxCnls <: AbstractCnlsModel
-    # Functions 
+mutable struct BoxCnls{T<:Real} <: AbstractCnlsModel{T}
+    # Functions
     res
     nleq
     nlineq
@@ -31,12 +32,12 @@ mutable struct BoxCnls <: AbstractCnlsModel
     jac_nleq
     jac_nlineq
 
-    # Bounds 
-    x_low::Vector
-    x_upp::Vector
+    # Bounds
+    x_low::Vector{T}
+    x_upp::Vector{T}
 
-    # Starting point 
-    x::Vector
+    # Starting point
+    x::Vector{T}
 
     # Dimensions
     n::Int
@@ -87,13 +88,13 @@ function BoxCnls(
     jac_r,
     jac_h,
     jac_g,
-    low,
-    upp,
-    x_start,
+    low::Vector{T},
+    upp::Vector{T},
+    x_start::Vector{T},
     n_var::Int,
     m::Int,
     p_eq::Int,
-    p_ineq::Int)
+    p_ineq::Int) where T
 
     n_slack = p_ineq
     n = n_var + n_slack
@@ -102,7 +103,9 @@ function BoxCnls(
     x_low = vcat(low, zeros(n_slack))
     x_upp = vcat(upp, fill(Inf,n_slack))
 
-    return BoxCnls(r,h,g,jac_r,jac_h,jac_g,x_low,x_upp,x_start,n,n_slack,m,p)
+    x0 = vcat(x_start,g(x_start))
+
+    return BoxCnls(r,h,g,jac_r,jac_h,jac_g,x_low,x_upp,x0,n,n_slack,m,p)
 end
 
 """
@@ -142,13 +145,13 @@ function BoxCnls(
     c,
     jac_r,
     jac_c,
-    low,
-    upp,
+    low::Vector{T},
+    upp::Vector{T},
     x_start,
     n_var::Int,
     m::Int,
     p::Int,
-    only_equalities::Bool)
+    only_equalities::Bool) where T
 
     return if only_equalities
         BoxCnls(r,c,nothing,jac_r,jac_c,nothing,low,upp,x_start,n_var,0,m,p)
@@ -334,7 +337,7 @@ end
 
 # Reset the values of the field of `Workspace` to 0
 
-function reset_workspace(wrkspc::Workspace{T}) where T
+function reset_workspace!(wrkspc::Workspace{T}) where T
     zero_T = T(0.0)
 
     wkrspc.x_prev .= zero_T

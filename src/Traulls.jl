@@ -11,7 +11,7 @@ abstract type TralcnllsData end
 
 abstract type ALHessian{T} end
 
-abstract type AbstractCnlsModel end
+abstract type AbstractCnlsModel{T} end
 
 abstract type PolyhedralConstraints end
 
