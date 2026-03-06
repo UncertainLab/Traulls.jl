@@ -25,9 +25,11 @@ for f in ["print_info", "polyhedral_constraints", "trust_region", "cg", "hessian
 end
 
 # Solvers
-for f in ["boconls_solver", "traulls_solver"]
+# for f in ["boconls_solver", "traulls_solver"]
+#     include("$f.jl")
+# end
+for f in ["model", "solver"]
     include("$f.jl")
 end
-
 
 end 
