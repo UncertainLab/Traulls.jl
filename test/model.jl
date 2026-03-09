@@ -48,7 +48,8 @@
     x = vcat(x0,c(x0))
 
     # Testing for model defined with in-place methods
-    model = Traulls.BoxCnls!(r!,c!,jac_r!,jac_c!,x_low,x_upp,x0,n,m,p,false)
+    model = Traulls.BoxCnls!(r!,c!,jac_r!,jac_c!,x_low,x_upp,x0,n,m,p,
+                             Val(:only_inequalities))
 
     @test size(x,1) == model.n
     @test Traulls.residuals(model,x) ≈ r(x0)
@@ -61,7 +62,7 @@
     @test model.nleq! === nothing && model.jac_nleq! === nothing
 
     # Testing for model defined with standard functions
-    model = Traulls.BoxCnls(r,c,jac_r,jac_c,x_low,x_upp,x0,n,m,p,false)
+    model = Traulls.BoxCnls(r,c,jac_r,jac_c,x_low,x_upp,x0,n,m,p,Val(:only_inequalities))
 
     @test size(x,1) == model.n
     @test Traulls.residuals(model,x) ≈ r(x0)
@@ -174,7 +175,9 @@ end
     # Starting point
     x0 = [(mod(i,2) == 1 ? -1.2 : 1.0) for i=1:n]
 
-    model = Traulls.BoxCnls!(r!,c!,jac_r!,jac_c!,x_low,x_upp,x0,n,m,p,true)
+    model = Traulls.BoxCnls!(r!,c!,jac_r!,jac_c!,x_low,x_upp,x0,n,m,p,
+                             Val(:only_equalities))
+
     @test size(x0,1) == model.n
     @test model.n_slack == 0
     @test model.p == p
@@ -185,7 +188,7 @@ end
     @test model.nlineq! === nothing && model.jac_nlineq! === nothing
 
     # Testing for model defined with standard functions
-    model = Traulls.BoxCnls(r,c,jac_r,jac_c,x_low,x_upp,x0,n,m,p,true)
+    model = Traulls.BoxCnls(r,c,jac_r,jac_c,x_low,x_upp,x0,n,m,p,Val(:only_equalities))
 
     @test size(x0,1) == model.n
     @test model.n_slack == 0
@@ -269,7 +272,8 @@ end
     x0 = [1/i for i=1:n]
 
     # Model with in place methods
-    model = Traulls.BoxCnls!(r!,h!,g!,jac_r!,jac_h!,jac_g!,x_low,x_upp,x0,n,m,p_eq,p_ineq)
+    model = Traulls.BoxCnls!(r!,h!,g!,jac_r!,jac_h!,jac_g!,x_low,x_upp,x0,n,m,
+                             p_eq,p_ineq)
 
     @test n+p_ineq == model.n
     @test model.n_slack == 1

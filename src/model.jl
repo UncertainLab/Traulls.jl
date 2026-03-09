@@ -1,6 +1,10 @@
 # Abstract type defined just for testing
 abstract type AbstractCnlsModel{T} end
 
+# Symbols for constraints type keywords in modle construstor
+const symbols_constraints_type = [:only_equalities, :only_inequalities]
+
+const ConstraintsType = Union{Val{:only_equalities}, Val{:only_inequalities}}
 """
     BoxCnls{T} <: AbstractCnlsModel{T}
 
@@ -137,6 +141,50 @@ function BoxCnls!(
     end
 end
 
+function BoxCnls!(
+    r!,
+    c!,
+    jac_r!,
+    jac_c!,
+    low::Vector{T},
+    upp::Vector{T},
+    x0::Vector{T},
+    n_var::Int,
+    m::Int,
+    p::Int,
+    ::Val{:only_equalities}) where T
+
+    BoxCnls(r!,c!,nothing,jac_r!,jac_c!,nothing,low,upp,n_var,0,m,p,x0)
+end
+
+function BoxCnls!(
+    r!,
+    c!,
+    jac_r!,
+    jac_c!,
+    low::Vector{T},
+    upp::Vector{T},
+    x0::Vector{T},
+    n_var::Int,
+    m::Int,
+    p::Int,
+    ::Val{:only_inequalities}) where T
+
+    n_slack = p
+    n = n_var + n_slack
+    x_low = vcat(low, zeros(n_slack))
+    x_upp = vcat(upp, fill(Inf,n_slack))
+
+    # Set initial slack variables to g(x₀)
+    u0 = similar(x0,n_slack)
+    c!(x0,u0)
+    x_start = vcat(x0,u0)
+
+    BoxCnls(r!,nothing,c!,jac_r!,nothing,jac_c!,x_low,x_upp,n,n_slack,m,p,x_start)
+end
+
+
+
 # Constructor with out-of-place evaluation functions for a model with a mix of
 # equalities and inequalities
 function BoxCnls(
@@ -185,7 +233,6 @@ function BoxCnls(
         return
     end
 
-
     return BoxCnls!(r!,h!,g!,jac_r!,jac_h!,jac_g!,low,upp,x0,n_var,m,p_eq,p_ineq)
 end
 
@@ -202,7 +249,7 @@ function BoxCnls(
     n_var::Int,
     m::Int,
     p::Int,
-    only_equalities::Bool) where T
+    eq_or_ineq::ConstraintsType) where T
 
     # In-place versions of evaluation functions
     function r!(x,rx)
@@ -225,7 +272,7 @@ function BoxCnls(
         return
     end
 
-    return BoxCnls!(r!,c!,jac_r!,jac_c!,low,upp,x0,n_var,m,p,only_equalities)
+    BoxCnls!(r!,c!,jac_r!,jac_c!,low,upp,x0,n_var,m,p,eq_or_ineq)
 end
 
 
