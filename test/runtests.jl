@@ -1,4 +1,4 @@
-using Traulls, LinearAlgebra
+using Traulls, LinearAlgebra, ForwardDiff
 using Test
 
 

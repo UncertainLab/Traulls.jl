@@ -226,8 +226,6 @@ function mul!(Hv::Vector{T}, sr1_op::SR1{T}, v::Vector{T}) where T
     m = size(sr1_op.J,1)
     p = size(sr1_op.C,1)
 
-    # Reset result values to make sure it is zero
-    # Hv .= 0.0
     # JᵀJv term
     temp_Jv = view(sr1_op.temp,1:m)
     mul!(temp_Jv, sr1_op.J, v) # form Jv
@@ -321,4 +319,4 @@ function reset_hessian!(
     H.S .= 0
 
     return
-end 
+end

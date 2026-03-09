@@ -1,9 +1,6 @@
 # Abstract type defined just for testing
 abstract type AbstractCnlsModel{T} end
 
-# Symbols for constraints type keywords in modle construstor
-const symbols_constraints_type = [:only_equalities, :only_inequalities]
-
 const ConstraintsType = Union{Val{:only_equalities}, Val{:only_inequalities}}
 """
     BoxCnls{T} <: AbstractCnlsModel{T}

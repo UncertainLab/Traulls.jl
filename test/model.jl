@@ -300,3 +300,76 @@ end
 
 
 end
+
+@testset "Model with autodiff" begin
+
+    n = 9
+    N = div(n-1,4)
+    m = 4N
+    p = 3*N
+
+
+    # Residuals
+    function r!(x,rx)
+        N = div(size(x,1)-1,4)
+
+        rx[1:N] .= [(x[4i-3] - x[4i-2])^2 for i=1:N]
+        rx[N+1:2N] .= [x[4i-2] + x[4i-1] - 2 for i=1:N]
+        rx[2N+1:3N] .= [x[4i] - 1 for i=1:N]
+        rx[3N+1:4N] .= [x[4i+1] - 1 for i=1:N]
+
+        return
+    end
+
+    function r(x)
+        m = 4*div(size(x,1)-1,4)
+        res = similar(x,m)
+        r!(x,res)
+        return res
+    end
+    # Inversed arguments for ForwardDiff.jacobian! call
+    jac_r!(x,J) = ForwardDiff.jacobian!(J, (rx,x) -> r!(x,rx), zeros(m), x)
+
+    jac_r(x) = ForwardDiff.jacobian(r,x)
+    # Constraints
+
+    function c!(x,cx)
+        N = div(size(x,1)-1,4)
+
+        for k = 1:3N
+            l = 4*div(k-1,3)
+            if mod(k,3) == 1
+                cx[k] = x[l+1]^2 + 3*x[l+2]
+            elseif k % 3 == 2
+                cx[k] = x[l+3]^2 + x[l+4] - 2*x[l+5]
+            else
+                cx[k] = x[l+2]^2 - x[l+5]
+            end
+        end
+        return
+    end
+
+    function c(x)
+        p = 3*div(size(x,1)-1,4)
+        res = similar(x,p)
+        c!(x,res)
+        return res
+    end
+
+    jac_c(x) = ForwardDiff.jacobian(c,x)
+
+    jac_c!(x,C) = ForwardDiff.jacobian!(C, (cx,x) -> c!(x,cx), zeros(3N), x)
+
+    x_low = fill(-Inf,n)
+    x_upp = fill(Inf,n)
+
+    # Starting point
+
+    x0 = 2 .* ones(n)
+
+    model = Traulls.BoxCnls!(r!,c!,jac_r!,jac_c!,x_low,x_upp,x0,n,m,p,Val(:only_equalities))
+
+    @test Traulls.jac_residuals(model,x0) ≈ jac_r(x0)
+    @test Traulls.jac_nlconstraints(model,x0) ≈ jac_c(x0)
+
+end
