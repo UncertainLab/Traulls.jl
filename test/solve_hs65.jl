@@ -5,14 +5,14 @@
     m = 3
     p = 1
 
-    function r!(x,rx)
+    function r!(rx, x)
         rx .= [x[1]-x[2],
                (x[1]+x[2]-10)/3,
                x[3]-5.0]
         return
     end
 
-    function jac_r!(x,J)
+    function jac_r!(J, x)
         J .= [1. -1. 0;
         1/3 1/3 0.;
         0. 0. 1.;]
@@ -20,12 +20,12 @@
     end
     # Equality constraints
 
-    function c!(x,cx)
+    function c!(cx, x)
         cx .= [48.0 - x[1]^2 - x[2]^2 - x[3]^2]
         return
     end
 
-    function jac_c!(x,C)
+    function jac_c!(C, x)
         C .= [-2x[1] -2x[2] -2x[3]]
         return
     end
@@ -38,7 +38,7 @@
     x0 = [-5, 5, 0.0]
 
     # Testing for model defined with in-place methods
-    model = Traulls.BoxCnls!(r!,c!,jac_r!,jac_c!,x_low,x_upp,x0,n,m,p,false)
+    model = Traulls.BoxCnls!(r!,c!,jac_r!,jac_c!,x_low,x_upp,x0,n,m,p,Val(:only_inequalities))
 
     sol = Traulls.solve(model; verbose=true, hessian_approx=Traulls.sr1, output_file_name = "updated_hs65.out")
 

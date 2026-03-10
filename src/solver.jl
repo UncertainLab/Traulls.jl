@@ -526,8 +526,8 @@ function solve_subproblem(
 
         # Evaluate the objective at trial point
         x .+= s
-        residuals!(model,x,rx)
-        nlconstraints!(model,x,cx)
+        residuals!(model, rx, x)
+        nlconstraints!(model, cx, x)
         alx = al_obj(rx,cx,y,mu)
 
         # Step taken on the slack variables, if any
@@ -562,8 +562,8 @@ function solve_subproblem(
             if hessian_approx == gn # Gauss-Newton case
                 # Update Jacobians for form next iteration Gauss-Newton
                 # approximation
-                jac_residuals!(model,x,J)
-                jac_nlconstraints!(model,x,C)
+                jac_residuals!(model, J, x)
+                jac_nlconstraints!(model,C, x)
                 update_hessian!(hess_op,J,C)
 
                 al_grad!(rx,cx,y,mu,J,C,g) # Evaluate gradient
@@ -574,11 +574,18 @@ function solve_subproblem(
 
                 # Form right handside of the secant equation
 
-                jac_residuals!(model,x,J)
-                jac_nlconstraints!(model,x,C)
+                jac_residuals!(model, J, x)
+                jac_nlconstraints!(model, C, x)
                 al_grad!(rx,cx,y,mu,J,C,g)
 
-                update_hessian!(hess_op,J,C,rx,cx,g,y,s)
+                update_hessian!(hess_op,
+                                J,
+                                C,
+                                rx,
+                                cx,
+                                g,
+                                y,
+                                s)
 
             end
 

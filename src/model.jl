@@ -41,7 +41,7 @@ adding slack variables`g(x) - u = 0` with `u ≥ 0`.
 Constructors are available for both in-place out out of place functions.
 
 For the in-place versions, evaluation functions must return nothing and have the
-signature `f!(x,fx)`, with input `x` and the result being stored in `fx`.
+signature `f!(fx,x)`, with input `x` and the result being stored in `fx`.
 
 For the out-of-place version, evaluation functions must return an output vector
 and have the signature `f(x)`.
@@ -98,7 +98,7 @@ function BoxCnls!(
 
     # Set initial slack variables to g(x₀)
     u0 = similar(x0,n_slack)
-    g!(x0,u0)
+    g!(u0, x0)
     x_start = vcat(x0,u0)
 
     return BoxCnls(r!,h!,g!,jac_r!,jac_h!,jac_g!,x_low,x_upp,n,n_slack,m,p,x_start)
@@ -106,37 +106,6 @@ end
 
 # Constructor with in-place evaluation functions for a model with only
 # equalities or inequalities
-function BoxCnls!(
-    r!,
-    c!,
-    jac_r!,
-    jac_c!,
-    low::Vector{T},
-    upp::Vector{T},
-    x0::Vector{T},
-    n_var::Int,
-    m::Int,
-    p::Int,
-    only_equalities::Bool) where T
-
-    return if only_equalities
-        BoxCnls(r!,c!,nothing,jac_r!,jac_c!,nothing,low,upp,n_var,0,m,p,x0)
-
-    else begin
-        n_slack = p
-        n = n_var + n_slack
-        x_low = vcat(low, zeros(n_slack))
-        x_upp = vcat(upp, fill(Inf,n_slack))
-
-        # Set initial slack variables to g(x₀)
-        u0 = similar(x0,n_slack)
-        c!(x0,u0)
-        x_start = vcat(x0,u0)
-
-        BoxCnls(r!,nothing,c!,jac_r!,nothing,jac_c!,x_low,x_upp,n,n_slack,m,p,x_start)
-    end
-    end
-end
 
 function BoxCnls!(
     r!,
@@ -174,7 +143,7 @@ function BoxCnls!(
 
     # Set initial slack variables to g(x₀)
     u0 = similar(x0,n_slack)
-    c!(x0,u0)
+    c!(u0, x0)
     x_start = vcat(x0,u0)
 
     BoxCnls(r!,nothing,c!,jac_r!,nothing,jac_c!,x_low,x_upp,n,n_slack,m,p,x_start)
@@ -200,32 +169,32 @@ function BoxCnls(
     p_ineq::Int) where T
 
     # In-place versions of evaluation functions
-    function r!(x,rx)
+    function r!(rx, x)
         rx[1:m] .= r(x)
         return
     end
 
-    function h!(x,hx)
+    function h!(hx, x)
         hx[1:p_eq] .= h(x)
         return
     end
 
-    function g!(x,gx)
+    function g!(gx, x)
         gx[1:p_ineq] .= g(x)
         return
     end
 
-    function jac_r!(x,Jx)
+    function jac_r!(Jx, x)
         Jx[1:m,1:n_var] .= jac_r(x)
         return
     end
 
-    function jac_h!(x,Hx)
+    function jac_h!(Hx, x)
         Hx[1:p_eq,1:n_var] .= jac_h(x)
         return
     end
 
-    function jac_g!(x,Gx)
+    function jac_g!(Gx, x)
         Gx[1:p_ineq,1:n_var] .= jac_g(x)
         return
     end
@@ -249,22 +218,22 @@ function BoxCnls(
     eq_or_ineq::ConstraintsType) where T
 
     # In-place versions of evaluation functions
-    function r!(x,rx)
+    function r!(rx, x)
         rx[1:m] .= r(x)
         return
     end
 
-    function c!(x,cx)
+    function c!(cx, x)
         cx[1:p] .= c(x)
         return
     end
 
-    function jac_r!(x,Jx)
+    function jac_r!(Jx, x)
         Jx[1:m,1:n_var] .= jac_r(x)
         return
     end
 
-    function jac_c!(x,Cx)
+    function jac_c!(Cx, x)
         Cx[1:p,1:n_var] .= jac_c(x)
         return
     end
@@ -274,14 +243,14 @@ end
 
 
 """
-    residuals!(model, x, v)
+    residuals!(model, rx, x)
 
 Evaluates the residuals for the given `model` at input vector `x`, storing the
-result in `v`.
+result in `res`.
 """
-function residuals!(model::BoxCnls{T}, x::Vector{T}, v::Vector{T}) where T
+function residuals!(model::BoxCnls{T}, rx::Vector{T}, x::Vector{T}) where T
     x_var = view(x, 1:model.n)
-    model.res!(x_var, v)
+    model.res!(rx, x_var)
     return
 end
 
@@ -292,17 +261,17 @@ Returns the residuals for the given `model` evaluated at input vector `x`.
 """
 function residuals(model::BoxCnls{T}, x::Vector{T}) where T
     rx = similar(x, model.m)
-    residuals!(model, x, rx)
+    residuals!(model, rx, x)
     return rx
 end
 
 """
-    nlconstraints!(model, x, v)
+    nlconstraints!(model, cx, x)
 
 Evaluate the nonlinear constraints for the given `model` at input vector `x`,
-storing the result in `v`.
+storing the result in `cx`.
 """
-function nlconstraints!(model::BoxCnls{T}, x::Vector{T}, cx::Vector{T}) where T
+function nlconstraints!(model::BoxCnls{T}, cx::Vector{T}, x::Vector{T}) where T
 
     n, n_slack, p = model.n, model.n_slack, model.p
     n_var = n - n_slack
@@ -313,14 +282,14 @@ function nlconstraints!(model::BoxCnls{T}, x::Vector{T}, cx::Vector{T}) where T
     # Equality constraints components
     if p_eq > 0
         hx = view(cx,1:p_eq)
-        model.nleq!(x_var, hx)
+        model.nleq!(hx, x_var)
     end
 
     # Inequality constraints transformed into equalities
     if n_slack > 0
         gxmu = view(cx, p_eq+1:p)    # buffer for g(x) - u
         x_slack = view(x, n_var+1:n)
-        model.nlineq!(x_var, gxmu)   # gxmu ← g(x)
+        model.nlineq!(gxmu, x_var)   # gxmu ← g(x)
         gxmu .-= x_slack             # gxmu ← gxmu - u
     end
 
@@ -335,24 +304,24 @@ Returns the nonlinear constraints for the given `model` evaluated at input vecto
 """
 function nlconstraints(model::BoxCnls{T}, x::Vector{T}) where T
     cx = similar(x, model.p)
-    nlconstraints!(model, x, cx)
+    nlconstraints!(model, cx, x)
     return cx
 end
 
 """
-    jac_residuals!(model, x, J)
+    jac_residuals!(model, J, x)
 
 Evaluates the Jacobian of the residuals for the given `model` at input vector `x`,
 storing the result in matrix `J`.
 """
-function jac_residuals!(model::BoxCnls{T}, x::Vector{T}, J::Matrix{T}) where T
+function jac_residuals!(model::BoxCnls{T}, J::Matrix{T}, x::Vector{T}) where T
     n, n_slack, m = model.n, model.n_slack, model.m
     n_var = n - n_slack
     x_var = view(x,1:n_var)
 
     # Derivatives with respect to decision variables
     Jxvar = view(J, 1:m, 1:n_var)
-    model.jac_res!(x_var, Jxvar)
+    model.jac_res!(Jxvar, x_var)
 
     # Derivatives with respect to slack variables
     if n_slack > 0
@@ -369,17 +338,17 @@ Returns the Jacobian of the residuals for the given `model` evaluated at input v
 """
 function jac_residuals(model::BoxCnls{T}, x::Vector{T}) where T
     Jx = similar(x ,model.m, model.n)
-    jac_residuals!(model, x, Jx)
+    jac_residuals!(model, Jx, x)
     return Jx
 end
 
 """
-    jac_nlconstraints!(model, x, C)
+    jac_nlconstraints!(model, C, x)
 
 Evaluate the Jacobian of the nonlinear constraints for the given `model` at input
 vector `x`, storing the result in matrix `C`.
 """
-function jac_nlconstraints!(model::BoxCnls{T}, x::Vector{T}, C::Matrix{T}) where T
+function jac_nlconstraints!(model::BoxCnls{T}, C::Matrix{T}, x::Vector{T}) where T
 
     n, n_slack, p = model.n, model.n_slack, model.p
     n_var = n - n_slack
@@ -392,7 +361,7 @@ function jac_nlconstraints!(model::BoxCnls{T}, x::Vector{T}, C::Matrix{T}) where
     # Equality constraints derivatives with respect to decision variables
     if p_eq > 0
         Chx = view(C, eqrows, ivar)
-        model.jac_nleq!(x_var, Chx)
+        model.jac_nleq!(Chx, x_var)
     end
 
     # Derivatives with respect to slack variables and inequality constraints
@@ -406,7 +375,7 @@ function jac_nlconstraints!(model::BoxCnls{T}, x::Vector{T}, C::Matrix{T}) where
 
         # Inequality constraints components
         Cgx = view(C, ineqrows, ivar)
-        model.jac_nlineq!(x_var, Cgx)
+        model.jac_nlineq!(Cgx, x_var)
         C[ineqrows, islack] .= Diagonal{T}(-I,n_slack)
     end
 
@@ -421,6 +390,6 @@ vector `x`.
 """
 function jac_nlconstraints(model::BoxCnls{T},x::Vector{T}) where T
     Cx = similar(x, model.p, model.n)
-    jac_nlconstraints!(model, x, Cx)
+    jac_nlconstraints!(model, Cx, x)
     return Cx
 end

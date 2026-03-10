@@ -9,7 +9,7 @@
     (x[1]+x[2]-10)/3,
     x[3]-5.0]
 
-    function r!(x,rx)
+    function r!(rx, x)
         rx .= [x[1]-x[2],
                (x[1]+x[2]-10)/3,
                x[3]-5.0]
@@ -20,7 +20,7 @@
         1/3 1/3 0.;
         0. 0. 1.;]
 
-    function jac_r!(x,J)
+    function jac_r!(J, x)
         J .= [1. -1. 0;
         1/3 1/3 0.;
         0. 0. 1.;]
@@ -30,12 +30,12 @@
     c(x) = [48.0 - x[1]^2 - x[2]^2 - x[3]^2]
     jac_c(x) = [-2x[1] -2x[2] -2x[3]]
 
-    function c!(x,cx)
+    function c!(cx, x)
         cx .= [48.0 - x[1]^2 - x[2]^2 - x[3]^2]
         return
     end
 
-    function jac_c!(x,C)
+    function jac_c!(C, x)
         C .= [-2x[1] -2x[2] -2x[3]]
         return
     end
@@ -91,7 +91,7 @@ end
         return rx
     end
 
-    function r!(x,rx)
+    function r!(rx, x)
         n = size(x,1)
         m = 2(n-1)
 
@@ -116,10 +116,11 @@ end
         return J
     end
 
-    function jac_r!(x, J)
+    function jac_r!(J, x)
         n = size(x,1)
         m = 2(n-1)
 
+        J .= 0.0
         for i=1:n-1
             J[i,i] = 20x[i]
             J[i,i+1] = -10
@@ -140,7 +141,7 @@ end
         return cx
     end
 
-    function c!(x, cx)
+    function c!(cx, x)
         n = length(x)
         cx .= [3x[k+1]^3 + 2x[k+2] - 5 + sin(x[k+1]-x[k+2])*sin(x[k+1]+x[k+2]) + 4x[k+1] -
             x[k]*exp(x[k]-x[k+1]) - 3 for k=1:n-2]
@@ -158,8 +159,9 @@ end
         return A
     end
 
-    function jac_c!(x,A)
+    function jac_c!(A, x)
         n = size(x,1)
+        A .= 0.0
         for k=1:n-2
             A[k,k] = -(x[k]+1) * exp(x[k]-x[k+1])
             A[k,k+1] = 9x[k+1]^2 + cos(x[k+1]-x[k+2])*sin(x[k+1]+x[k+2]) + sin(x[k+1]-x[k+2])*cos(x[k+1]+x[k+2]) + 4 + x[k]*exp(x[k]-x[k+1])
@@ -211,7 +213,7 @@ end
 
     r(x) = [exp((x[i]-i)^2 / 2x[i+1]^2) for i=1:n-1]
 
-    function r!(x,rx)
+    function r!(rx, x)
         rx .= [exp((x[i]-i)^2 / 2x[i+1]^2) - i for i=1:n-1]
     end
 
@@ -227,7 +229,7 @@ end
         return J
     end
 
-    function jac_r!(x,J)
+    function jac_r!(J, x)
         J .= 0
         for i=1:size(x,1)-1
             J[i,i] = 2x[i] * exp((x[i]-i)^2 / 2x[i+1]^2)
@@ -240,27 +242,27 @@ end
 
     g(x) = [1 - x[1]^2 - x[2]^2 - x[3]^2]
 
-    function g!(x,gx)
+    function g!(gx, x)
         gx .= [1 - x[1]^2 - x[2]^2 - x[3]^2]
         return
     end
 
     jac_g(x) =  [-2x[1] -2x[2] -2x[3] 0.0 0.0]
 
-    function jac_g!(x,Gx)
+    function jac_g!(Gx, x)
         Gx .= [-2x[1] -2x[2] -2x[3] 0.0 0.0]
     end
 
     h(x) = [x[4]^2 + x[5]^2 - 1]
 
-    function h!(x,hx)
+    function h!(hx, x)
         hx .= [x[4]^2 + x[5]^2 - 1]
         return
     end
 
     jac_h(x) = [0.0 0.0 0.0 2x[4] 2x[5]]
 
-    function jac_h!(x,Hx)
+    function jac_h!(Hx, x)
         Hx .= [0.0 0.0 0.0 2x[4] 2x[5]]
         return
     end
@@ -310,7 +312,7 @@ end
 
 
     # Residuals
-    function r!(x,rx)
+    function r!(rx,x)
         N = div(size(x,1)-1,4)
 
         rx[1:N] .= [(x[4i-3] - x[4i-2])^2 for i=1:N]
@@ -324,16 +326,16 @@ end
     function r(x)
         m = 4*div(size(x,1)-1,4)
         res = similar(x,m)
-        r!(x,res)
+        r!(res,x)
         return res
     end
     # Inversed arguments for ForwardDiff.jacobian! call
-    jac_r!(x,J) = ForwardDiff.jacobian!(J, (rx,x) -> r!(x,rx), zeros(m), x)
+    jac_r!(J, x) = ForwardDiff.jacobian!(J, r!, zeros(m), x)
 
     jac_r(x) = ForwardDiff.jacobian(r,x)
     # Constraints
 
-    function c!(x,cx)
+    function c!(cx, x)
         N = div(size(x,1)-1,4)
 
         for k = 1:3N
@@ -352,13 +354,13 @@ end
     function c(x)
         p = 3*div(size(x,1)-1,4)
         res = similar(x,p)
-        c!(x,res)
+        c!(res, x)
         return res
     end
 
     jac_c(x) = ForwardDiff.jacobian(c,x)
 
-    jac_c!(x,C) = ForwardDiff.jacobian!(C, (cx,x) -> c!(x,cx), zeros(3N), x)
+    jac_c!(C, x) = ForwardDiff.jacobian!(C, c!, zeros(3N), x)
 
     x_low = fill(-Inf,n)
     x_upp = fill(Inf,n)
