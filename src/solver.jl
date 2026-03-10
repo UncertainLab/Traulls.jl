@@ -891,3 +891,54 @@ function criticality_measure(
 
     return pix
 end
+
+# Computes and returns the criticality measure for a problem encoded in BoxCnls
+# format.
+# The measure computed is the norm of the projection of the steepest direction
+# on the tangent cone at a given point. That information is encoded inside the
+# `proj_op` argument.
+function criticality_measure(
+    model::BoxCnls{T},
+    proj_op::CoordinateSubspaceProjector{T},
+    x::Vector{T},
+    g::Vector{T},
+    projmg::Vector{T};
+    p::T=Inf,
+    atol::T=T(1e-7)) where T
+
+    x_low, x_upp = model.x_low, model.x_upp
+    fixvars = proj_op.fixvars
+
+    for i in axes(x,1)
+        projmg[i] = if !fixvars[i]     # free variable
+            g[i]
+        elseif x[i] < x_low[i] + atol  # xᵢ = ℓᵢ
+            max(0,-g[i])
+        elseif x_upp < x[i] + atol     # xᵢ = uᵢ
+            min(0,-g[i])
+        end
+    end
+
+    return norm(projmg,p)
+
+end
+
+
+# Computes and returns the criticality measure for a problem encoded in BoxCnls
+# format.
+# The measure computed is the norm of the projection of the steepest direction
+# on the tangent space at a given point. That information is encoded inside the
+# `proj_op` argument.
+function criticality_measure(
+    model,
+    proj_op::SubspaceProjector{T},
+    x::Vector{T},
+    g::Vector{T},
+    projg::Vector{T};
+    p::T=Inf,
+    atol::T=T(1e-7)) where T
+
+    mul!(projg, proj_op, g)
+
+    return norm(projg, Inf)
+end

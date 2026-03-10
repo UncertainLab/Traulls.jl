@@ -475,7 +475,7 @@ function active_bounds!(
     for i in axes(x,1)
         if !P.fixvars[i] &&
             (s[i] <= atol + max(-radius,x_low[i] - x[i]) ||
-            min(radius,x_upp[i] - x[i]) - atol <= s[i])
+            min(radius,x_upp[i] - x[i])  <= s[i] + atol)
 
             push!(newly_active,i)
         end
@@ -610,8 +610,8 @@ function initial_active_bounds(
 
     for i in axes(x,1)
 
-        fix_vars[i] = (x_upp[i]-atol < x[i] && d[i] > atol) || # positive direction at active upper bound
-            (x_low[i]+atol > x[i] && d[i] < -atol) ||          # negative direction at active lower bound
+        fix_vars[i] = (x_upp[i] < x[i] + atol && d[i] > atol) || # positive direction at active upper bound
+            (x_low[i] + atol > x[i] && d[i] < -atol) ||          # negative direction at active lower bound
             (abs(d[i]) < atol)                                 # zero direction
     end
 
@@ -635,7 +635,7 @@ function active_bounds!(
     atol::Float64=sqrt(eps(Float64))) 
 
     for i in axes(fix_vars,1)
-        fix_vars[i] = fix_vars[i] || (x[i] <= atol+x_low[i]) || (x_upp[i]-atol <= x[i])
+        fix_vars[i] = fix_vars[i] || (x[i] <= atol + x_low[i]) || (x_upp[i] <= x[i] + atol)
     end
     return
 end
@@ -651,8 +651,8 @@ function active_bounds!(
 
     for i in axes(fix_vars,1)
         fix_vars[i] = fix_vars[i] ||
-         (s[i] <= atol + max(-delta,x_low[i] - x[i])) || 
-         (min(delta,x_upp[i] - x[i]) - atol <= s[i])
+         (s[i] <= atol + max(-delta, x_low[i] - x[i])) ||
+         (min(delta, x_upp[i] - x[i]) <= s[i] + atol)
     end
 
 end
@@ -680,7 +680,7 @@ function active_bounds_step(
     at_bound = BitVector(undef,size(x,1))
 
     for i in axes(s,1)
-        at_bound[i] = (s[i]-s_l[i] <= atol) || (s_u[i]-s[i] <= atol)
+        at_bound[i] = (s[i] <= atol + s_l[i]) || (s_u[i] <= s[i] + atol)
     end
 
     active = findall(at_bound)
