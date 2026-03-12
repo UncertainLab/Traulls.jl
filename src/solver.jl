@@ -241,15 +241,19 @@ function solve(model::BoxCnls;
     increase_factor, neg_ratio_factor)
 
     # Set up coordinate subspace projector
-    proj_op = CoordinateSubspaceProjector(n)
+    proj_op = projector_operator(model, Val(false))
+    # proj_op = CoordinateSubspaceProjector(n)
     # Set up tolerances
     omega_rel, eta = initial_tolerances(mu, omega0, eta0, k_crit, k_feas)
 
     # Initial values of objective, feasibility and criticality
     fx = dot(rx,rx)
-    feas_measure = norm(cx,Inf)
+    feas_measure = norm(cx, Inf)
     gproj = inner_workspace.proj_g
-    pix = criticality_measure(x,g,gproj,x_low,x_upp)
+
+    pix = criticality_measure(model, proj_op, x, g, gproj)
+    # pix = criticality_measure(x,g,gproj,x_low,x_upp)
+
     crit_tol = max(crit_rtol, crit_rtol*pix)
 
     solved = solved = feas_measure <= feas_atol && pix <= crit_tol
@@ -501,7 +505,8 @@ function solve_subproblem!(
     set_initial_radius!(tr,g)
 
     # Prepare for inner minimization loop
-    pix = criticality_measure(x,g,gproj,x_low,x_upp)
+    pix = criticality_measure(model, proj_op, x, g, gproj)
+    # pix = criticality_measure(x,g,gproj,x_low,x_upp)
     omega_crit = max(omega_rel, omega_rel*pix)
     solved = pix <= omega_crit
 
@@ -605,7 +610,8 @@ function solve_subproblem!(
 
             end
 
-            pix = criticality_measure(x,g,gproj,x_low,x_upp)
+            pix = criticality_measure(model, proj_op, x, g, gproj)
+            # pix = criticality_measure(x,g,gproj,x_low,x_upp)
 
         else
             x .= x_prev
@@ -923,15 +929,15 @@ function criticality_measure(
     atol::T=T(1e-7)) where T
 
     x_low, x_upp = model.x_low, model.x_upp
-    fixvars = proj_op.fixvars
+    # fixvars = proj_op.fixvars
 
     for i in axes(x,1)
-        projmg[i] = if !fixvars[i]     # free variable
-            g[i]
-        elseif x[i] < x_low[i] + atol  # xᵢ = ℓᵢ
+        projmg[i] = if x[i] < x_low[i] + atol  # xᵢ = ℓᵢ
             max(0,-g[i])
-        elseif x_upp < x[i] + atol     # xᵢ = uᵢ
+        elseif x_upp[i] < x[i] + atol             # xᵢ = uᵢ
             min(0,-g[i])
+        else
+            -g[i]                              # xᵢ ∈ (lᵢ,uᵢ)
         end
     end
 
@@ -956,5 +962,5 @@ function criticality_measure(
 
     mul!(projg, proj_op, g)
 
-    return norm(projg, Inf)
+    norm(projg, Inf)
 end
