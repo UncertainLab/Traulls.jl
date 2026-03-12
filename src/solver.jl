@@ -1,3 +1,19 @@
+# Initializes a projector operator for a problem where linear constraints are
+# bounds on the variables.
+function projector_operator(model::BoxCnls{T},::Val{false}) where T
+    n = model.n
+    CoordinateSubspaceProjector(n;T=T)
+end
+
+# Returns a projector operator for problems where linear constraints are a mix
+# of linear equalities and bounds on the variables.
+function projector_operator(model, ::Val{true})
+    # TODO: modify model structure to encode linear equality constraints
+    A = model.eqmat
+    chol_aat = cholesky(A*A')
+    SubspaceProjector(A,chol_aat)
+end
+
 # Workspace structure whose attributes are the buffers vectors involved into
 # intermediate computations.
 # Avoids doing unnecessary reallocations of memory throughout the execution.
@@ -246,7 +262,7 @@ function solve(model::BoxCnls;
 
         verbose && print_outer_iter_header(iter,fx,feas_measure,mu,pix,omega_rel; io=output_io)
 
-        pix = solve_subproblem(
+        pix = solve_subproblem!(
             model,
             x,
             x_low,
@@ -315,7 +331,7 @@ function solve(model::BoxCnls;
 end
 
 """
-    solve_subproblem(model, args...)
+    solve_subproblem!(model, args...)
 
 Solves the outer iteration subproblem
 
@@ -433,7 +449,7 @@ subproblem
 - `verbose::Bool=false`: Boolean to log details into a input/output stream
 - `io::IO=stdout`: input/output stream (default is `stdout`)
 """
-function solve_subproblem(
+function solve_subproblem!(
     model::BoxCnls,
     x::Vector,
     x_low::Vector,
@@ -502,7 +518,7 @@ function solve_subproblem(
 
         radius = tr.radius
 
-        pred = projected_gradient(
+        pred = projected_gradient!(
             x,
             s,
             g,
@@ -610,7 +626,7 @@ function solve_subproblem(
 end
 
 """
-    projected_gradient(x,g,H,xₗ,xᵤ,Δ,max_cg_iter,κₛ,κᵪ)
+    projected_gradient!(x,g,H,xₗ,xᵤ,Δ,max_cg_iter,κₛ,κᵪ)
 
 Approximately solves the quadratic program
 
@@ -645,7 +661,7 @@ the conjugate gradient method
 - `pred::Float64`: Reduction of the quadratic model after taking step `s`
 
 """
-function projected_gradient(
+function projected_gradient!(
     x::Vector,
     s::Vector,
     g::Vector,
@@ -697,7 +713,7 @@ function projected_gradient(
 
     while !optimal && !cg_stop && iter <= max_cg_iter && !saturated_subspace(proj_op)
 
-        cg_status = pcg(
+        cg_status = pcg!(
             b,
             hess_op,
             proj_op,
@@ -743,7 +759,7 @@ function projected_gradient(
     return pred
 end
 
-""" cauchy_step(x,g,H,ℓ,u,Δ)
+""" cauchy_step!(x,g,H,ℓ,u,Δ)
 
 Compute a Cauchy step that provides a sufficient reduction of the quadratic
 model `q(s) = <s,Hs> + <g,s>`.

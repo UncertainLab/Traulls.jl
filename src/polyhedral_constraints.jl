@@ -188,7 +188,6 @@ function SubspaceProjector(
     SubspaceProjector(subA,chol,chol_aat)
 end
 
-
 # Update the Cholesky decomposition of the Gram matrix when adding one bound constraint 
 # to the active set 
 """

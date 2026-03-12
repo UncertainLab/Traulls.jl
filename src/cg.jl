@@ -11,7 +11,7 @@ Enum representing the termination status of the projected conjugate gradient met
 @enum CG_status normal_exit on_boundary negative_curvature max_iter_reached
 
 """ 
-    pcg(b, H, w_l, w_u, fix_vars, κ_cg)
+    pcg!(b, H, w_l, w_u, fix_vars, κ_cg)
 
 Approximately solves, w.r.t. `w` the subproblem:
 
@@ -57,7 +57,7 @@ curvature detection (default: square root double relative precision)
 
 - `status`: The termination status, encoded in the `CG_status` Enum (see [`CG_status`](@ref))
 """
-function pcg(
+function pcg!(
     b::Vector,
     H::ALHessian,
     P::CoordinateSubspaceProjector,
@@ -74,16 +74,7 @@ function pcg(
     
     n = size(b,1)
 
-    # Buffers 
-    # w = zeros(n)
-    # r = zeros(n)
-    # v = zeros(n)
     w .= 0.0
-    
-    # Form the preconditionner 
-    # TODO: Encode P into a `Projector`
-    #free_vars = .!fix_vars
-    #P = Diagonal(free_vars)
 
     r .= b
     v .= P*r
