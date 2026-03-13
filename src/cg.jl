@@ -19,7 +19,7 @@ Approximately solves, w.r.t. `w` the subproblem:
 
 `s.t. wᵢ = 0, i ∈ fix_vars`
 
-` ` ` ` ` ` `wₗ ≤ w ≤ wᵤ,`
+`wₗ ≤ w ≤ wᵤ,`
 
 using the projected conjugate gradient method.
 
