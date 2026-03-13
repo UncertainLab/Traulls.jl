@@ -53,7 +53,7 @@ end
 # Reset the values of the field of `Workspace` to 0
 
 function reset_workspace!(wrkspc::Workspace{T}) where T
-    zero_T = T(0.0)
+    zero_T = T(0)
 
     wkrspc.x_prev .= zero_T
     wkrspc.rx_prev .= zero_T
@@ -181,8 +181,8 @@ function solve(model::BoxCnls;
     tau::Float64 = 10.0,
     omega0::Float64 = 1.0,
     eta0::Float64 = 1.0,
-    feas_atol::Float64 = 1e-6,
-    crit_rtol::Float64 = 1e-7,
+    min_tol_feas::Float64 = 1e-6,
+    min_reltol_crit::Float64 = 1e-7,
     k_crit::Float64 = 1.0,
     k_feas::Float64 = 0.1,
     beta_crit::Float64 = 1.0,
@@ -244,7 +244,7 @@ function solve(model::BoxCnls;
     proj_op = projector_operator(model, Val(false))
     # proj_op = CoordinateSubspaceProjector(n)
     # Set up tolerances
-    omega_rel, eta = initial_tolerances(mu, omega0, eta0, k_crit, k_feas)
+    reltol_crit, tol_feas = initial_tolerances(mu, omega0, eta0, k_crit, k_feas)
 
     # Initial values of objective, feasibility and criticality
     fx = dot(rx,rx)
@@ -253,18 +253,17 @@ function solve(model::BoxCnls;
 
     pix = criticality_measure(model, proj_op, x, g, gproj)
     # pix = criticality_measure(x,g,gproj,x_low,x_upp)
-
-    crit_tol = max(crit_rtol, crit_rtol*pix)
-
-    solved = solved = feas_measure <= feas_atol && pix <= crit_tol
+    tol_crit = min_reltol_crit * max(1, pix)
+    solved = feas_measure <= min_tol_feas && pix <= tol_crit
     iter = 1
 
-    verbose && print_boconls_header(n,m,p,x_low,x_upp,crit_tol,feas_atol,tau; io=output_io)
+    verbose && print_boconls_header(n,m,p,x_low,x_upp,min_reltol_crit,min_tol_feas,tau;
+                                    io=output_io)
     verbose && print_tr_header(tr;io=output_io)
 
     while !solved && iter <= max_iter
 
-        verbose && print_outer_iter_header(iter,fx,feas_measure,mu,pix,omega_rel; io=output_io)
+        verbose && print_outer_iter_header(iter,fx,feas_measure,mu,pix,reltol_crit; io=output_io)
 
         pix = solve_subproblem!(
             model,
@@ -281,7 +280,7 @@ function solve(model::BoxCnls;
             hess_op,
             proj_op,
             tr,
-            omega_rel,
+            reltol_crit,
             kappa_step,
             kappa_cg,
             hessian_approx,
@@ -293,21 +292,27 @@ function solve(model::BoxCnls;
 
             feas_measure = norm(cx,Inf)
 
-            if feas_measure <= eta
+            if feas_measure <= tol_feas
 
-                solved = feas_measure <= feas_atol && pix <= crit_tol
+                # Evaluate termination status
+                solved = feas_measure <= min_tol_feas &&
+                    pix <= tol_crit
+
+                # Update Lagrange multipliers
                 first_order_multipliers!(y,cx,mu)
 
                 if !solved
-                    # Update the iterate, multipliers and decrease tolerances (penalty parameter is unchanged)
-                    omega_rel = max(omega_rel / mu^beta_crit, crit_rtol)
-                    eta = max(eta / mu^beta_feas, feas_atol)
+                    # Update the iterate, multipliers and decrease tolerances
+                    # Penalty parameter is unchanged
+                    reltol_crit = max(reltol_crit / mu^beta_crit, min_reltol_crit)
+                    tol_feas = max(tol_feas / mu^beta_feas, min_tol_feas)
                 end
             else
-                # Increase the penalty parameter lesser decrease of the tolerances (iterate and multipliers are unchanged)
+                # Increase the penalty parameter lesser decrease of the tolerances
+                # Iterate and multipliers are unchanged
                 mu = min(mu_max, tau * mu)
-                omega_rel = max(omega0 / mu^k_crit, crit_rtol)
-                eta = max(eta0 / mu^k_feas, feas_atol)
+                reltol_crit = max(omega0 / mu^k_crit, min_reltol_crit)
+                tol_feas = max(eta0 / mu^k_feas, min_tol_feas)
             end
 
         iter += 1
@@ -321,7 +326,7 @@ function solve(model::BoxCnls;
 
     solving_status = if solved
         first_order_critical
-        elseif feas_measure <= feas_atol
+        elseif feas_measure <= min_tol_feas
         feasible_non_critical
         else
         infeasible_non_critical
@@ -468,7 +473,7 @@ function solve_subproblem!(
     hess_op::ALHessian,
     proj_op::CoordinateSubspaceProjector,
     tr::TrustRegion,
-    omega_rel::Float64,
+    reltol_crit::Float64,
     kappa_step::Float64,
     kappa_cg::Float64,
     hessian_approx::HessianApprox,
@@ -506,9 +511,9 @@ function solve_subproblem!(
 
     # Prepare for inner minimization loop
     pix = criticality_measure(model, proj_op, x, g, gproj)
+    tol_crit = reltol_crit * max(1, pix)
     # pix = criticality_measure(x,g,gproj,x_low,x_upp)
-    omega_crit = max(omega_rel, omega_rel*pix)
-    solved = pix <= omega_crit
+    solved = pix <= tol_crit
 
     short_circuit = false
 
@@ -624,7 +629,8 @@ function solve_subproblem!(
         update_radius!(tr,ratio,norm_step)
 
         verbose && print_inner_iter(iter,alx_prev,norm_step,radius,ratio;io=io)
-        solved = pix <= omega_crit
+
+        solved = pix <= tol_crit
         iter += 1
     end
 
