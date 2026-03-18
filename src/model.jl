@@ -46,6 +46,400 @@ signature `f!(fx,x)`, with input `x` and the result being stored in `fx`.
 For the out-of-place version, evaluation functions must return an output vector
 and have the signature `f(x)`.
 """
+
+mutable struct CnlsModel{T<:Real} <: AbstrcatCnlsModel{T}
+    # In-place evaluation functions
+    res!
+    nleq!
+    nlineq!
+    jac_res!
+    jac_nleq!
+    jac_nlineq!
+
+    # Linear constraints
+    linmat::AbstractMatrix{T}
+    linrhs::AbstractVector{T}
+    xlow::AbstractVector{T}
+    xupp::AbstractVector{T}
+
+    # Dimensions
+    n::Int
+    nslack::Int
+    nres::Int
+    ncons::Int
+    nlincons::Int
+
+    # Starting point
+    x::Vector{T}
+end
+
+# Constructor with in-place evaluation functions for a model with a mix of equalities and
+# inequalities
+function CnlsModel!(
+    r!,
+    h!,
+    g!,
+    jac_r!,
+    jac_h!,
+    jac_g!,
+    A::Matrix{T},
+    b::Vector{T},
+    low::Vector{T},
+    upp::Vector{T},
+    x0::Vector{T},
+    nvar::Int,
+    nres::Int,
+    neq::Int,
+    nineq::Int) where T
+
+    # Slack variables data
+    nslack = nineq
+    n = nvar + nslack
+    ncons = neq + nineq
+
+    # Adjust linear constraints
+    xlow = vcat(low, zeros(nslack))
+    xupp = vcat(upp, fill(Inf, nslack))
+    nlincons = size(A,1)
+    lincons = hcat(A, zeros(nlincons, nslack))
+
+    # Set initial slack variables to g(x₀)
+    u0 = similar(x0, nslack)
+    g!(u0, x0)
+    xstart = vcat(x0, u0)
+
+    return CnlsModel(r!, h!, g!, jac_r!, jac_h!, jac_g!, lincons, b, xlow, xupp, n, nslack,
+                     nres, ncons, nlincons, xstart)
+end
+
+# Constructor with out-of-place evaluation functions for a model with a mix of
+# equalities and inequalities
+function CnlsModel(
+    r,
+    h,
+    g,
+    jac_r,
+    jac_h,
+    jac_g,
+    A::Matrix{T},
+    b::Vector{T},
+    low::Vector{T},
+    upp::Vector{T},
+    x0::Vector{T},
+    nvar::Int,
+    nres::Int,
+    neq::Int,
+    nineq::Int) where T
+
+    # In-place versions of evaluation functions
+    function r!(rx, x)
+        rx[1:m] .= r(x)
+        return
+    end
+
+    function h!(hx, x)
+        hx[1:p_eq] .= h(x)
+        return
+    end
+
+    function g!(gx, x)
+        gx[1:p_ineq] .= g(x)
+        return
+    end
+
+    function jac_r!(Jx, x)
+        Jx[1:m,1:n_var] .= jac_r(x)
+        return
+    end
+
+    function jac_h!(Hx, x)
+        Hx[1:p_eq,1:n_var] .= jac_h(x)
+        return
+    end
+
+    function jac_g!(Gx, x)
+        Gx[1:p_ineq,1:n_var] .= jac_g(x)
+        return
+    end
+
+    return CnlsModel!(r!, h!, g!, jac_r!, jac_h!, jac_g!, A, b, low, upp, x0, nvar, nres,
+                      neq, nineq)
+end
+
+
+# Constructor with in-place evaluation functions for a model with only
+# equalities or inequalities
+
+function CnlsModel!(
+    r!,
+    c!,
+    jac_r!,
+    jac_c!,
+    A::Matrix{T},
+    b::Vector{T},
+    low::Vector{T},
+    upp::Vector{T},
+    x0::Vector{T},
+    nvar::Int,
+    nres::Int,
+    ncons::Int,
+    ::Val{:only_equalities}) where T
+
+    CnlsModel(r!, c!, nothing, jac_r!, jac_c!, nothing, A, b, low, upp, nvar, 0, nres,
+              ncons, size(A,1), x0)
+end
+
+function CnlsModel!(
+    r!,
+    c!,
+    jac_r!,
+    jac_c!,
+    A::Matrix{T},
+    b::Vector{T},
+    low::Vector{T},
+    upp::Vector{T},
+    x0::Vector{T},
+    nvar::Int,
+    nres::Int,
+    ncons::Int,
+    ::Val{:only_inequalities}) where T
+
+    # Adjust dimensions for slack variables
+    nslack = ncons
+    n = nvar + nslack
+
+    # Adjust linear constraints
+    xlow = vcat(low, zeros(nslack))
+    xupp = vcat(upp, fill(Inf,nslack))
+    nlincons = size(A,1)
+    lincons = hcat(A, zeros(nlincons, nslack))
+
+    # Set initial slack variables to g(x₀)
+    u0 = similar(x0 ,nslack)
+    c!(u0, x0)
+    x_start = vcat(x0,u0)
+
+    CnlsModel(r!, nothing, c!, jac_r!, nothing, jac_c!, lincons, b, xlow, xupp, n,
+              nslack, nres, ncons, nlincons, xstart)
+end
+
+function CnlsModel(
+    r,
+    c,
+    jac_r,
+    jac_c,
+    A::Matrix{T},
+    b::Vector{T},
+    low::Vector{T},
+    upp::Vector{T},
+    x0::Vector{T},
+    nvar::Int,
+    nres::Int,
+    ncons::Int,
+    eq_or_ineq::ConstraintType) where T
+
+    # In-place versions of evaluation functions
+    function r!(rx, x)
+        rx[1:m] .= r(x)
+        return
+    end
+
+    function c!(cx, x)
+        cx[1:p] .= c(x)
+        return
+    end
+
+    function jac_r!(Jx, x)
+        Jx[1:m,1:n_var] .= jac_r(x)
+        return
+    end
+
+    function jac_c!(Cx, x)
+        Cx[1:p,1:n_var] .= jac_c(x)
+        return
+    end
+
+    CnlsModel!(r!, c!, jac_r!, jac_c!, A, b, low, upp, x0, nvar, nres, ncons, eq_or_ineq)
+end
+
+# Constructor with in-place evaluation functions for model with mix equalities and
+# inequalities and bounds on the parameters
+function CnlsModel!(
+    r!,
+    h!,
+    g!,
+    jac_r!,
+    jac_h!,
+    jac_g!,
+    low::Vector{T},
+    upp::Vector{T},
+    x0::Vector{T},
+    nvar::Int,
+    nres::Int,
+    neq::Int,
+    nineq::Int) where T
+
+    # Slack variables data
+    nslack = nineq
+    n = nvar + nslack
+    ncons = neq + nineq
+
+    # Adjust linear constraints
+    xlow = vcat(low, zeros(nslack))
+    xupp = vcat(upp, fill(Inf, nslack))
+
+    # Set initial slack variables to g(x₀)
+    u0 = similar(x0, nslack)
+    g!(u0, x0)
+    xstart = vcat(x0, u0)
+
+    CnlsModel!(r!, h!, g!, jac_r!, jac_h!, jac_g!, zeros(T,1,1), zeros(T,1), xlow, xupp, n,
+               nslack, nres, ncons, 0, xstart)
+end
+
+# Constructor with out of place evaluation functions for models with mixed equalities and
+# inequalities and bounds on the parameters
+function CnlsModel(
+    r,
+    h,
+    g,
+    jac_r,
+    jac_h,
+    jac_g,
+    low::Vector{T},
+    upp::Vector{T},
+    x0::Vector{T},
+    nvar::Int,
+    nres::Int,
+    neq::Int,
+    nineq::Int) where T
+
+
+    # In-place versions of evaluation functions
+    function r!(rx, x)
+        rx[1:m] .= r(x)
+        return
+    end
+
+    function h!(hx, x)
+        hx[1:p_eq] .= h(x)
+        return
+    end
+
+    function g!(gx, x)
+        gx[1:p_ineq] .= g(x)
+        return
+    end
+
+    function jac_r!(Jx, x)
+        Jx[1:m,1:n_var] .= jac_r(x)
+        return
+    end
+
+    function jac_h!(Hx, x)
+        Hx[1:p_eq,1:n_var] .= jac_h(x)
+        return
+    end
+
+    function jac_g!(Gx, x)
+        Gx[1:p_ineq,1:n_var] .= jac_g(x)
+        return
+    end
+
+    CnlsModel!(r!, h!, g!, jac_r!, jac_h!, jac_g!, low, upp, x0, nvar, nres, neq, nineq)
+end
+
+# Constructor with in-place evaluation functions for model with only equalities or
+# and bounds on the parameters
+
+function CnlsModel!(
+    r!,
+    c!,
+    jac_r!,
+    jac_c!,
+    low::Vector{T},
+    upp::Vector{T},
+    x0::Vector{T},
+    nvar::Int,
+    nres::Int,
+    ncons::Int,
+    ::Val{:only_equalities}) where T
+
+    CnlsModel(r!, c!, nothing, jac_r!, jac_c!, nothing, zeros(T,1,1), zeros(T,1), low, upp,
+              nvar, 0, nres, ncons, 0, x0)
+end
+
+# Constructor with in-place evaluation functions for model with only inequalities and bounds
+# constraints
+function CnlsModel!(
+    r!,
+    c!,
+    jac_r!,
+    jac_c!,
+    low::Vector{T},
+    upp::Vector{T},
+    x0::Vector{T},
+    nvar::Int,
+    nres::Int,
+    ncons::Int,
+    ::Val{:only_inequalities}) where T
+
+    # Adjust dimensions for slack variables
+    nslack = ncons
+    n = nvar + nslack
+
+    # Adjust linear constraints
+    xlow = vcat(low, zeros(nslack))
+    xupp = vcat(upp, fill(Inf,nslack))
+
+    # Set initial slack variables to g(x₀)
+    u0 = similar(x0 ,nslack)
+    c!(u0, x0)
+    x_start = vcat(x0,u0)
+
+    CnlsModel(r!, nothing, c!, jac_r!, nothing, jac_c!, zeros(T,1,1), zeros(T,1), xlow,
+              xupp, n, nslack, nres, ncons, 0, xstart)
+end
+
+# Constructor for model with only equalities or inequalities and bounds on the variables
+function CnlsModel(
+    r,
+    c,
+    jac_r,
+    jac_c,
+    low::Vector{T},
+    upp::Vector{T},
+    x0::Vector{T},
+    nvar::Int,
+    nres::Int,
+    ncons::Int,
+    eq_or_ineq::ConstraintsType) where T
+
+        # In-place versions of evaluation functions
+    function r!(rx, x)
+        rx[1:m] .= r(x)
+        return
+    end
+
+    function c!(cx, x)
+        cx[1:p] .= c(x)
+        return
+    end
+
+    function jac_r!(Jx, x)
+        Jx[1:m,1:n_var] .= jac_r(x)
+        return
+    end
+
+    function jac_c!(Cx, x)
+        Cx[1:p,1:n_var] .= jac_c(x)
+        return
+    end
+
+    CnlsModel!(r!, c!, jac_r!, jac_c!, low, upp, x0, nvar, nres, ncons, eq_or_ineq)
+end
+
+#############################################################
 mutable struct BoxCnls{T<:Real} <: AbstractCnlsModel{T}
     # In-place evaluation functions
     res!
