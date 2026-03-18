@@ -3,7 +3,7 @@ abstract type AbstractCnlsModel{T} end
 
 const ConstraintsType = Union{Val{:only_equalities}, Val{:only_inequalities}}
 """
-    BoxCnls{T} <: AbstractCnlsModel{T}
+    CnlsModel{T} <: AbstractCnlsModel{T}
 
  Structure representing a nonlinear least-squares problem of the form
 
@@ -13,7 +13,9 @@ const ConstraintsType = Union{Val{:only_equalities}, Val{:only_inequalities}}
 
 `g(x) ≥ 0`
 
-`low ≤ x ≤ upp.`
+`Ax = b`
+
+`ℓ ≤ x ≤ u.`
 
 Functions `r`, `h` and `g` are two time continuously differentiable.
 
@@ -27,13 +29,16 @@ Functions `r`, `h` and `g` are two time continuously differentiable.
 constraints
 * `jac_nlineq!`: Function evaluating the Jacobian of the nonlinear inequality
 constraints
-* `x_low`: Lower bounds on the variables
-* `x_upp`: Upper bounds on the variables
-* `x`: Initial solution
+* `linmat`: Matrix of the linear equality constraints
+* `linrhs`: Right handside of the linear equality constraints
+* `xlow`: Lower bounds on the variables
+* `xupp`: Upper bounds on the variables
 * `n`: Number of variables
-* `n_slack`: Number of slack variables
-* `m`: Number of residuals
-* `p`: Total of nonlinear  constraints (equalities + inequalities)
+* `nslack`: Number of slack variables
+* `nres`: Number of residuals
+* `ncons`: Total of nonlinear  constraints (equalities + inequalities)
+* `nlincons`: Total number of linear equality constraints, i.e. number of rows of `linmat`
+* `x`: Initial guess for solution
 
 Nonlinear inequality constraints are converted as equality constraints by
 adding slack variables`g(x) - u = 0` with `u ≥ 0`.
@@ -41,13 +46,13 @@ adding slack variables`g(x) - u = 0` with `u ≥ 0`.
 Constructors are available for both in-place out out of place functions.
 
 For the in-place versions, evaluation functions must return nothing and have the
-signature `f!(fx,x)`, with input `x` and the result being stored in `fx`.
+signature `f!(fx, x)`, with input `x` and the result being stored in `fx`.
 
-For the out-of-place version, evaluation functions must return an output vector
-and have the signature `f(x)`.
+For the out-of-place version, evaluation functions must return an output vector of
+appropriate dimension and have the signature `f(x)`.
 """
 
-mutable struct CnlsModel{T<:Real} <: AbstrcatCnlsModel{T}
+mutable struct CnlsModel{T<:Real} <: AbstractCnlsModel{T}
     # In-place evaluation functions
     res!
     nleq!
@@ -133,32 +138,32 @@ function CnlsModel(
 
     # In-place versions of evaluation functions
     function r!(rx, x)
-        rx[1:m] .= r(x)
+        rx[1:nres] .= r(x)
         return
     end
 
     function h!(hx, x)
-        hx[1:p_eq] .= h(x)
+        hx[1:neq] .= h(x)
         return
     end
 
     function g!(gx, x)
-        gx[1:p_ineq] .= g(x)
+        gx[1:nineq] .= g(x)
         return
     end
 
     function jac_r!(Jx, x)
-        Jx[1:m,1:n_var] .= jac_r(x)
+        Jx[1:nres,1:nvar] .= jac_r(x)
         return
     end
 
     function jac_h!(Hx, x)
-        Hx[1:p_eq,1:n_var] .= jac_h(x)
+        Hx[1:neq,1:nvar] .= jac_h(x)
         return
     end
 
     function jac_g!(Gx, x)
-        Gx[1:p_ineq,1:n_var] .= jac_g(x)
+        Gx[1:nineq,1:nvar] .= jac_g(x)
         return
     end
 
@@ -236,26 +241,26 @@ function CnlsModel(
     nvar::Int,
     nres::Int,
     ncons::Int,
-    eq_or_ineq::ConstraintType) where T
+    eq_or_ineq::ConstraintsType) where T
 
     # In-place versions of evaluation functions
     function r!(rx, x)
-        rx[1:m] .= r(x)
+        rx[1:nres] .= r(x)
         return
     end
 
     function c!(cx, x)
-        cx[1:p] .= c(x)
+        cx[1:ncons] .= c(x)
         return
     end
 
     function jac_r!(Jx, x)
-        Jx[1:m,1:n_var] .= jac_r(x)
+        Jx[1:nres,1:nvar] .= jac_r(x)
         return
     end
 
     function jac_c!(Cx, x)
-        Cx[1:p,1:n_var] .= jac_c(x)
+        Cx[1:ncons,1:nvar] .= jac_c(x)
         return
     end
 
@@ -293,8 +298,8 @@ function CnlsModel!(
     g!(u0, x0)
     xstart = vcat(x0, u0)
 
-    CnlsModel!(r!, h!, g!, jac_r!, jac_h!, jac_g!, zeros(T,1,1), zeros(T,1), xlow, xupp, n,
-               nslack, nres, ncons, 0, xstart)
+    CnlsModel(r!, h!, g!, jac_r!, jac_h!, jac_g!, zeros(T,1,1), zeros(T,1),
+               xlow, xupp, n, nslack, nres, ncons, 0, xstart)
 end
 
 # Constructor with out of place evaluation functions for models with mixed equalities and
@@ -317,32 +322,32 @@ function CnlsModel(
 
     # In-place versions of evaluation functions
     function r!(rx, x)
-        rx[1:m] .= r(x)
+        rx[1:nres] .= r(x)
         return
     end
 
     function h!(hx, x)
-        hx[1:p_eq] .= h(x)
+        hx[1:neq] .= h(x)
         return
     end
 
     function g!(gx, x)
-        gx[1:p_ineq] .= g(x)
+        gx[1:nineq] .= g(x)
         return
     end
 
     function jac_r!(Jx, x)
-        Jx[1:m,1:n_var] .= jac_r(x)
+        Jx[1:nres,1:nvar] .= jac_r(x)
         return
     end
 
     function jac_h!(Hx, x)
-        Hx[1:p_eq,1:n_var] .= jac_h(x)
+        Hx[1:neq,1:nvar] .= jac_h(x)
         return
     end
 
     function jac_g!(Gx, x)
-        Gx[1:p_ineq,1:n_var] .= jac_g(x)
+        Gx[1:nineq,1:nvar] .= jac_g(x)
         return
     end
 
@@ -395,7 +400,7 @@ function CnlsModel!(
     # Set initial slack variables to g(x₀)
     u0 = similar(x0 ,nslack)
     c!(u0, x0)
-    x_start = vcat(x0,u0)
+    xstart = vcat(x0,u0)
 
     CnlsModel(r!, nothing, c!, jac_r!, nothing, jac_c!, zeros(T,1,1), zeros(T,1), xlow,
               xupp, n, nslack, nres, ncons, 0, xstart)
@@ -417,26 +422,179 @@ function CnlsModel(
 
         # In-place versions of evaluation functions
     function r!(rx, x)
-        rx[1:m] .= r(x)
+        rx[1:nres] .= r(x)
         return
     end
 
     function c!(cx, x)
-        cx[1:p] .= c(x)
+        cx[1:ncons] .= c(x)
         return
     end
 
     function jac_r!(Jx, x)
-        Jx[1:m,1:n_var] .= jac_r(x)
+        Jx[1:nres,1:nvar] .= jac_r(x)
         return
     end
 
     function jac_c!(Cx, x)
-        Cx[1:p,1:n_var] .= jac_c(x)
+        Cx[1:ncons,1:nvar] .= jac_c(x)
         return
     end
 
     CnlsModel!(r!, c!, jac_r!, jac_c!, low, upp, x0, nvar, nres, ncons, eq_or_ineq)
+end
+
+"""
+    residuals!(model, rx, x)
+
+Evaluates the residuals for the given `model` at input vector `x`, storing the
+result in `res`.
+"""
+function residuals!(model::CnlsModel{T}, rx::Vector{T}, x::Vector{T}) where T
+    x_var = view(x, 1:model.n)
+    model.res!(rx, x_var)
+    return
+end
+
+"""
+    residuals(model, x)
+
+Returns the residuals for the given `model` evaluated at input vector `x`.
+"""
+function residuals(model::CnlsModel{T}, x::Vector{T}) where T
+    rx = similar(x, model.nres)
+    residuals!(model, rx, x)
+    return rx
+end
+
+"""
+    nlconstraints!(model, cx, x)
+
+Evaluate the nonlinear constraints for the given `model` at input vector `x`,
+storing the result in `cx`.
+"""
+function nlconstraints!(model::CnlsModel{T}, cx::Vector{T}, x::Vector{T}) where T
+
+    n, n_slack, p = model.n, model.nslack, model.ncons
+    n_var = n - n_slack
+    p_eq = p - n_slack
+
+    x_var = view(x,1:n_var)
+
+    # Equality constraints components
+    if p_eq > 0
+        hx = view(cx,1:p_eq)
+        model.nleq!(hx, x_var)
+    end
+
+    # Inequality constraints transformed into equalities
+    if n_slack > 0
+        gxmu = view(cx, p_eq+1:p)    # buffer for g(x) - u
+        x_slack = view(x, n_var+1:n)
+        model.nlineq!(gxmu, x_var)   # gxmu ← g(x)
+        gxmu .-= x_slack             # gxmu ← gxmu - u
+    end
+
+    return
+end
+
+"""
+    nlconstraints(model, x)
+
+Returns the nonlinear constraints for the given `model` evaluated at input vector
+`x`.
+"""
+function nlconstraints(model::CnlsModel{T}, x::Vector{T}) where T
+    cx = similar(x, model.ncons)
+    nlconstraints!(model, cx, x)
+    return cx
+end
+
+"""
+    jac_residuals!(model, J, x)
+
+Evaluates the Jacobian of the residuals for the given `model` at input vector `x`,
+storing the result in matrix `J`.
+"""
+function jac_residuals!(model::CnlsModel{T}, J::Matrix{T}, x::Vector{T}) where T
+    n, n_slack, m = model.n, model.nslack, model.nres
+    n_var = n - n_slack
+    x_var = view(x,1:n_var)
+
+    # Derivatives with respect to decision variables
+    Jxvar = view(J, 1:m, 1:n_var)
+    model.jac_res!(Jxvar, x_var)
+
+    # Derivatives with respect to slack variables
+    if n_slack > 0
+        J[:,n_var+1:end] .= zeros(m,n_slack)
+    end
+
+    return
+end
+
+"""
+    jac_residuals(model, x)
+
+Returns the Jacobian of the residuals for the given `model` evaluated at input vector `x`.
+"""
+function jac_residuals(model::CnlsModel{T}, x::Vector{T}) where T
+    Jx = similar(x, model.nres, model.n)
+    jac_residuals!(model, Jx, x)
+    return Jx
+end
+
+"""
+    jac_nlconstraints!(model, C, x)
+
+Evaluate the Jacobian of the nonlinear constraints for the given `model` at input
+vector `x`, storing the result in matrix `C`.
+"""
+function jac_nlconstraints!(model::CnlsModel{T}, C::Matrix{T}, x::Vector{T}) where T
+
+    n, n_slack, p = model.n, model.nslack, model.ncons
+    n_var = n - n_slack
+    p_eq = p - n_slack
+
+    ivar = 1:n_var
+    eqrows = 1:p_eq
+
+    x_var = view(x,ivar)
+
+    # Equality constraints derivatives with respect to decision variables
+    if p_eq > 0
+        Chx = view(C, eqrows, ivar)
+        model.jac_nleq!(Chx, x_var)
+    end
+
+    # Derivatives with respect to slack variables and inequality constraints
+    # components
+    if n_slack > 0
+        islack = n_var+1:n
+        ineqrows = p_eq+1:p
+
+        # Equality constraints derivatives wrt slack variables
+        C[eqrows, islack] .= T(0)
+
+        # Inequality constraints components
+        Cgx = view(C, ineqrows, ivar)
+        model.jac_nlineq!(Cgx, x_var)
+        C[ineqrows, islack] .= Diagonal{T}(-I,n_slack)
+    end
+
+    return
+end
+
+"""
+    jac_nlconstraints(model, x)
+
+Returns the Jacobian of the nonlinear constraints for the given `model` at input
+vector `x`.
+"""
+function jac_nlconstraints(model::CnlsModel{T},x::Vector{T}) where T
+    Cx = similar(x, model.ncons, model.n)
+    jac_nlconstraints!(model, Cx, x)
+    return Cx
 end
 
 #############################################################
@@ -786,4 +944,63 @@ function jac_nlconstraints(model::BoxCnls{T},x::Vector{T}) where T
     Cx = similar(x, model.p, model.n)
     jac_nlconstraints!(model, Cx, x)
     return Cx
+end
+
+
+# Workspace structure whose attributes are the buffers vectors involved into
+# intermediate computations.
+# Avoids doing unnecessary reallocations of memory throughout the execution.
+
+mutable struct Workspace{T<:Real}
+
+    # Current and previous point info
+    x_prev::Vector{T}
+    rx_prev::Vector{T}
+    cx_prev::Vector{T}
+
+    # Inner minimization related
+    proj_g::Vector{T}
+    step::Vector{T}
+    search_dir::Vector{T}
+    step_low::Vector{T}
+    step_upp::Vector{T}
+    hess_vec::Vector{T}
+    cg_rhs::Vector{T}
+    r::Vector{T}
+    v::Vector{T}
+    p::Vector{T}
+end
+
+# Constructor for `Workspace` structure
+# n: numbers of variables
+# m: number of residuals
+# p: number of nonlinear constraints
+
+function Workspace(T::DataType, n::Int, m::Int, p::Int)
+
+    Workspace{T}(zeros(T,n),zeros(T,m),zeros(T,p),zeros(T,n),zeros(T,n),zeros(T,n),
+              zeros(T,n),zeros(T,n),zeros(T,n),zeros(T,n),zeros(T,n),zeros(T,n),
+              zeros(T,n))
+end
+
+# Reset the values of the field of `Workspace` to 0
+
+function reset_workspace!(wrkspc::Workspace{T}) where T
+    zero_T = T(0)
+
+    wkrspc.x_prev .= zero_T
+    wkrspc.rx_prev .= zero_T
+    wkrspc.cx_prev .= zero_T
+    wkrspc.proj_g .= zero_T
+    wkrspc.step .= zero_T
+    wkrspc.search_dir .= zero_T
+    wkrspc.step_low .= zero_T
+    wkrspc.step_upp .= zero_T
+    wkrspc.hess_vec .= zero_T
+    wkrspc.cg_rhs .= zero_T
+    wkrspc.r .= zero_T
+    wkrspc.v .= zero_T
+    wkrspc.p .= zero_T
+
+    return
 end

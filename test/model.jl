@@ -48,25 +48,26 @@
     x = vcat(x0,c(x0))
 
     # Testing for model defined with in-place methods
-    model = Traulls.BoxCnls!(r!,c!,jac_r!,jac_c!,x_low,x_upp,x0,n,m,p,
+    model = Traulls.CnlsModel!(r!,c!,jac_r!,jac_c!,x_low,x_upp,x0,n,m,p,
                              Val(:only_inequalities))
 
     @test size(x,1) == model.n
     @test Traulls.residuals(model,x) ≈ r(x0)
-    @test model.n_slack == p
+    @test model.nslack == p && model.ncons == p
     @test Traulls.jac_residuals(model,x) ≈ [1. -1. 0 0;
         1/3 1/3 0. 0;
         0. 0. 1. 0;]
     @test Traulls.jac_nlconstraints(model,x) ≈ hcat(jac_c(x0),[-1])
     @test Traulls.nlconstraints(model,x) ≈ zeros(1)
     @test model.nleq! === nothing && model.jac_nleq! === nothing
+    @test model.nlincons == 0
 
     # Testing for model defined with standard functions
-    model = Traulls.BoxCnls(r,c,jac_r,jac_c,x_low,x_upp,x0,n,m,p,Val(:only_inequalities))
+    model = Traulls.CnlsModel(r,c,jac_r,jac_c,x_low,x_upp,x0,n,m,p,Val(:only_inequalities))
 
     @test size(x,1) == model.n
     @test Traulls.residuals(model,x) ≈ r(x0)
-    @test model.n_slack == p
+    @test model.nslack == p
     @test Traulls.jac_residuals(model,x) ≈ [1. -1. 0 0;
         1/3 1/3 0. 0;
         0. 0. 1. 0;]
@@ -177,12 +178,12 @@ end
     # Starting point
     x0 = [(mod(i,2) == 1 ? -1.2 : 1.0) for i=1:n]
 
-    model = Traulls.BoxCnls!(r!,c!,jac_r!,jac_c!,x_low,x_upp,x0,n,m,p,
+    model = Traulls.CnlsModel!(r!,c!,jac_r!,jac_c!,x_low,x_upp,x0,n,m,p,
                              Val(:only_equalities))
 
     @test size(x0,1) == model.n
-    @test model.n_slack == 0
-    @test model.p == p
+    @test model.nslack == 0
+    @test model.ncons == p
     @test Traulls.residuals(model,x0) ≈ r(x0)
     @test Traulls.jac_residuals(model,x0) ≈ jac_r(x0)
     @test Traulls.jac_nlconstraints(model,x0) ≈ jac_c(x0)
@@ -190,11 +191,11 @@ end
     @test model.nlineq! === nothing && model.jac_nlineq! === nothing
 
     # Testing for model defined with standard functions
-    model = Traulls.BoxCnls(r,c,jac_r,jac_c,x_low,x_upp,x0,n,m,p,Val(:only_equalities))
+    model = Traulls.CnlsModel(r,c,jac_r,jac_c,x_low,x_upp,x0,n,m,p,Val(:only_equalities))
 
     @test size(x0,1) == model.n
-    @test model.n_slack == 0
-    @test model.p == p
+    @test model.nslack == 0
+    @test model.ncons == p
     @test Traulls.residuals(model,x0) ≈ r(x0)
     @test Traulls.jac_residuals(model,x0) ≈ jac_r(x0)
     @test Traulls.jac_nlconstraints(model,x0) ≈ jac_c(x0)
@@ -202,7 +203,7 @@ end
     @test model.nlineq! === nothing && model.jac_nlineq! === nothing
 end
 
-@testset "Model with a mix of equalities and inequalies" begin
+@testset "Model with a mix of equalities and inequalities" begin
 
     n = 5
     m = 4
@@ -274,12 +275,12 @@ end
     x0 = [1/i for i=1:n]
 
     # Model with in place methods
-    model = Traulls.BoxCnls!(r!,h!,g!,jac_r!,jac_h!,jac_g!,x_low,x_upp,x0,n,m,
+    model = Traulls.CnlsModel!(r!,h!,g!,jac_r!,jac_h!,jac_g!,x_low,x_upp,x0,n,m,
                              p_eq,p_ineq)
 
     @test n+p_ineq == model.n
-    @test model.n_slack == 1
-    @test model.p == p_eq+p_ineq
+    @test model.nslack == 1
+    @test model.ncons == p_eq+p_ineq
     @test size(model.x,1) == model.n
     @test Traulls.residuals(model,model.x) ≈ r(x0)
     @test Traulls.jac_residuals(model,model.x) ≈ hcat(jac_r(x0),zeros(m))
@@ -288,11 +289,11 @@ end
                                                   hcat(jac_g(x0), Matrix{Float64}(-I,p_ineq,p_ineq)))
 
     # Model with out of place methods
-    model = Traulls.BoxCnls(r,h,g,jac_r,jac_h,jac_g,x_low,x_upp,x0,n,m,p_eq,p_ineq)
+    model = Traulls.CnlsModel(r,h,g,jac_r,jac_h,jac_g,x_low,x_upp,x0,n,m,p_eq,p_ineq)
 
     @test n+p_ineq == model.n
-    @test model.n_slack == 1
-    @test model.p == p_eq+p_ineq
+    @test model.nslack == 1
+    @test model.ncons == p_eq+p_ineq
     @test size(model.x,1) == model.n
     @test Traulls.residuals(model,model.x) ≈ r(x0)
     @test Traulls.jac_residuals(model,model.x) ≈ hcat(jac_r(x0),zeros(m))
@@ -369,7 +370,7 @@ end
 
     x0 = 2 .* ones(n)
 
-    model = Traulls.BoxCnls!(r!,c!,jac_r!,jac_c!,x_low,x_upp,x0,n,m,p,Val(:only_equalities))
+    model = Traulls.CnlsModel!(r!,c!,jac_r!,jac_c!,x_low,x_upp,x0,n,m,p,Val(:only_equalities))
 
     @test Traulls.jac_residuals(model,x0) ≈ jac_r(x0)
     @test Traulls.jac_nlconstraints(model,x0) ≈ jac_c(x0)
