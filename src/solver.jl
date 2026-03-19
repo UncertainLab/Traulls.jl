@@ -1,17 +1,3 @@
-# Initializes a projector operator for a problem where linear constraints are
-# bounds on the variables.
-function projector_operator(model::CnlsModel{T}, ::Val{false}) where T
-    CoordinateSubspaceProjector(model.n; T=T)
-end
-
-# Returns a projector operator for problems where linear constraints are a mix
-# of linear equalities and bounds on the variables.
-function projector_operator(model::CnlsModel, ::Val{true})
-    A = model.linmat
-    chol_aat = cholesky(A*A')
-    SubspaceProjector(A, chol_aat)
-end
-
 """
     solve(model; kwargs...)
 
@@ -151,13 +137,17 @@ function solve(model::CnlsModel;
     # Prepare output stream to log iteration detail
     output_io = (output_file_name == "" ? stdout : open(output_file_name,"w"))
 
-    # Make starting point feasible wrt bounds
-    x = model.x
-    xlow, xupp = model.xlow, model.xupp
-    x .= max.(model.xlow, min.(x, model.xupp))
 
-    # Allocate memory for buffer vectors involved in inner minimization
+    # Dimensions of the problem
     n, nres, ncons = model.n, model.nres, model.ncons
+    lincons_present = model.nlincons > 0
+
+    # Make initial point feasible and form subspace projector operator
+    x = model.x
+    proj_op = initial_point_and_projector!(model, x, Val(lincons_present))
+    xlow, xupp = model.xlow, model.xupp
+
+     # Allocate memory for buffer vectors involved in inner minimization
     inner_workspace = Workspace(Float64, n, nres ,ncons)
 
     # Allocate buffers for functions and first derivatives evaluation
@@ -180,8 +170,8 @@ function solve(model::CnlsModel;
     tr = TrustRegion(accept_treshold, increase_treshold, decrease_factor,
     increase_factor, neg_ratio_factor)
 
-    # Set up coordinate subspace projector
-    proj_op = projector_operator(model, Val(false))
+    # # Set up coordinate subspace projector
+    # proj_op = projector_operator(model, Val(false))
     # proj_op = CoordinateSubspaceProjector(n)
     # Set up tolerances
     reltol_crit, tol_feas = initial_tolerances(mu, omega0, eta0, k_crit, k_feas)
@@ -191,9 +181,11 @@ function solve(model::CnlsModel;
     feas_measure = norm(cx, Inf)
     gproj = inner_workspace.proj_g
 
-    pix = criticality_measure(x, g, gproj, xlow, xupp)
-    tol_crit = min_reltol_crit * max(1, pix)
-    solved = feas_measure <= min_tol_feas && pix <= tol_crit
+    # TODO: add computation of criticality measure for polyhedral problem
+    # (when lincons_present = true)
+    pix = lincons_present ? 1.0 : criticality_measure(x, g, gproj, xlow, xupp)
+    tol_scale_factor = max(1, norm(g, Inf))
+    solved = feas_measure <= min_tol_feas && pix <= reltol_crit * tol_scale_factor
 
     iter = 1
 
@@ -235,8 +227,9 @@ function solve(model::CnlsModel;
             if feas_measure <= tol_feas
 
                 # Evaluate termination status
+                tol_scale_factor = max(1, norm(g, Inf))
                 solved = feas_measure <= min_tol_feas &&
-                    pix <= tol_crit
+                    pix <= reltol_crit * tol_scale_factor
 
                 # Update Lagrange multipliers
                 first_order_multipliers!(y, cx, mu)
@@ -425,6 +418,7 @@ function solve_subproblem!(
 
     # Dimensions
     n, nslack, ncons = model.n, model.nslack, model.ncons
+    lincons_present = model.nlincons > 0
 
     # Buffers to save previous iterate and functions evaluations
     x_prev = workspace.x_prev
@@ -450,9 +444,11 @@ function solve_subproblem!(
     set_initial_radius!(tr,g)
 
     # Prepare for inner minimization loop
-    pix = criticality_measure(x, g, gproj, xlow, xupp)
-    tol_crit = reltol_crit * max(1, pix)
-    solved = pix <= tol_crit
+    # TODO: add computation of criticality measure for polyhedral problem
+    # (when lincons_present = true)
+    pix = lincons_present ? 1.0 : criticality_measure(x, g, gproj, xlow, xupp)
+    tol_scale_factor = max(1, norm(g,Inf))
+    solved = pix <= reltol_crit * tol_scale_factor
 
     short_circuit = false
 
@@ -522,39 +518,25 @@ function solve_subproblem!(
 
         if accept_step(tr,ratio)
 
-            # Update gradient and Hessian approximation
+            # Evaluate first derivative at trial point
 
-            if hessian_approx == gn # Gauss-Newton case
-                # Update Jacobians for form next iteration Gauss-Newton
-                # approximation
-                jac_residuals!(model, J, x)
-                jac_nlconstraints!(model,C, x)
+            jac_residuals!(model, J, x)
+            jac_nlconstraints!(model, C, x)
+            al_grad!(rx,cx,y,mu,J,C,g)
+
+            # Update Hessian approximation
+            if hessian_approx == gn
+                # Gauss-Newton case
                 update_hessian!(hess_op, J, C)
 
-                al_grad!(rx,cx,y,mu,J,C,g) # Evaluate gradient
-
-            else # Quasi Newton update
-                # Update Jacobians and apply structured SR1 update to
-                # second order terms
-
-                # Form right handside of the secant equation
-
-                jac_residuals!(model, J, x)
-                jac_nlconstraints!(model, C, x)
-                al_grad!(rx,cx,y,mu,J,C,g)
-
-                update_hessian!(hess_op,
-                                J,
-                                C,
-                                rx,
-                                cx,
-                                g,
-                                y,
-                                s)
-
+            else
+                # Quasi Newton update
+                update_hessian!(hess_op, J, C, rx, cx, g, y, s)
             end
 
-            pix = criticality_measure(x, g, gproj, xlow, xupp)
+            # TODO: add computation of criticality measure for polyhedral problem
+            # (when lincons_present = true)
+            pix = lincons_present ? 1.0 : criticality_measure(x, g, gproj, xlow, xupp)
 
         else
             x .= x_prev
@@ -568,7 +550,8 @@ function solve_subproblem!(
 
         verbose && print_inner_iter(iter, alx_prev, norm_step, radius, ratio;io=io)
 
-        solved = pix <= tol_crit
+        tol_scale_factor = max(1, norm(g, Inf))
+        solved = pix <= reltol_crit * tol_scale_factor
         iter += 1
     end
 
@@ -811,6 +794,29 @@ Typically `v` is the gradient of some objective function and the norm of the
 - `fix_vars`: `BitVector` encoded the components of `v` that are set to `0`
 """
 norm_reduced_v(v::Vector,fix_vars::BitVector) = norm(v[.!fix_vars])
+
+
+# Modifies the initial guess for the solution such that it is feasible to the bounds
+# Forms and returns the operator computing projections on coordinate subspaces
+function initial_point_and_projector!(model::CnlsModel, x::AbstractVector{T}, ::Val{false}) where T
+
+    # Make starting point feasible with respect to bounds
+    x .= max.(model.xlow, min.(x, model.xupp))
+
+    CoordinateSubspaceProjector(model.n; T=T)
+end
+
+function projector_operator(model::CnlsModel{T}, ::Val{false}) where T
+    CoordinateSubspaceProjector(model.n; T=T)
+end
+
+# Returns a projector operator for problems where linear constraints are a mix
+# of linear equalities and bounds on the variables.
+function projector_operator(model::CnlsModel, ::Val{true})
+    A = model.linmat
+    chol_aat = cholesky(A*A')
+    SubspaceProjector(A, chol_aat)
+end
 
 
 """
