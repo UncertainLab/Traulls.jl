@@ -1,8 +1,15 @@
 # Initializes a projector operator for a problem where linear constraints are
 # bounds on the variables.
-function projector_operator(model::BoxCnls{T},::Val{false}) where T
-    n = model.n
-    CoordinateSubspaceProjector(n;T=T)
+function projector_operator(model::CnlsModel{T}, ::Val{false}) where T
+    CoordinateSubspaceProjector(model.n; T=T)
+end
+
+# Returns a projector operator for problems where linear constraints are a mix
+# of linear equalities and bounds on the variables.
+function projector_operator(model::CnlsModel, ::Val{true})
+    A = model.linmat
+    chol_aat = cholesky(A*A')
+    SubspaceProjector(A, chol_aat)
 end
 
 """
@@ -109,7 +116,7 @@ printed into the output file (default: false)
 Returns the solution vector and additional information encoded in a
 [`PrimalDualSolution`](@ref).
 """
-function solve(model::BoxCnls;
+function solve(model::CnlsModel;
     mu::Float64 = 10.0,
     tau::Float64 = 10.0,
     omega0::Float64 = 1.0,
@@ -146,12 +153,12 @@ function solve(model::BoxCnls;
 
     # Make starting point feasible wrt bounds
     x = model.x
-    x_low, x_upp = model.x_low, model.x_upp
-    x .= max.(model.x_low, min.(x, model.x_upp))
+    xlow, xupp = model.xlow, model.xupp
+    x .= max.(model.xlow, min.(x, model.xupp))
 
     # Allocate memory for buffer vectors involved in inner minimization
-    n, m, p = model.n, model.m, model.p
-    inner_workspace = Workspace(Float64,n,m,p)
+    n, nres, ncons = model.n, model.nres, model.ncons
+    inner_workspace = Workspace(Float64, n, nres ,ncons)
 
     # Allocate buffers for functions and first derivatives evaluation
     rx = residuals(model, x)
@@ -161,7 +168,7 @@ function solve(model::BoxCnls;
 
     y = least_squares_multipliers(rx, J, C) # Initial Lagrange mutipliers
                                             # estimates
-    g = al_grad(rx,cx,y,mu,J,C)             # Gradient of the AL
+    g = al_grad(rx, cx, y, mu, J, C)        # Gradient of the AL
 
     # Ininitialize Hessian approximation
     hess_op = @match hessian_approx begin
@@ -184,14 +191,14 @@ function solve(model::BoxCnls;
     feas_measure = norm(cx, Inf)
     gproj = inner_workspace.proj_g
 
-    pix = criticality_measure(x,g,gproj,x_low,x_upp)
+    pix = criticality_measure(x, g, gproj, xlow, xupp)
     tol_crit = min_reltol_crit * max(1, pix)
     solved = feas_measure <= min_tol_feas && pix <= tol_crit
 
     iter = 1
 
-    verbose && print_boconls_header(n,m,p,x_low,x_upp,min_reltol_crit,min_tol_feas,tau;
-                                    io=output_io)
+    verbose && print_boconls_header(n,nres,ncons,xlow,xupp,min_reltol_crit,min_tol_feas,
+                                    tau;io=output_io)
     verbose && print_tr_header(tr;io=output_io)
 
     while !solved && iter <= max_iter
@@ -201,8 +208,8 @@ function solve(model::BoxCnls;
         pix = solve_subproblem!(
             model,
             x,
-            x_low,
-            x_upp,
+            xlow,
+            xupp,
             y,
             mu,
             rx,
@@ -232,7 +239,7 @@ function solve(model::BoxCnls;
                     pix <= tol_crit
 
                 # Update Lagrange multipliers
-                first_order_multipliers!(y,cx,mu)
+                first_order_multipliers!(y, cx, mu)
 
                 if !solved
                     # Update the iterate, multipliers and decrease tolerances
@@ -369,8 +376,8 @@ This quantity measures how close a point is from first-order criticality.
 - `model::BoxCnls`: Structure encoding the original constrained nonlinear
 least-squares problem to be solved
 - `x::Vector`: Starting point the the outer iteration
-- `x_low::Vector`: Lower bounds on the variables
-- `x_upp::Vector`: Upper bounds on the variables
+- `xlow::Vector`: Lower bounds on the variables
+- `xupp::Vector`: Upper bounds on the variables
 - `y::Vector`: Current estimation of the Lagrange multipliers
 - `mu::Float64`: Penalty parameter
 - `rx::Vector`: Residuals evaluated at `x`
@@ -392,10 +399,10 @@ subproblem
 - `io::IO=stdout`: input/output stream (default is `stdout`)
 """
 function solve_subproblem!(
-    model::BoxCnls,
+    model::CnlsModel,
     x::Vector,
-    x_low::Vector,
-    x_upp::Vector,
+    xlow::Vector,
+    xupp::Vector,
     y::Vector,
     mu::Float64,
     rx::Vector,
@@ -417,7 +424,7 @@ function solve_subproblem!(
     io::IO=stdout)
 
     # Dimensions
-    n, n_slack, p = model.n, model.n_slack, model.p
+    n, nslack, ncons = model.n, model.nslack, model.ncons
 
     # Buffers to save previous iterate and functions evaluations
     x_prev = workspace.x_prev
@@ -443,7 +450,7 @@ function solve_subproblem!(
     set_initial_radius!(tr,g)
 
     # Prepare for inner minimization loop
-    pix = criticality_measure(x, g, gproj, x_low, x_upp)
+    pix = criticality_measure(x, g, gproj, xlow, xupp)
     tol_crit = reltol_crit * max(1, pix)
     solved = pix <= tol_crit
 
@@ -467,8 +474,8 @@ function solve_subproblem!(
             gproj,
             hess_op,
             proj_op,
-            x_low,
-            x_upp,
+            xlow,
+            xupp,
             radius,
             max_cg_iter,
             kappa_step,
@@ -489,14 +496,14 @@ function solve_subproblem!(
         alx = al_obj(rx,cx,y,mu)
 
         # Step taken on the slack variables, if any
-        if n_slack > 0
+        if nslack > 0
 
             # Add "magical" step to current point x
-            step_slack!(x,y,cx,mu,n_slack,p)
+            step_slack!(x, y, cx, mu, nslack, ncons)
 
             # Adjust the step vector
-            slack_idx = n - n_slack + 1 : n
-            ineq_idx = p - n_slack + 1 : p
+            slack_idx = n - nslack + 1 : n
+            ineq_idx = ncons - nslack + 1 : ncons
             s[slack_idx] .= x[slack_idx] .- x_prev[slack_idx] .- s[slack_idx]
 
             # Update the constraints involving slack variables without evaluating
@@ -522,7 +529,7 @@ function solve_subproblem!(
                 # approximation
                 jac_residuals!(model, J, x)
                 jac_nlconstraints!(model,C, x)
-                update_hessian!(hess_op,J,C)
+                update_hessian!(hess_op, J, C)
 
                 al_grad!(rx,cx,y,mu,J,C,g) # Evaluate gradient
 
@@ -547,7 +554,7 @@ function solve_subproblem!(
 
             end
 
-            pix = criticality_measure(x, g, gproj, x_low, x_upp)
+            pix = criticality_measure(x, g, gproj, xlow, xupp)
 
         else
             x .= x_prev
@@ -559,7 +566,7 @@ function solve_subproblem!(
         norm_step = norm(s,Inf)
         update_radius!(tr,ratio,norm_step)
 
-        verbose && print_inner_iter(iter,alx_prev,norm_step,radius,ratio;io=io)
+        verbose && print_inner_iter(iter, alx_prev, norm_step, radius, ratio;io=io)
 
         solved = pix <= tol_crit
         iter += 1
@@ -611,8 +618,8 @@ function projected_gradient!(
     gproj::Vector,
     hess_op::ALHessian,
     proj_op::CoordinateSubspaceProjector,
-    x_low::Vector,
-    x_upp::Vector,
+    xlow::Vector,
+    xupp::Vector,
     radius::Float64,
     max_cg_iter::Int,
     kappa_step::Float64,
@@ -633,17 +640,17 @@ function projected_gradient!(
                 hess_op,
                 proj_op,
                 Hs,
-                x_low,
-                x_upp,
+                xlow,
+                xupp,
                 radius)
 
     # Form implicit bounds on the search direction
     w_low, w_upp = workspace.step_low, workspace.step_upp
-    w_low .= (t -> max(-radius, t)).(x_low-x) .- s
-    w_upp .= (t -> min(radius,t)).(x_upp-x) .- s
+    w_low .= (t -> max(-radius, t)).(xlow-x) .- s
+    w_upp .= (t -> min(radius,t)).(xupp-x) .- s
 
     # Set up for conjugate gradient iterations
-    mul!(Hs,hess_op,s)
+    mul!(Hs, hess_op, s)
     b = workspace.cg_rhs
     b .= Hs .+ g
 
@@ -677,7 +684,7 @@ function projected_gradient!(
         w_upp .-= w
 
         # Prepare for next CG iterations
-        mul!(Hs,hess_op,s) # form Hs
+        mul!(Hs, hess_op, s) # form Hs
         b .= Hs .+ g
 
         # Compute norms of reduced gradients ||Zᵀg|| and ||Zᵀ(Hs+g)||
@@ -691,7 +698,7 @@ function projected_gradient!(
         cg_stop = cg_status == negative_curvature
 
         # Update the set of fixed variables (implicitly updates the null space matrix Z)
-        active_bounds!(s,x,x_low,x_upp,radius,proj_op)
+        active_bounds!(s,x,xlow,xupp,radius,proj_op)
 
         iter += 1
     end
@@ -730,19 +737,16 @@ function cauchy_step!(
     hess_op::ALHessian,
     proj_op::CoordinateSubspaceProjector,
     Hd::Vector,
-    x_low::Vector,
-    x_upp::Vector,
+    xlow::Vector,
+    xupp::Vector,
     radius::Float64)
 
     n = size(x,1)
-    # d = Vector{Float64}(undef,n)                    # projected gradient direction
-    # s = zeros(n)
-    # accumulated Cauchy step
+    # Accumulated Cauchy step
     s .= 0.0
-    #fix_vars = falses(n)                   # indices of fixed variables
 
     # Breakpoints values and group indices
-    breakpoints, grp_idx  = sort_breakpoints(x,g,x_low,x_upp,radius)
+    breakpoints, grp_idx  = sort_breakpoints(x,g,xlow,xupp,radius)
     prev_tb = 0.0
     d .= -g
 
@@ -754,9 +758,6 @@ function cauchy_step!(
         first_active_indx = popfirst!(grp_idx)
         update_projector!(proj_op,first_active_indx)
         mul!(d,proj_op,-g)
-        # fix_vars[first_active_indx] .= true
-        # fix_vars[setdiff(1:n,first_active_indx)] .= false
-        # d .= -g .* .!fix_vars
     end
 
     gtd = dot(g,d)
@@ -783,14 +784,12 @@ function cauchy_step!(
         # Prepare for the next interval
         prev_tb = tb
         newly_active = grp_idx[i]
-        update_projector!(proj_op,newly_active)
-        # fix_vars[newly_active] .= true
+        update_projector!(proj_op, newly_active)
 
         s .+= d .* l_interval
         mul!(d,proj_op,-g)
-        # d .= -g .* .!fix_vars
         gtd = dot(g,d)
-        mul!(Hd,hess_op,d)
+        mul!(Hd, hess_op, d)
     end
 
 
@@ -840,48 +839,16 @@ function criticality_measure(
     x::Vector,
     g::Vector,
     gproj::Vector,
-    x_low::Vector,
-    x_upp::Vector;
+    xlow::Vector,
+    xupp::Vector;
     p::Float64=Inf)
 
     # proj_g = Vector{Float64}(undef,size(x,1))
-    project!(gproj, x .- g, x_low, x_upp)
+    project!(gproj, x .- g, xlow, xupp)
     pix = norm(gproj .- x, p)
 
     return pix
 end
-
-# Computes and returns the criticality measure for a problem encoded in BoxCnls
-# format.
-# The measure computed is the norm of the projection of the steepest direction
-# on the tangent cone at a given point. That information is encoded inside the
-# `proj_op` argument.
-function criticality_measure(
-    model::BoxCnls{T},
-    proj_op::CoordinateSubspaceProjector{T},
-    x::Vector{T},
-    g::Vector{T},
-    projmg::Vector{T};
-    p::T=Inf,
-    atol::T=T(1e-7)) where T
-
-    x_low, x_upp = model.x_low, model.x_upp
-    # fixvars = proj_op.fixvars
-
-    for i in axes(x,1)
-        projmg[i] = if x[i] < x_low[i] + atol  # xᵢ = ℓᵢ
-            max(0,-g[i])
-        elseif x_upp[i] < x[i] + atol             # xᵢ = uᵢ
-            min(0,-g[i])
-        else
-            -g[i]                              # xᵢ ∈ (lᵢ,uᵢ)
-        end
-    end
-
-    return norm(projmg,p)
-
-end
-
 
 # Computes and returns the criticality measure for a problem encoded in BoxCnls
 # format.
