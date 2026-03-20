@@ -366,24 +366,24 @@ This quantity measures how close a point is from first-order criticality.
 
 # Arguments
 
-- `model::BoxCnls`: Structure encoding the original constrained nonlinear
+- `model::BoxCnls{T}`: Structure encoding the original constrained nonlinear
 least-squares problem to be solved
-- `x::Vector`: Starting point the the outer iteration
-- `xlow::Vector`: Lower bounds on the variables
-- `xupp::Vector`: Upper bounds on the variables
-- `y::Vector`: Current estimation of the Lagrange multipliers
-- `mu::Float64`: Penalty parameter
-- `rx::Vector`: Residuals evaluated at `x`
-- `cx::Vector`: Equality constraints evaluated at `x`
-- `J::Matrix`: Jacobian of the residuals evaluated at `x`
-- `C::Matrix`: Jacobian of the equality constraints evaluated at `x`
-- `g::Vector`: Gradient of the Augmented Lagrangian at `x`
+- `x::AbstractVector{T}`: Starting point the the outer iteration
+- `xlow::AbstractVector{T}`: Lower bounds on the variables
+- `xupp::AbstractVector{T}`: Upper bounds on the variables
+- `y::AbstractVector{T}`: Current estimation of the Lagrange multipliers
+- `mu::T`: Penalty parameter
+- `rx::AbstractVector{T}`: Residuals evaluated at `x`
+- `cx::AbstractVector{T}`: Equality constraints evaluated at `x`
+- `J::AbstractMatrix{T}`: Jacobian of the residuals evaluated at `x`
+- `C::AbstractMatrix{T}`: Jacobian of the equality constraints evaluated at `x`
+- `g::AbstractVector{T}`: Gradient of the Augmented Lagrangian at `x`
 - `tr::TrustRegion`: Encodes the trust region constraint and associated
-- `omega_crit::Float64`: Optimality tolerance
+- `omega_crit::T`: Optimality tolerance
 constants
-- `kappa_step::Float64`: Constant used to define the stopping criteria of the
+- `kappa_step::T`: Constant used to define the stopping criteria of the
  gradient projection method
-- `kappa_cg::Float64`: Constant used to define the stopping criteria of the
+- `kappa_cg::T`: Constant used to define the stopping criteria of the
 conjugate gradient iterations
 - `max_iter::Int`: maximum number of iterations to solve the outer iteration
 subproblem
@@ -392,29 +392,29 @@ subproblem
 - `io::IO=stdout`: input/output stream (default is `stdout`)
 """
 function solve_subproblem!(
-    model::CnlsModel,
-    x::Vector,
-    xlow::Vector,
-    xupp::Vector,
-    y::Vector,
-    mu::Float64,
-    rx::Vector,
-    cx::Vector,
-    J::Matrix,
-    C::Matrix,
-    g::Vector,
-    hess_op::ALHessian,
-    proj_op::CoordinateSubspaceProjector,
-    tr::TrustRegion,
-    reltol_crit::Float64,
-    kappa_step::Float64,
-    kappa_cg::Float64,
+    model::CnlsModel{T},
+    x::AbstractVector{T},
+    xlow::AbstractVector{T},
+    xupp::AbstractVector{T},
+    y::AbstractVector{T},
+    mu::T,
+    rx::AbstractVector{T},
+    cx::AbstractVector{T},
+    J::AbstractMatrix{T},
+    C::AbstractMatrix{T},
+    g::AbstractVector{T},
+    hess_op::ALHessian{T},
+    proj_op::CoordinateSubspaceProjector{T},
+    tr::TrustRegion{T},
+    reltol_crit::T,
+    kappa_step::T,
+    kappa_cg::T,
     hessian_approx::HessianApprox,
     max_iter::Int,
     max_cg_iter::Int,
-    workspace::Workspace;
+    workspace::Workspace{T};
     verbose::Bool=false,
-    io::IO=stdout)
+    io::IO=stdout) where T
 
     # Dimensions
     n, nslack, ncons = model.n, model.nslack, model.ncons
@@ -446,7 +446,9 @@ function solve_subproblem!(
     # Prepare for inner minimization loop
     # TODO: add computation of criticality measure for polyhedral problem
     # (when lincons_present = true)
-    pix = lincons_present ? 1.0 : criticality_measure(x, g, gproj, xlow, xupp)
+    pix = lincons_present ? 1.0 :
+        criticality_measure(x, g, gproj, xlow, xupp)
+
     tol_scale_factor = max(1, norm(g,Inf))
     solved = pix <= reltol_crit * tol_scale_factor
 
@@ -575,39 +577,39 @@ In the QP model, `||.||` denotes the `∞`-norm `||s|| = maxᵢ |sᵢ|`.
 
 # Arguments
 
-- `x::Vector`: Current iterate
-- `g::Vector`: Gradient of the Augmented Lagrangian at `x`
-- `H::ALHessian`: Approximation of the Hessian of the Augmented Lagrangian at
+- `x::AbstractVector{T}`: Current iterate
+- `g::AbstractVector{T}`: Gradient of the Augmented Lagrangian at `x`
+- `H::ALHessian{T}`: Approximation of the Hessian of the Augmented Lagrangian at
 `x`
-- `xₗ::Vector`: Lower bounds on `x`
-- `xᵤ::Vector`: Upper bounds on `x`
-- `Δ::Float64`: Trust region radius
+- `xₗ::AbstractVector{T}`: Lower bounds on `x`
+- `xᵤ::AbstractVector{T}`: Upper bounds on `x`
+- `Δ::T`: Trust region radius
 - `max_cg_iter::Int`: Number of maximum uses of the conjugate gradient method
-- `κₛ::Float64`: Positive constant used to define the convergence criteria
+- `κₛ::T`: Positive constant used to define the convergence criteria
 relative of the gradient projection method
-- `κᵪ::Float64`: Positve constant used to define the convergence criteria of
+- `κᵪ::T`: Positve constant used to define the convergence criteria of
 the conjugate gradient method
 
 # On return
 
-- `s::Vector`: This argument is modified in place and contains the trial step
-- `pred::Float64`: Reduction of the quadratic model after taking step `s`
+- `s::AbstractVector{T}`: This argument is modified in place and contains the trial step
+- `pred::T`: Reduction of the quadratic model after taking step `s`
 
 """
 function projected_gradient!(
-    x::Vector,
-    s::Vector,
-    g::Vector,
-    gproj::Vector,
-    hess_op::ALHessian,
-    proj_op::CoordinateSubspaceProjector,
-    xlow::Vector,
-    xupp::Vector,
-    radius::Float64,
+    x::AbstractVector{T},
+    s::AbstractVector{T},
+    g::AbstractVector{T},
+    gproj::AbstractVector{T},
+    hess_op::ALHessian{T},
+    proj_op::CoordinateSubspaceProjector{T},
+    xlow::AbstractVector{T},
+    xupp::AbstractVector{T},
+    radius::T,
     max_cg_iter::Int,
-    kappa_step::Float64,
-    kappa_cg::Float64,
-    workspace::Workspace)
+    kappa_step::T,
+    kappa_cg::T,
+    workspace::Workspace{T}) where T
 
 
     # Hessian-vector product buffer
@@ -706,23 +708,23 @@ projected gradient path, i.e. the first local minimum of `t ↦ q(s(t))`
 on `[0, ∞)`.
 
 The associated Cauchy step is computed in place into vector `s`
-Returns the `BitVector` `fix_vars` that encodes the indices of active bounds
+Returns the `BitAbstractVector{T}` `fix_vars` that encodes the indices of active bounds
 at the Cauchy point `x + s`.
 
 Follows the procedure of algorithm 17.3.1 from Trust Regions Methods
 (Conn, Gould and Toint, SIAM, 2000).
 """
 function cauchy_step!(
-    x::Vector,
-    s::Vector,
-    g::Vector,
-    d::Vector,
-    hess_op::ALHessian,
-    proj_op::CoordinateSubspaceProjector,
-    Hd::Vector,
-    xlow::Vector,
-    xupp::Vector,
-    radius::Float64)
+    x::AbstractVector{T},
+    s::AbstractVector{T},
+    g::AbstractVector{T},
+    d::AbstractVector{T},
+    hess_op::ALHessian{T},
+    proj_op::CoordinateSubspaceProjector{T},
+    Hd::AbstractVector{T},
+    xlow::AbstractVector{T},
+    xupp::AbstractVector{T},
+    radius::T) where T
 
     n = size(x,1)
     # Accumulated Cauchy step
@@ -793,13 +795,13 @@ Typically `v` is the gradient of some objective function and the norm of the
 - `v`: vector whose norm is computed
 - `fix_vars`: `BitVector` encoded the components of `v` that are set to `0`
 """
-norm_reduced_v(v::Vector,fix_vars::BitVector) = norm(v[.!fix_vars])
+norm_reduced_v(v::AbstractVector{T},fix_vars::BitVector) where T = norm(v[.!fix_vars])
 
 
 # Modifies the initial guess for the solution such that it is feasible to the bounds
 # Forms and returns the operator computing projections on coordinate subspaces
 function initial_point_and_projector!(
-    model::CnlsModel,
+    model::CnlsModel{T},
     x::AbstractVector{T},
     ::Val{false}) where T
 
@@ -812,7 +814,7 @@ end
 # Modifies the initial guess for the solution to make it linear feasible
 # Forms and returns the operator computing projections on reduced subspaces
 function initial_point_and_projector!(
-    model::CnlsModel,
+    model::CnlsModel{T},
     x::AbstractVector{T},
     ::Val{true};
     tol::T=sqrt(eps(T))) where T
@@ -881,12 +883,12 @@ Computes the criticality measure used to measure if a primal-dual solution
 
 # Arguments
 
-- `x::Vector`: Current iterate
-- `g::Vector`: Gradient of the Augmented Lagrangian at current primal-dual
+- `x::AbstractVector{T}`: Current iterate
+- `g::AbstractVector{T}`: Gradient of the Augmented Lagrangian at current primal-dual
 iterate `(x,y)`
-- `xₗ::Vector`: Lower bounds on `x`
-- `xᵤ::Vector`: Upper bounds on `x`
-- `p::Float64`: Nature of the norm computed (default is `Inf`).
+- `xₗ::AbstractVector{T}`: Lower bounds on `x`
+- `xᵤ::AbstractVector{T}`: Upper bounds on `x`
+- `p::T`: Nature of the norm computed (default is `Inf`).
 
 # Return
 
@@ -896,12 +898,12 @@ iterate `(x,y)`
 In practice, either the `ℓ₂` or `∞` norms are used.
 """
 function criticality_measure(
-    x::Vector,
-    g::Vector,
-    gproj::Vector,
-    xlow::Vector,
-    xupp::Vector;
-    p::Float64=Inf)
+    x::AbstractVector{T},
+    g::AbstractVector{T},
+    gproj::AbstractVector{T},
+    xlow::AbstractVector{T},
+    xupp::AbstractVector{T};
+    p::Float64 = Inf) where T
 
     # proj_g = Vector{Float64}(undef,size(x,1))
     project!(gproj, x .- g, xlow, xupp)
@@ -916,10 +918,10 @@ end
 function criticality_measure(
     model,
     proj_op::SubspaceProjector{T},
-    x::Vector{T},
-    g::Vector{T},
-    projg::Vector{T};
-    p::T=Inf,
+    x::AbstractVector{T},
+    g::AbstractVector{T},
+    projg::AbstractVector{T};
+    p::Float64 = Inf,
     atol::T=T(1e-7)) where T
 
     mul!(projg, proj_op, g)
