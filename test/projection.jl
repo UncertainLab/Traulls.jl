@@ -54,7 +54,7 @@ end
     P = Traulls.SubspaceProjector(A,chol_aat)
 
     @test all(.!(P.workspace_mat.fixvars))
-    Traulls.update_subspace_projector!(P,active)
+    Traulls.update_projector!(P,active)
 
     @test all(P.workspace_mat.fixvars[active]) &&
         all(.!(P.workspace_mat.fixvars[setdiff(1:n,active)]))

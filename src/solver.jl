@@ -183,7 +183,9 @@ function solve(model::CnlsModel;
 
     # TODO: add computation of criticality measure for polyhedral problem
     # (when lincons_present = true)
-    pix = lincons_present ? 1.0 : criticality_measure(x, g, gproj, xlow, xupp)
+    pix = lincons_present ?
+        criticality_measure(x, g, gproj, proj_op) :
+        criticality_measure(x, g, gproj, xlow, xupp)
     tol_scale_factor = max(1, norm(g, Inf))
     solved = feas_measure <= min_tol_feas && pix <= reltol_crit * tol_scale_factor
 
@@ -404,7 +406,7 @@ function solve_subproblem!(
     C::AbstractMatrix{T},
     g::AbstractVector{T},
     hess_op::ALHessian{T},
-    proj_op::CoordinateSubspaceProjector{T},
+    proj_op::Projector{T},
     tr::TrustRegion{T},
     reltol_crit::T,
     kappa_step::T,
@@ -446,10 +448,11 @@ function solve_subproblem!(
     # Prepare for inner minimization loop
     # TODO: add computation of criticality measure for polyhedral problem
     # (when lincons_present = true)
-    pix = lincons_present ? 1.0 :
+    pix = lincons_present ?
+        criticality_measure(x, g, gproj, proj_op) :
         criticality_measure(x, g, gproj, xlow, xupp)
 
-    tol_scale_factor = max(1, norm(g,Inf))
+    tol_scale_factor = max(1, norm(g, Inf))
     solved = pix <= reltol_crit * tol_scale_factor
 
     short_circuit = false
@@ -538,7 +541,9 @@ function solve_subproblem!(
 
             # TODO: add computation of criticality measure for polyhedral problem
             # (when lincons_present = true)
-            pix = lincons_present ? 1.0 : criticality_measure(x, g, gproj, xlow, xupp)
+            pix = lincons_present ?
+                criticality_measure(x, g, gproj, proj_op) :
+                criticality_measure(x, g, gproj, xlow, xupp)
 
         else
             x .= x_prev
@@ -602,7 +607,7 @@ function projected_gradient!(
     g::AbstractVector{T},
     gproj::AbstractVector{T},
     hess_op::ALHessian{T},
-    proj_op::CoordinateSubspaceProjector{T},
+    proj_op::Projector{T},
     xlow::AbstractVector{T},
     xupp::AbstractVector{T},
     radius::T,
@@ -643,10 +648,10 @@ function projected_gradient!(
     w = workspace.search_dir
     r, v, p = workspace.r, workspace.v, workspace.p
 
-    optimal, cg_stop = false, false
+    quasi_optimal, cg_stop = false, false
     iter = 1
 
-    while !optimal && !cg_stop && iter <= max_cg_iter && !saturated_subspace(proj_op)
+    while !quasi_optimal && !cg_stop && iter <= max_cg_iter && !saturated_subspace(proj_op)
 
         cg_status = pcg!(
             b,
@@ -673,17 +678,17 @@ function projected_gradient!(
         b .= Hs .+ g
 
         # Compute norms of reduced gradients ||Zᵀg|| and ||Zᵀ(Hs+g)||
-        # norm_reduced_g = norm_reduced_v(g,fix_vars)
-        # norm_reduced_gnext = norm_reduced_v(b,fix_vars)
-        norm_reduced_g = norm(proj_op*g)
-        norm_reduced_gnext = norm(proj_op*b)
+
+        # TODO: in-place computations for norms of reduced gradients
+        norm_reduced_g = norm(proj_op * g)
+        norm_reduced_gnext = norm(proj_op * b)
 
         # Evaluate termination criteria
-        optimal = norm_reduced_gnext <= kappa_step * norm_reduced_g
+        quasi_optimal = norm_reduced_gnext <= kappa_step * norm_reduced_g
         cg_stop = cg_status == negative_curvature
 
         # Update the set of fixed variables (implicitly updates the null space matrix Z)
-        active_bounds!(s,x,xlow,xupp,radius,proj_op)
+        update_active_set!(s, x, xlow, xupp, radius, proj_op)
 
         iter += 1
     end
@@ -731,7 +736,7 @@ function cauchy_step!(
     s .= 0.0
 
     # Breakpoints values and group indices
-    breakpoints, grp_idx  = sort_breakpoints(x,g,xlow,xupp,radius)
+    breakpoints, grp_idx = sort_breakpoints(x, g, xlow, xupp, radius)
     prev_tb = 0.0
     d .= -g
 
@@ -777,26 +782,169 @@ function cauchy_step!(
         mul!(Hd, hess_op, d)
     end
 
-
-    # return fix_vars
     return
 end
 
-"""
-    norm_reduced_v(v,fix_vars)
 
-Computes the norm of the reduced vector `Zᵀv` where `Z` is a null space matrix
-of the set `{v | vᵢ = 0 for i ∈ fix_vars}`
-Typically `v` is the gradient of some objective function and the norm of the
-    reduced gradient is involed to evaluate termination criteria.
+"""
+    cauchy_step!(x,g,H,proj_op,ℓ,u,Δ)
+
+Compute a Cauchy step that provides a sufficient reduction of the quadratic model
+`q(s) = <s,Hs> + <g,s>`.
+
+The step is defined by `s_c = s(t_c)` , where `s(t)`, for `t ≥ 0`, is the
+projected gradient step `P(x-t*g) - x` with `P` denoting the projection over
+`{v | Av = 0 and max(-Δ,ℓ) ≤ x + v ≤ min(Δ,u)}`.
+
+This method finds the first local minimum of the quadratic model along the
+projected gradient path, i.e. the first local minimum of `t ↦ q(s(t))` on `[0, ∞)`.
+
+The associated Cauchy step is computed in place into vector `s`
+Returns the `BitAbstractVector{T}` `fix_vars` that encodes the indices of active bounds
+at the Cauchy point `x + s`.
+
+Follows the procedure of algorithm 17.3.1 from Trust Regions Methods
+(Conn, Gould and Toint, SIAM, 2000).
 
 # Arguments
 
-- `v`: vector whose norm is computed
-- `fix_vars`: `BitVector` encoded the components of `v` that are set to `0`
-"""
-norm_reduced_v(v::AbstractVector{T},fix_vars::BitVector) where T = norm(v[.!fix_vars])
+- `x::Vector`: current iterate
+- `s::Vector`: buffer vector for the Cauchy step
+- `g::Vector`: gradient of the augmented Lagrangian at current point
+- `d::Vector`: buffer vector the the projected steepest direction
+- `hess_op`: Hessian approximation of type `ALHessian` at current point
+- `proj_op`: [`SubspaceProjector`](@ref) operator to project the negative gradient on
+tangent spaces
+- `Hd::Vector`: buffer vector for the
+- `xlow::Vector`: lower bounds on the variables `x`
+- `xupp::Vector`: upper bounds on the variables `x`
+- `radius::T`: Current trust region radius
 
+# On return
+
+- `s` argument modified in place with components set to the Cauchy step
+
+"""
+function cauchy_step!(
+    x::AbstractVector{T},
+    s::AbstractVector{T},
+    g::AbstractVector{T},
+    d::AbstractVector{T},
+    hess_op::ALHessian{T},
+    proj_op::SubspaceProjector{T},
+    Hd::AbstractVector{T},
+    xlow::AbstractVector{T},
+    xupp::AbstractVector{T},
+    radius::T) where T
+
+    (m,n) = size(proj_op.workspace_mat.eqmat)
+
+    # Initial projected steepest direction
+    mul!(d, proj_op, -g)
+
+    # Check if they are bounds active at x
+    prev_tb = 0
+    initial_fixed = initial_active_bounds(x, d, xlow, xupp)
+
+    if !isempty(initial_fixed)
+        update_projector!(proj_op, initial_fixed)
+    end
+
+    # Update the projection
+    mul!(d, proj_op, -g)
+
+    # Prepare the first interval
+    # Find the first breakpoint
+    tb, idx = next_breakpoint(d, s, xlow, xupp, radius, proj_op.workspace_mat.fixvars)
+
+    # Form gᵀd and Hd
+    gtd = dot(g,d)
+    mul!(Hd, hess_op, d) # Hd ← H*d
+
+    # Search while constraints can be added to the active set or breakpoints exist
+    while !saturated_subspace(proj_op) && !isempty(idx)
+
+        # Compute slope and curvature
+        phi_p = gtd + dot(s,Hd)
+        phi_pp = dot(d,Hd)
+
+        # Study the current interval [prev_tb, tb)
+        delta_t = (phi_pp > 0 ? -phi_p / phi_pp : 0.0)
+        l_interval = tb - prev_tb
+
+        if phi_p >= 0
+            # local minimum at previous breakpoint
+            break
+        elseif phi_pp > 0 && delta_t < l_interval
+            # local minimum at t = tb - phi_p / phi_pp
+            s .+= delta_t .* d
+            break
+        end
+
+        # No local minimum in [prev_tb, tb)
+        # Update accumulated step
+        s .+= d .* l_interval
+
+        # Compute the projected direction on the next interval
+        update_projector!(proj_op,idx)
+        mul!(d, proj_op, -g)
+
+        # Prepare for the next interval
+        gtd = dot(g,d)
+        mul!(Hd, hess_op, d)
+
+        prev_tb = tb
+        # Find next breakpoint
+        tb, idx = next_breakpoint(d,s,d_low,d_upp,proj_op.workpsace_mat.fixvars)
+
+    end
+
+    return
+end
+
+""" next_breakpoint(d,s,dₗ,dᵤ,fix_bounds)
+
+Finds the smallest scalar `θ` such that one or more components not in `fix_bounds`
+of `s + θ*d` lie at one of their bounds `dₗ` or `dᵤ`.
+
+Returns the scalar `θ` and `idx`, the index of the components that becomes active.
+"""
+function next_breakpoint(
+    d::AbstractVector{T},
+    s::AbstractVector{T},
+    xlow::AbstractVector{T},
+    xupp::AbstractVector{T},
+    radius::T,
+    fix_bounds::BitVector;
+    atol::T=sqrt(eps(T))) where T
+
+    theta = Inf # current breakpoint value
+    idx = []    # list of bounds indicices becoming active at theta
+
+    for i in axes(d,1)
+        if !fix_bounds[i]
+
+            theta_try = if d[i] < -atol
+                (max(xlow[i] - x[i], -radius) - s[i]) / d[i]
+            elseif d[i] > atol
+                (min(xupp[i] - x[i], radius) - s[i]) / d[i]
+            else
+                Inf
+            end
+
+            also_bp = abs(theta_try-theta) < atol
+
+            if also_bp
+                push!(idx,i)
+
+            elseif !also_bp && theta_try < theta
+                theta = theta_try
+                idx = [i]
+            end
+        end
+    end
+    return theta, idx
+end
 
 # Modifies the initial guess for the solution such that it is feasible to the bounds
 # Forms and returns the operator computing projections on coordinate subspaces
@@ -916,15 +1064,13 @@ end
 # on the tangent space at a given point. That information is encoded inside the
 # `proj_op` argument.
 function criticality_measure(
-    model,
-    proj_op::SubspaceProjector{T},
     x::AbstractVector{T},
     g::AbstractVector{T},
-    projg::AbstractVector{T};
-    p::Float64 = Inf,
-    atol::T=T(1e-7)) where T
+    projg::AbstractVector{T},
+    proj_op::SubspaceProjector{T};
+    p::Float64 = Inf) where T
 
     mul!(projg, proj_op, g)
 
-    norm(projg, Inf)
+    norm(projg, p)
 end

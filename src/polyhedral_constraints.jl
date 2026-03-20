@@ -255,7 +255,7 @@ Cholesky decomposition involved in the normal equations solving.
 * `newly_active`: `Vector` containing the indices of the variables that are set
 active
 """
-function update_subspace_projector!(proj_op::SubspaceProjector, newly_active::Vector{Int})
+function update_projector!(proj_op::SubspaceProjector, newly_active::Vector{Int})
 
     # Set new constraints active
     update_subspace!(proj_op.workspace_mat, newly_active)
@@ -326,24 +326,39 @@ function Base.:*(P::SubspaceProjector{T}, x::Vector{T}) where T
     return res
 end
 
-# Reset the projector operator by setting all bounds as inactive
-function reset_projector!(P::SubspaceProjector)
+"""
+    factor_to_boundary(p,w,wₗ,wᵤ,P;atol)
 
-    P.workspace_mat.fixvars .= false
-    P.chol_gram_augmat = P.chol_gram_eqmat
-    return
+Computes the largest scalar `γ` such that `w + γp` stays in the box `[wₗ,wᵤ]`.
+The components considered are among free variables in a coordinate subspace
+encoded in `Projector` `P`.
+"""
+function factor_to_boundary(
+    p::Vector{T},
+    w::Vector{T},
+    w_l::Vector{T},
+    w_u::Vector{T},
+    P::SubspaceProjector{T};
+    atol::T = sqrt(eps(T))) where T
+
+    gamma = Inf
+    fixvars = P.workspace_mat.fixvars
+
+    for i in axes(w,1)
+        if !fixvars[i]
+            gamma = if p[i] < -atol
+                min(gamma, (w_l[i] - w[i]) / p[i])
+            elseif p[i] > atol
+                min(gamma, (w_u[i] - w[i]) / p[i])
+            end
+        end
+    end
+
+    return gamma
 end
 
-# Returns the number of active constraints in subspace
-nb_fixed(proj_op::SubspaceProjector) = nb_fixed(proj_op.workspace_mat)
 
-# Returns the maximum number of bounds that can become active
-# Equals `dimension - number of equality constraints`
-function nbmax_fixed_bounds(proj_op::SubspaceProjector)
 
-    (n,m) = size(proj_op.workspace_mat.eqmat)
-    return n-m
-end
 
 # Returns the number of degrees of freedom remaining into the restricted
 # supspace represented by operator `proj_op`
@@ -355,6 +370,49 @@ function nb_degrees_of_freedom(proj_op::SubspaceProjector)
     return n - m - count(proj_op.workspace_mat.fixvars)
 end
 
+# Asserts whether or not a coordinate subspace is saturated or not
+# Returns `true` if they are no remaining degrees of freedom, `false` instead.
+
+saturated_subspace(P::SubspaceProjector) = nb_degrees_of_freedom(P) == 0
+
+
+# Reset the projector operator by setting all bounds as inactive
+function reset_projector!(P::SubspaceProjector)
+
+    P.workspace_mat.fixvars .= false
+    P.chol_gram_augmat = P.chol_gram_eqmat
+    return
+end
+
+# Identify which bounds from the box `[max(-Δ,ℓ), min(Δ,u)]` become active at
+# trial point `x + s` and set accordingly the coordinate subspace projector `P`.
+# Activity of bounds is measured up to positive tolerance `atol`.
+
+function update_active_set!(
+    s::AbstractVector{T},
+    x::AbstractVector{T},
+    x_low::AbstractVector{T},
+    x_upp::AbstractVector{T},
+    radius::T,
+    P::SubspaceProjector{T};
+    atol::T=sqrt(eps(T))) where T
+
+    newly_active = Vector{Int}([])
+    fixvars = P.workspace_mat.fixvars
+
+    for i in axes(x,1)
+        if !fixvars[i] &&
+            (s[i] <= atol + max(-radius, x_low[i] - x[i]) ||
+            min(radius, x_upp[i] - x[i])  <= s[i] + atol)
+
+            push!(newly_active,i)
+        end
+    end
+
+    update_projector!(P, newly_active)
+
+    return
+end
 
 # Structure encoding a coordinate subspace where components of vectors
 # corresponding to active bounds are set to 0
@@ -413,7 +471,7 @@ saturated_subspace(P::CoordinateSubspaceProjector) = nb_degrees_of_freedom(P) ==
 
 Computes the largest scalar `γ` such that `w + γp` stays in the box `[wₗ,wᵤ]`.
 The components considered are among free variables in a coordinate subspace
-encoded in `P`.
+encoded in `Projector` `P`.
 """
 function factor_to_boundary(
     p::Vector{T},
@@ -460,7 +518,7 @@ end
 # trial point `x + s` and set accordingly the coordinate subspace projector `P`.
 # Activity of bounds is measured up to positive tolerance `atol`.
 
-function active_bounds!(
+function update_active_set!(
     s::Vector{T},
     x::Vector{T},
     x_low::Vector{T},
@@ -480,7 +538,7 @@ function active_bounds!(
         end
     end
 
-    update_projector!(P,newly_active)
+    update_projector!(P, newly_active)
 
     return
 end
@@ -559,43 +617,9 @@ function group_breakpoints(breakpoints::Vector)
     return unique_vals, grouped_indices
 end
 
-"""
-    projection(x,ℓ,u)
-
-Computes and returns the projection of `x` onto the box constrainted set
-`{v | ℓ ≤ v ≤ u}`.
-"""
-function project(x::Vector, x_low::Vector, x_upp::Vector)  
-    
-    v = Vector(undef,size(x,1))
-    project!(v,x,x_low, x_upp)
-    return v 
-end
 
 #= Identify the bounds that become active when taking the step `s` from `x` in the intersection of the feasible domain and the trust region (up to `atol`) 
 Update the Cholesky decomposition used to compute projections on the resulting subspace =#
-
-"""
-    active_idx(x,ℓ,u;atol)
-
-Identifies the bounds active at `x` using tolerance `atol`. Returns the
-corresponding list of indices encoded in a BitVector
-"""
-function active_idx(
-    x::Vector,
-    x_low::Vector,
-    x_upp::Vector; 
-    atol::Float64=sqrt(eps(Float64)))  
-
-    at_bound = BitVector(undef,size(x,1))
-
-    for i in axes(x,1)
-        at_bound[i] = (x[i]-x_low[i] <= atol) || (x_upp[i]-x[i] <= atol)
-    end
-
-    active = findall(at_bound)
-    return active
-end
 
 # Returns the indices of bounds that stay active at `x` when taking direction `d`
 function initial_active_bounds(
@@ -615,95 +639,4 @@ function initial_active_bounds(
     end
 
     return findall(fix_vars)
-end
-
-"""
-    active_bounds!(x,ℓ,u,fix_vars;atol)
-
-Identifies the active components of `x`, i.e. lying at one of their bounds `ℓ` or
-`u`, using tolerance `atol` (default is `sqrt(eps)`).
-
-This information is encoded in the `BitVector` `fix_vars`. The latter is modified
-in place and the components relative to already active bounds are not modified.
-"""
-function active_bounds!(
-    x::Vector,
-    x_low::Vector,
-    x_upp::Vector,
-    fix_vars::BitVector;
-    atol::Float64=sqrt(eps(Float64))) 
-
-    for i in axes(fix_vars,1)
-        fix_vars[i] = fix_vars[i] || (x[i] <= atol + x_low[i]) || (x_upp[i] <= x[i] + atol)
-    end
-    return
-end
-
-function active_bounds!(
-    s::Vector{T},
-    x::Vector{T},
-    x_low::Vector{T},
-    x_upp::Vector{T},
-    delta::T,
-    fix_vars::BitVector;
-    atol::T=sqrt(eps(T))) where T 
-
-    for i in axes(fix_vars,1)
-        fix_vars[i] = fix_vars[i] ||
-         (s[i] <= atol + max(-delta, x_low[i] - x[i])) ||
-         (min(delta, x_upp[i] - x[i]) <= s[i] + atol)
-    end
-
-end
-"""
-    active_bounds_step(bounds, x, s, Δ; atol)
-
-Identifies the bounds that become active when taking the step `s` from `x` in the
-intersection of the feasible domain and the infinite norm trust region, encoded
-by `Δ`.
-
-Returns the corresponding list of indices.
-
-Strict feasibility of the bounds are measured using the tolerance `atol`.
-"""
-function active_bounds_step(
-    x::Vector,
-    s::Vector,
-    x_low::Vector,
-    x_upp::Vector,
-    delta::Float64;
-    atol::Float64 = sqrt(eps(Float64))) 
-
-    s_l = (t -> max(t,-delta)).(x_low-x)
-    s_u = (t -> min(t,delta)).(x_upp-x)
-    at_bound = BitVector(undef,size(x,1))
-
-    for i in axes(s,1)
-        at_bound[i] = (s[i] <= atol + s_l[i]) || (s_u[i] <= s[i] + atol)
-    end
-
-    active = findall(at_bound)
-    return active
-end
-
-"""
-    step_bounds(x,ℓ,u,sₗ,sᵤ,Δ)
-
-Computes the lower and upper bounds for a step `s` that must satisfy
-`{ℓ ≤ x+s ≤ u, ||s|| ≤ Δ}` where `||.||` denotes the `∞`-norm.
-
-The result is stored in vectors `sₗ` and `sᵤ`.
-"""
-function step_bounds!(
-    x::Vector,
-    x_low::Vector,
-    x_upp::Vector,
-    s_low::Vector,
-    s_upp::Vector,
-    delta::Float64) 
-
-    s_low .= (t -> max(-delta, t)).(x_low-x)
-    s_upp .= (t -> min(delta,t)).(x_upp-x)
-
-    return
 end
