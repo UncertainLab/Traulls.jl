@@ -1,7 +1,7 @@
 module Traulls
 
 # Packages
-using LinearAlgebra, Printf, Match, ForwardDiff
+using LinearAlgebra, Printf, Match, ForwardDiff, JuMP, HiGHS
 
 import LinearAlgebra.mul!, LinearAlgebra.transpose
 

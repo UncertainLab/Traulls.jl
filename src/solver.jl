@@ -798,7 +798,10 @@ norm_reduced_v(v::Vector,fix_vars::BitVector) = norm(v[.!fix_vars])
 
 # Modifies the initial guess for the solution such that it is feasible to the bounds
 # Forms and returns the operator computing projections on coordinate subspaces
-function initial_point_and_projector!(model::CnlsModel, x::AbstractVector{T}, ::Val{false}) where T
+function initial_point_and_projector!(
+    model::CnlsModel,
+    x::AbstractVector{T},
+    ::Val{false}) where T
 
     # Make starting point feasible with respect to bounds
     x .= max.(model.xlow, min.(x, model.xupp))
@@ -806,16 +809,67 @@ function initial_point_and_projector!(model::CnlsModel, x::AbstractVector{T}, ::
     CoordinateSubspaceProjector(model.n; T=T)
 end
 
-function projector_operator(model::CnlsModel{T}, ::Val{false}) where T
-    CoordinateSubspaceProjector(model.n; T=T)
+# Modifies the initial guess for the solution to make it linear feasible
+# Forms and returns the operator computing projections on reduced subspaces
+function initial_point_and_projector!(
+    model::CnlsModel,
+    x::AbstractVector{T},
+    ::Val{true};
+    tol::T=sqrt(eps(T))) where T
+
+    A, b = model.linmat, model.linrhs
+    n, m = model.n, model.nlincons
+    xlow, xupp = model.xlow, model.xupp
+
+    solve_linfeas_pb!(A, x0, b, xlow, xupp, m, n)
+
+    # Identity active bounds at starting point
+    initial_active = falses(n)
+
+    for i in axes(x,1)
+        initial_active[i] = x[i] <= xlow[i] + tol || xupp[i] <= x[i] + tol
+    end
+
+    chol_aat = Cholesky(A*A')
+
+    # Form projector operator
+    SubspaceProjector(A, initial_active, chol_aat)
 end
 
-# Returns a projector operator for problems where linear constraints are a mix
-# of linear equalities and bounds on the variables.
-function projector_operator(model::CnlsModel, ::Val{true})
-    A = model.linmat
-    chol_aat = cholesky(A*A')
-    SubspaceProjector(A, chol_aat)
+# Solves w.r.t. x and auxiliary variables r the linear feasibility problem
+# `min ||r||₁ s.t. Ax + r = b, ℓ ≤ x ≤ u`
+# Modifies in place argument x0 with the value at optimal solution
+function solve_linfeas_pb!(
+    A::AbstractMatrix{T},
+    x0::AbstractVector{T},
+    b::AbstractVector{T},
+    lb::AbstractVector{T},
+    ub::AbstractVector{T},
+    m::Int,
+    n::Int) where T
+
+    feas_model = Model(HiGHS.Optimizer)
+    set_silent(feas_model)
+
+    @variable(feas_model, lb[i] <= x[i=1:n] <= lb[i], start = x0[i])
+    @variable(feas_model, r[1:m])
+
+    @constraint(feas_model, A*x + r == b)
+
+    # Model 1-norm of residual variable r
+    @variable(feas_model, t)
+    @constraint(feas_model, [t; r] in MOI.NormOneCone(m + 1))
+
+    @objective(feas_model, Min, t)
+
+    optimize!(feas_model)
+
+    #TODO: Handle failed linear feasibility to stop the solver
+    value(t) > 0 && @warn("Failed to achieve linear feasibility")
+
+    x0 .= value.(x)
+
+    return
 end
 
 
@@ -856,8 +910,6 @@ function criticality_measure(
     return pix
 end
 
-# Computes and returns the criticality measure for a problem encoded in BoxCnls
-# format.
 # The measure computed is the norm of the projection of the steepest direction
 # on the tangent space at a given point. That information is encoded inside the
 # `proj_op` argument.
