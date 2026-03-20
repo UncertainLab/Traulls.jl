@@ -1,6 +1,6 @@
 
 """
-    TrustRegion <: TralcnllsData
+    TrustRegion{T}
 
 Mutable structure to represent a trust region constraint of the form `||s|| ≤ Δ` and its update parameters.
 
