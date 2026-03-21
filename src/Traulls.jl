@@ -1,33 +1,28 @@
 module Traulls
 
 # Packages
-using LinearAlgebra, JuMP, Ipopt, Printf, Match
+using LinearAlgebra, Printf, Match, ForwardDiff, JuMP, HiGHS
 
 import LinearAlgebra.mul!, LinearAlgebra.transpose
 
 # Abstract types
 
-abstract type TralcnllsData end
-
 abstract type ALHessian{T} end
 
-abstract type AbstractCnlsModel end
-
-abstract type PolyhedralConstraints end
+abstract type AbstractCnlsModel{T} end
 
 abstract type Projector{T} end
 
 # Utils
 for f in ["print_info", "polyhedral_constraints", "trust_region", "cg", "hessian", 
-    "al_utils"]
+    "al_utils",  "workspace", "model"]
 
     include("$f.jl")
 end
 
-# Solvers
-for f in ["boconls_solver", "traulls_solver"]
+# Solver files
+for f in ["solver"]
     include("$f.jl")
 end
-
 
 end 

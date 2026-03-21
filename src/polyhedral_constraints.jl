@@ -1,21 +1,27 @@
 """
     SubspaceMatrix{T}
 
-This structure encodes the matrix that defines a subspace of the form `{v | Av = 0, vᵢ = 0 for i ∈ fixvars}`
-where `A` is a full row rank `m × n` ('m < n') matrix and `fixvars = [i₁,...iₚ]`, (`p ≤ n - m`) is a subset of `[1,2,...,n]`.
+This structure encodes the matrix that defines a subspace of the form
+`{v | Av = 0, vᵢ = 0 for i ∈ fixvars}`
+where `A` is a full row rank `m × n` ('m < n') matrix and `fixvars = [i₁,...iₚ]`,
+ (`p ≤ n - m`) is a subset of `[1,2,...,n]`.
 
-The subspace is merely the null space of the matrix `A₊` defined as the concatenation of `A` with `Z` defined as the
-`p × n` matrix whose row `k` is the row `iₖ` of the `n × n` identity matrix.
+The subspace is merely the null space of the matrix `A₊` defined as the
+concatenation of `A` with `Z` defined as the `p × n` matrix whose row `k` is the
+row `iₖ` of the `n × n` identity matrix.
 
 ** Attributes
 
-* `mat`: `AbstractMatrix` corresponding  to the linear equality constraints matrix `A`
+* `mat`: `AbstractMatrix` corresponding  to the linear equality constraints
+matrix `A`
 
-* `fixvars`: `BitVector` of size `n` encoding the matrix `Z`: `fixvars[i] = true` means that components `i`
-of vectors must equal `0` whereas `fixvars[i] = false` means that component `i` remains free
+* `fixvars`: `BitVector` of size `n` encoding the matrix `Z`: `fixvars[i] = true`
+means that components `i` of vectors must equal `0` whereas `fixvars[i] = false`
+means that component `i` remains free
 
-`transpose` and base product `*` are overloaded for the type `SubspaceMatrix` in order to make the computations
-with such a matrix efficient and without explicitly storing the matrix `Z`.
+`transpose` and base product `*` are overloaded for the type `SubspaceMatrix` in
+order to make the computations with such a matrix efficient and without
+explicitly storing the matrix `Z`.
 """
 mutable struct SubspaceMatrix{T<:Real} <: AbstractMatrix{T} 
     eqmat::AbstractMatrix{T}
@@ -34,11 +40,14 @@ Creates a `SubspaceMatrix` where all variables are free.
 
 ** On return
 
-* `SubspaceMatrix` with attribute `mat` set to `A` and `fixvars[i]` set to `false` for all `i`
+* `SubspaceMatrix` with attribute `mat` set to `A` and `fixvars[i]` set to
+`false` for all `i`
 """
 function SubspaceMatrix(A::Matrix{T}) where T
     (m,n) = size(A)
-    @assert m < n "The input matrix must have strictly less rows than columns"
+    if m >= n
+        error("DimsError: The input matrix must have strictly less rows than columns")
+    end
 
     SubspaceMatrix(A,falses(size(A,2)))
 end
@@ -51,11 +60,12 @@ Wrapper for the transpose of a [`SubspaceMatrix`](@ref).
 
 ** Attributes
 
-* `mat`: `Transpose` corresponding  to the transpose of the linear equality constraints matrix `A`
+* `mat`: `Transpose` corresponding  to the transpose of the linear equality
+constraints matrix `A`
 
-* `fixvars`: `BitVector` of size `n` encoding the fixed variables: `fixvars[i] = true` means that components `i`
-of vectors must equal `0` whereas `fixvars[i] = false` means that component `i` remains free
-
+* `fixvars`: `BitVector` of size `n` encoding the fixed variables:
+`fixvars[i] = true` means that components `i` of vectors must equal `0` whereas
+`fixvars[i] = false` means that component `i` remains free
 """
 struct TransposeSubspaceMatrix{T<:Real,S<:AbstractMatrix{T}} <: AbstractMatrix{T}
     eqmat::Transpose{T,S}
@@ -85,6 +95,7 @@ function Base.:*(A::TransposeSubspaceMatrix{T,S},x::Vector{T}) where {T,S}
     return res
 end
 """
+    update_subspace!(M,newly_active)
 
 Add the bounds corresponding to indices in array `vᵢ = 0` for `i ∈ newly_active`
 to the subspace encoded in `SubspaceMatrix` `M`.
@@ -104,11 +115,12 @@ nb_fixed(submat::SubspaceMatrix) = count(submat.fixvars)
 
 This structure encodes the projector operator onto a subspace of the form 
 `{v | Av = 0, vᵢ = 0 for i ∈ fixvars}`
-where `A` is a full row rank `m × n` ('m < n') matrix and `fixvars = [i₁,...iₚ]`, (`p ≤ n - m`)
-is a subset of `[1,2,...,n]`.
+where `A` is a full row rank `m × n` ('m < n') matrix and
+`fixvars = [i₁,...iₚ]`, (`p ≤ n - m`) is a subset of `[1,2,...,n]`.
 
-The subspace is the null space of the matrix `A₊` defined as the concatenation of `A` with `Z`, a
-`p × n` matrix whose row `k` is the row `iₖ` of the `n × n` identity matrix.
+The subspace is the null space of the matrix `A₊` defined as the concatenation of
+`A` with `Z`, a `p × n` matrix whose row `k` is the row `iₖ` of the `n × n`
+identity matrix.
 
 The projection is computed by solving the normal equations associated to the 
 projection quadratic program, which involves the Cholesky decomposition of 
@@ -118,7 +130,8 @@ the augmented Gram matrix `A₊A₊ᵀ`.
 
 * `workspace_mat`: `SubspaceMatrix` representing matrix `A₊`
 
-* `chol_gram_augmat`: `Factorization` storing the Cholesky decomposition of `A₊A₊ᵀ`
+* `chol_gram_augmat`: `Factorization` storing the Cholesky decomposition of
+`A₊A₊ᵀ`
 
 * `chol_gram_eqmat`: `Factorization` storing the Cholesky decomposition of `AAᵀ`
 """
@@ -131,7 +144,8 @@ end
 """
     SubspaceProjector(A,chol_AAᵀ)
 
-Constructor for the `SubspaceProjector` corresponding to the projection operator onto the null space of the matrix `A`.
+Constructor for the `SubspaceProjector` corresponding to the projection operator
+onto the null space of the matrix `A`.
 
 ** Arguments
 
@@ -173,7 +187,6 @@ function SubspaceProjector(
 
     SubspaceProjector(subA,chol,chol_aat)
 end
-
 
 # Update the Cholesky decomposition of the Gram matrix when adding one bound constraint 
 # to the active set 
@@ -220,7 +233,7 @@ function cholesky_augmented_gram_mat(
     G = chol_aat.L \ A_act_cols
     mul!(H, G', G, -1, 1) # forms I - GᵀG
 
-    # Forms the L factor of ÃÃᵀ Cholesy decomposition
+    # Forms the L factor of A₊A₊ᵀ Cholesy decomposition
     L[1:m,1:m] .= chol_aat.L
     L[m+1:end,1:m] .= G'
     L[m+1:end,m+1:end] .= cholesky(H).L
@@ -242,7 +255,7 @@ Cholesky decomposition involved in the normal equations solving.
 * `newly_active`: `Vector` containing the indices of the variables that are set
 active
 """
-function update_subspace_projector!(proj_op::SubspaceProjector, newly_active::Vector{Int})
+function update_projector!(proj_op::SubspaceProjector, newly_active::Vector{Int})
 
     # Set new constraints active
     update_subspace!(proj_op.workspace_mat, newly_active)
@@ -313,6 +326,56 @@ function Base.:*(P::SubspaceProjector{T}, x::Vector{T}) where T
     return res
 end
 
+"""
+    factor_to_boundary(p,w,wₗ,wᵤ,P;atol)
+
+Computes the largest scalar `γ` such that `w + γp` stays in the box `[wₗ,wᵤ]`.
+The components considered are among free variables in a coordinate subspace
+encoded in `Projector` `P`.
+"""
+function factor_to_boundary(
+    p::Vector{T},
+    w::Vector{T},
+    w_l::Vector{T},
+    w_u::Vector{T},
+    P::SubspaceProjector{T};
+    atol::T = sqrt(eps(T))) where T
+
+    gamma = Inf
+    fixvars = P.workspace_mat.fixvars
+
+    for i in axes(w,1)
+        if !fixvars[i]
+            gamma = if p[i] < -atol
+                min(gamma, (w_l[i] - w[i]) / p[i])
+            elseif p[i] > atol
+                min(gamma, (w_u[i] - w[i]) / p[i])
+            end
+        end
+    end
+
+    return gamma
+end
+
+
+
+
+# Returns the number of degrees of freedom remaining into the restricted
+# supspace represented by operator `proj_op`
+
+function nb_degrees_of_freedom(proj_op::SubspaceProjector)
+
+    (m,n) = size(proj_op.workspace_mat.eqmat)
+
+    return n - m - count(proj_op.workspace_mat.fixvars)
+end
+
+# Asserts whether or not a coordinate subspace is saturated or not
+# Returns `true` if they are no remaining degrees of freedom, `false` instead.
+
+saturated_subspace(P::SubspaceProjector) = nb_degrees_of_freedom(P) == 0
+
+
 # Reset the projector operator by setting all bounds as inactive
 function reset_projector!(P::SubspaceProjector)
 
@@ -321,317 +384,163 @@ function reset_projector!(P::SubspaceProjector)
     return
 end
 
-# Returns the number of active constraints in subspace
-nb_fixed(proj_op::SubspaceProjector) = nb_fixed(proj_op.workspace_mat)
+# Identify which bounds from the box `[max(-Δ,ℓ), min(Δ,u)]` become active at
+# trial point `x + s` and set accordingly the coordinate subspace projector `P`.
+# Activity of bounds is measured up to positive tolerance `atol`.
 
-# Returns the maximum number of bounds that can become active
-# Equals `dimension - number of equality constraints`
-function nbmax_fixed_bounds(proj_op::SubspaceProjector)
+function update_active_set!(
+    s::AbstractVector{T},
+    x::AbstractVector{T},
+    x_low::AbstractVector{T},
+    x_upp::AbstractVector{T},
+    radius::T,
+    P::SubspaceProjector{T};
+    atol::T=sqrt(eps(T))) where T
 
-    (n,m) = size(proj_op.workspace_mat.eqmat)
-    return n-m
-end
-
-##################### DEPRECATED CODE #########################################
-
-
-""" MixedConstraints <: PolyhedralConstraints
-
-This mutablle structure represents and encodes a polyhedral set with linear equalities, bounds and some variables fixed to `0` of the form
-
-`{v | Av = 0, xₗ ≤ v ≤ xᵤ, ∀i ∈ 𝒜, vᵢ = 0}`
-
-**Attributes**
-
-* `lineq` matrix `A` from the linear equality constraints
-
-* `xlow` and `xupp` respectively represent lower and upper bounds `xₗ` and `xᵤ`
-
-* `fixvars` is a `BitVector` encoding the set of fixed variables `𝒜`, i.e. `fixvars[i]=true → vᵢ = 0`
-"""
-mutable struct MixedConstraints <: PolyhedralConstraints
-    lineq::Matrix
-    xlow::Vector
-    xupp::Vector
-    fixvars::BitVector
-    chol::Cholesky
-end
-
-function MixedConstraints(
-        A::Matrix,
-        chol_aat::Cholesky; 
-        l::Vector = fill(-Inf,size(A,2)), 
-        u::Vector=fill(Inf,size(A,2)))
-    
-    fixed = BitVector(undef,size(A,2))
-    fixed .= false
-    MixedConstraints(A,l,u,fixed,chol_aat)
-end   
-
-function MixedConstraints(
-        A::Matrix,
-        chol_aat::Cholesky,
-        fixed::BitVector; 
-        l::Vector = fill(-Inf,size(A,2)), 
-        u::Vector=fill(Inf,size(A,2))) 
-    
-    chol = (any(fixed) ? cholesky_aug_aat(A, fixed, chol_aat) : chol_aat)
-    MixedConstraints(A,l,u,fixed,chol)
-end  
-
-nb_fix(lincons::MixedConstraints) = count(lincons.fixvars)
-#= Forms the Cholesky decomposition of ÃÃᵀ 
-Computation exploits its block structure =#
-
-function cholesky_aug_aat(
-    A::Matrix, 
-    fix_bounds::BitVector, 
-    chol_aat::Cholesky) 
-
-    (m,n) = size(A)
-    p = count(fix_bounds)
-    mpp = m+p
-    @assert mpp <= n 
-
-    # Auxiliary buffer arrays 
-    H = Matrix{Float64}(I,p,p)
-    L = LowerTriangular(Matrix{Float64}(undef, mpp, mpp))
-    
-    A_act_cols = view(A,:,fix_bounds)
-    G = chol_aat.L \ A_act_cols
-    # TODO: implement a more efficient computation of I - GᵀG
-    mul!(H, G', G, -1, 1) # forms I - GᵀG
-    
-    # Forms the L factor of ÃÃᵀ Cholesy decomposition
-    L[1:m,1:m] .= chol_aat.L
-    L[m+1:end,1:m] .= G'
-    L[m+1:end,m+1:end] .= cholesky(H).L  
-    return Cholesky(L)
-end
-
-# Perform the Cholesky decomposition update on the representation `lincons`
-function update_chol!(
-        lincons::MixedConstraints, 
-        chol_aat::Cholesky) 
-    
-    lincons.chol = cholesky_aug_aat(lincons.lineq, lincons.fixvars, chol_aat)
-    return
-end
-
-#= The two following methods perform respectively the left multiplication by `Ã` and `Ãᵀ` =#
-
-function left_mul_tr(lincons::MixedConstraints, y::Vector) 
-    
-    (m,n) = size(lincons.lineq)
-    x = Vector(undef,n)
-    
-    if any(lincons.fixvars)
-        mul!(x,lincons.lineq',y[1:m])
-        x[lincons.fixvars] .+= y[m+1:end]
-    else
-        mul!(x,lincons.lineq',y)
-    end
-    return x
-end
-
-function left_mul(lincons::MixedConstraints, x::Vector) 
-    
-    (m,_) = size(lincons.lineq)
-    y = Vector(undef, m+count(lincons.fixvars))
-
-    if any(lincons.fixvars)
-        mul!(view(y,1:m), lincons.lineq, x)
-        y[m+1:end] .= x[lincons.fixvars]
-    else
-        mul!(y, lincons.lineq, x)
-    end
-    return y
-end
-    
-
-#=
-In place versions of the projection methods onto, respectively, the nullspace of `A` and sets of the form `{v | Av = 0, vᵢ = 0 for i ∈ fixed variables}`
-=#
-function projection_nullspace!(
-    lincons::MixedConstraints,
-    r::Vector,
-    v::Vector
-    ) 
-
-    @assert !any(lincons.fixvars)
-    m = size(lincons.lineq,1)
-    w, y = Vector(undef,m), Vector(undef,m) # auxiliary vectors
-
-    y[:] = lincons.chol.L \ (lincons.lineq*r)
-    w[:] = lincons.chol.U \ y
-    v[:] = r - lincons.lineq'*w
-    return
-end
-
-function projection_subspace!(
-    lincons::MixedConstraints, 
-    r::Vector,
-    v::Vector
-    ) 
-
-    (m,n) = size(lincons.lineq)
-    mpp = m + count(lincons.fixvars)
-    @assert m < mpp <= n 
-
-    w, y = Vector(undef,mpp), Vector(undef,mpp) # auxiliary vectors
-    
-    y[:] = lincons.chol.L \ left_mul(lincons,r) 
-    w[:] = lincons.chol.U \ y 
-    v[:] = r - left_mul_tr(lincons,w)
-    return
-end
-
-
-"""
-    projection(lincons,r)
-
-Computes and returns the projection of vector `r` onto the null space of a matrix `Ã` represented by `lincons` (see [`MixedConstraints`](@ref)).
-
-The nullspace of `Ã` corresponds to the feasible set `{v | Av = 0, vᵢ = 0 for i ∈ lincons.fixvars}`.
-
-The projection is computed by solving the normal equations associated to the problem `minᵥ {||v-r|| | Ãv = 0}` using the Cholesky factorization of `ÃÃᵀ`.
-
-If there are no fixed variables, i.e. `Ã = A`, then simply perfoms the projection onto the nullspace of `A`.
-"""
-function projection(lincons::MixedConstraints, r::Vector) 
-        
-    v = Vector{Float64}(undef,size(r,1))
-    projection!(lincons,r,v)
-    return v
-end
-
-# In place version of the above `projection` method
-function projection!(
-    lincons::MixedConstraints, 
-    r::Vector, 
-    v::Vector
-    ) 
-
-    if any(lincons.fixvars)
-        projection_subspace!(lincons,r,v)
-    else
-        projection_nullspace!(lincons,r,v)
-    end
-    return
-end
-
-"""
-    function projection_polyhedron(x,A,b,l,u;solver)
-
-Compute the projection of vector 'x' onto the polyhedron '{v | Av = b, l ≤ v ≤ u}' by solving the associated minimum-distance quadratic program.
-
-The default solver is 'Ipopt'.
-"""
-function projection_polyhedron(
-    x::Vector, 
-    A::Matrix, 
-    b::Vector, 
-    l::Vector, 
-    u::Vector; 
-    solver = Ipopt.Optimizer) 
-
-    n = size(x,1)
-    model = Model(solver)
-    set_silent(model)
-    set_attribute(model, "hessian_constant", "yes") # Option to make Ipopt assume it is a QP
-
-    @variable(model, l[i] <= v[i=1:n] <= u[i])
-    @constraint(model, A*v .== b)
-    @objective(model, Min, dot(v-x,v-x))
-    optimize!(model)
-
-    return value.(v)
-end
-
-
-#= Identify the bounds active at `x` up to `atol` and update the Cholesky decomposition used to compute projections =#
-
-function active_bounds!(
-        lincons::MixedConstraints,
-        x::Vector,
-        chol_aat::Cholesky;
-        atol::Float64 = sqrt(eps(Float64))
-        ) 
+    newly_active = Vector{Int}([])
+    fixvars = P.workspace_mat.fixvars
 
     for i in axes(x,1)
-        lincons.fixvars[i] = (x[i]-lincons.xlow[i] <= atol) || (lincons.xupp[i]-x[i] <= atol)
-    end
-    update_chol!(lincons,chol_aat)
-    return
-end
+        if !fixvars[i] &&
+            (s[i] <= atol + max(-radius, x_low[i] - x[i]) ||
+            min(radius, x_upp[i] - x[i])  <= s[i] + atol)
 
-
-#= Identify the bounds that become active when taking the step `s` from `x` in the intersection of the feasible domain and the trust region (up to `atol`) 
-Update the Cholesky decomposition used to compute projections on the resulting subspace =#
-function active_bounds(
-    lincons::MixedConstraints,
-    x::Vector,
-    s::Vector,
-    delta::Float64;
-    atol::Float64 = sqrt(eps(Float64))
-    ) 
-
-    s_l = (t -> max(t,-delta)).(lincons.xlow-x)
-    s_u = (t -> min(t,delta)).(lincons.xupp-x)
-    at_bound = BitVector(undef,size(x,1))
-
-    for i in axes(s,1)
-        at_bound[i] = (s[i]-s_l[i] <= atol) || (s_u[i]-s[i] <= atol)
+            push!(newly_active,i)
+        end
     end
 
-    active = findall(at_bound)
-    return active
-end
-#= Set the variable `ind` to active and update the Cholesky factorization =#
+    update_projector!(P, newly_active)
 
-function add_active!(
-        lincons::MixedConstraints,
-        chol_aat::Cholesky,
-        ind::Int
-        ) 
-
-    lincons.fixvars[ind] = true
-    update_chol!(lincons,chol_aat)
     return
 end
 
-#= Set the variables in `indx` to active and update the Cholesky factorization =#
-function add_active!(
-        lincons::MixedConstraints,
-        chol_aat::Cholesky,
-        indx::Vector{Int}
-        ) 
-
-    lincons.fixvars[indx] .= true
-    update_chol!(lincons,chol_aat)
-    return
-end
-
-""" BoundConstraints
-
-Mutable struct representing a set of lower and upper bounds and which ones are considered active.
-
-**Attributes**
-
-* `xlow` and `xupp` are double precision vectors that respectively represent lower and upper bounds
-
-* `fixvars` is a `BitVector` encoding the indices of active bounds `𝒜`, i.e. `fixvars[i]=true → vᵢ = 0`
-"""
-mutable struct BoundConstraints <: PolyhedralConstraints
-    xlow::Vector
-    xupp::Vector
+# Structure encoding a coordinate subspace where components of vectors
+# corresponding to active bounds are set to 0
+mutable struct CoordinateSubspaceProjector{T<:Real} <: Projector{T}
     fixvars::BitVector
 end
 
-function BoundConstraints(xlow::Vector, xupp::Vector) 
-    fixed = BitVector(undef,size(xlow,1))
-    fixed .= false
-    BoundConstraints(xlow,xupp,fixed)
+# Constructor for `CoordinateSubspaceProjector` structure.
+# Returns a structure with `fixvars` attribute initalized to `falses(n)` where
+# `n` is an integer given as input.
+# This corresponds to define the underlying subspace to `ℝⁿ`.
+
+CoordinateSubspaceProjector(n::Int;T::DataType=Float64) = CoordinateSubspaceProjector{T}(falses(n))
+
+# Overload the `LinearAlgebra.mul!` method to compute projection of a vector `v`
+# onto a coordinate subspace represented by `P` as a matrix-vector product.
+# The result is stored in vector `r`.
+
+function mul!(r::Vector, P::CoordinateSubspaceProjector, v::Vector)
+
+    freevars = .!(P.fixvars)
+
+    r[P.fixvars] .= 0          # set rᵢ = 0 for fixed components
+    r[freevars] .= v[freevars] # set rᵢ = vᵢ for free components
+
+    return
+end
+
+# Overload the `Base.*` method to compute projection of a vector `v`
+# onto a coordinate subspace represented by `P` as a matrix-vector product.
+# The result is stored in vector `r`.
+
+function Base.:*(P::CoordinateSubspaceProjector, v::Vector)
+
+    res = Vector{eltype(v)}(undef,size(v,1))
+    mul!(res,P,v)
+
+    return res
+end
+
+# Returns the number of degrees of freedoms remaining in the coordinate subspace
+# represented by operator `P`.
+
+function nb_degrees_of_freedom(P::CoordinateSubspaceProjector)
+    fixed = P.fixvars
+    return size(fixed,1) - count(fixed)
+end
+
+# Asserts whether or not a coordinate subspace is saturated or not
+# Returns `true` if they are no remaining degrees of freedom, `false` instead.
+
+saturated_subspace(P::CoordinateSubspaceProjector) = nb_degrees_of_freedom(P) == 0
+
+"""
+    factor_to_boundary(p,w,wₗ,wᵤ,P;atol)
+
+Computes the largest scalar `γ` such that `w + γp` stays in the box `[wₗ,wᵤ]`.
+The components considered are among free variables in a coordinate subspace
+encoded in `Projector` `P`.
+"""
+function factor_to_boundary(
+    p::Vector{T},
+    w::Vector{T},
+    w_l::Vector{T},
+    w_u::Vector{T},
+    P::CoordinateSubspaceProjector{T};
+    atol::T = sqrt(eps(T))) where T
+
+    gamma = Inf
+    for i in axes(w,1)
+        if !P.fixvars[i]
+            if p[i] < -atol
+                gamma = min(gamma, (w_l[i] - w[i]) / p[i])
+            elseif p[i] > atol
+                gamma = min(gamma, (w_u[i] - w[i]) / p[i])
+            end
+        end
+    end
+    return gamma
+end
+
+# Reset a coordinate subspace projector `P` by setting all components free.
+# Elements of `fixvars` attribute are all set to false
+
+function reset_projector!(P::CoordinateSubspaceProjector)
+
+    P.fixvars .= false
+
+    return
+end
+
+# Set active the components of indices in `newly_active` into the projector
+# `P`
+
+function update_projector!(P::CoordinateSubspaceProjector, newly_active::Vector{Int})
+
+    P.fixvars[newly_active] .= true
+
+    return
+end
+
+# Identify which bounds from the box `[max(-Δ,ℓ), min(Δ,u)]` become active at
+# trial point `x + s` and set accordingly the coordinate subspace projector `P`.
+# Activity of bounds is measured up to positive tolerance `atol`.
+
+function update_active_set!(
+    s::Vector{T},
+    x::Vector{T},
+    x_low::Vector{T},
+    x_upp::Vector{T},
+    radius::T,
+    P::CoordinateSubspaceProjector{T};
+    atol::T=sqrt(eps(T))) where T
+
+    newly_active = Vector{Int}([])
+
+    for i in axes(x,1)
+        if !P.fixvars[i] &&
+            (s[i] <= atol + max(-radius,x_low[i] - x[i]) ||
+            min(radius,x_upp[i] - x[i])  <= s[i] + atol)
+
+            push!(newly_active,i)
+        end
+    end
+
+    update_projector!(P, newly_active)
+
+    return
 end
 
 """
@@ -648,15 +557,18 @@ end
 """
     sort_breakpoints(x,g,ℓ,u,Δ;atol) -> unique_vals, grouped_indices
 
-Computes the breakpoints of the projected gradient path `-tg` for `t ≥ 0` onto the box `{d | min(ℓ-x,-Δe) ≤ d ≤ max(u-x,Δe)}`.
+Computes the breakpoints of the projected gradient path `-tg` for `t ≥ 0` onto
+the box `{d | min(ℓ-x,-Δe) ≤ d ≤ max(u-x,Δe)}`.
+
 Breakpoints are then sorted in ascending order with duplicates removed. 
 For each unique breakpoint, the function returns the list of indices (from the 
 original array) his value occurs.
 
 # Returns
 - `unique_vals`: Sorted vector of unique breakpoints.
-- `grouped_indices`: A vector where entry `i` contains the indices of the variables associated to breakpoint number `i`.
-  the indices of `values` corresponding to the matching entry in `unique_vals`.
+- `grouped_indices`: A vector where entry `i` contains the indices of the
+variables associated to breakpoint number `i`, which are therefore the indices
+of `values` corresponding to the matching entry in `unique_vals`.
 """
 function sort_breakpoints(
     x::Vector,
@@ -705,41 +617,9 @@ function group_breakpoints(breakpoints::Vector)
     return unique_vals, grouped_indices
 end
 
-"""
-    projection(x,ℓ,u)
-
-Computes and returns the projection of `x` onto the box constrainted set `{v | ℓ ≤ v ≤ u}`.
-"""
-function project(x::Vector, x_low::Vector, x_upp::Vector)  
-    
-    v = Vector(undef,size(x,1))
-    project!(v,x,x_low, x_upp)
-    return v 
-end
 
 #= Identify the bounds that become active when taking the step `s` from `x` in the intersection of the feasible domain and the trust region (up to `atol`) 
 Update the Cholesky decomposition used to compute projections on the resulting subspace =#
-
-"""
-    active_idx(x,ℓ,u;atol)
-
-Identifies the bounds active at `x` using tolerance `atol`. Returns the corresponding list of indices encoded in a BitVector
-"""
-function active_idx(
-    x::Vector,
-    x_low::Vector,
-    x_upp::Vector; 
-    atol::Float64=sqrt(eps(Float64)))  
-
-    at_bound = BitVector(undef,size(x,1))
-
-    for i in axes(x,1)
-        at_bound[i] = (x[i]-x_low[i] <= atol) || (x_upp[i]-x[i] <= atol)
-    end
-
-    active = findall(at_bound)
-    return active
-end
 
 # Returns the indices of bounds that stay active at `x` when taking direction `d`
 function initial_active_bounds(
@@ -753,89 +633,10 @@ function initial_active_bounds(
 
     for i in axes(x,1)
 
-        fix_vars[i] = (x_upp[i]-atol < x[i] && d[i] > atol) || # positive direction at active upper bound
-            (x_low[i]+atol > x[i] && d[i] < -atol) ||          # negative direction at active lower bound
+        fix_vars[i] = (x_upp[i] < x[i] + atol && d[i] > atol) || # positive direction at active upper bound
+            (x_low[i] + atol > x[i] && d[i] < -atol) ||          # negative direction at active lower bound
             (abs(d[i]) < atol)                                 # zero direction
     end
 
     return findall(fix_vars)
-end
-
-"""
-    active_bounds!(x,ℓ,u,fix_vars;atol)
-
-Identifies the active components of `x`, i.e. lying at one of their bounds `ℓ` or `u`, using tolerance `atol` (default is `sqrt(eps)`).
-
-This information is encoded in the `BitVector` `fix_vars`. The latter is modified in place and the components relative to already active bounds
-are not modified.
-"""
-function active_bounds!(
-    x::Vector,
-    x_low::Vector,
-    x_upp::Vector,
-    fix_vars::BitVector;
-    atol::Float64=sqrt(eps(Float64))) 
-
-    for i in axes(fix_vars,1)
-        fix_vars[i] = fix_vars[i] || (x[i] <= atol+x_low[i]) || (x_upp[i]-atol <= x[i])
-    end
-    return
-end
-"""
-    active_bounds_step(bounds, x, s, Δ; atol)
-
-Identifies the bounds that become active when taking the step `s` from `x` in the intersection of the feasible domain and the infinite norm trust region, encoded by `Δ`.
-Returns the corresponding list of indices.
-
-Uses the tolerance `atol`.
-"""
-function active_bounds_step(
-    x::Vector,
-    s::Vector,
-    x_low::Vector,
-    x_upp::Vector,
-    delta::Float64;
-    atol::Float64 = sqrt(eps(Float64))) 
-
-    s_l = (t -> max(t,-delta)).(x_low-x)
-    s_u = (t -> min(t,delta)).(x_upp-x)
-    at_bound = BitVector(undef,size(x,1))
-
-    for i in axes(s,1)
-        at_bound[i] = (s[i]-s_l[i] <= atol) || (s_u[i]-s[i] <= atol)
-    end
-
-    active = findall(at_bound)
-    return active
-end
-
-"""
-    step_bounds(x,ℓ,u,Δ)
-
-Computes and returns the lower and upper bounds for a step `s` that must satisfy `{ℓ ≤ x+s ≤ u, ||s|| ≤ Δ}` 
-where `||.||` denotes the `∞`-norm.
-"""
-function step_bounds(
-    x::Vector,
-    x_low::Vector,
-    x_upp::Vector,
-    delta::Float64) 
-
-    s_low = (t -> max(-delta, t)).(x_low-x)
-    s_upp = (t -> min(delta,t)).(x_upp-x)
-
-    return s_low, s_upp
-end
-
-"""
-    add_active!(bounds, indx)
-
-Sets the constraints in `indx` as active.
-"""
-function add_active!(
-        bounds::BoundConstraints,
-        indx::Vector{Int}) 
-
-    bounds.fixvars[indx] .= true
-    return
 end

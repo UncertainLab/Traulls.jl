@@ -1,6 +1,6 @@
 
 """
-    TrustRegion <: TralcnllsData
+    TrustRegion{T}
 
 Mutable structure to represent a trust region constraint of the form `||s|| ≤ Δ` and its update parameters.
 
@@ -13,17 +13,17 @@ Mutable structure to represent a trust region constraint of the form `||s|| ≤ 
 - `decrease_factor`: factor to decrease the radius (scalar in `(0,1)`)
 - `neg_ratio_factor`: factor to decrease the radius in case of negative ratio (scalar in `(0,1)`)
 """
-mutable struct TrustRegion <: TralcnllsData
-    radius::Float64
-    accept_treshold::Float64 
-    increase_treshold::Float64 
-    decrease_factor::Float64 
-    increase_factor::Float64 
-    neg_ratio_factor::Float64
+mutable struct TrustRegion{T<:Real}
+    radius::T
+    accept_treshold::T
+    increase_treshold::T
+    decrease_factor::T
+    increase_factor::T
+    neg_ratio_factor::T
 end
 
-function TrustRegion(eta1::Float64, eta2::Float64, alpha1::Float64, alpha2::Float64, gamma2::Float64) 
-    return TrustRegion(Inf, eta1, eta2, alpha1, alpha2, gamma2)
+function TrustRegion(eta1::T, eta2::T, alpha1::T, alpha2::T, gamma2::T) where T
+    TrustRegion(Inf, eta1, eta2, alpha1, alpha2, gamma2)
 end
 
 """
@@ -53,10 +53,10 @@ Set the field `radius` of the trust region `tr` to `κ*||g||ₚ`, where:
 This value correponds to the initial radius of an optimization process.
 """
 function set_initial_radius!(
-    tr::TrustRegion,
-    g::Vector;
-    kappa_radius::Float64=0.1,
-    p::Float64=Inf) 
+    tr::TrustRegion{T},
+    g::Vector{T};
+    kappa_radius::T = T(0.1),
+    p::T = T(Inf)) where T
 
     tr.radius = kappa_radius * norm(g,p)
     return
@@ -68,7 +68,7 @@ end
 
 Asserts if the ratio `ρ` associated to the step computed in the current trust region `tr` is accepted or not.
 """
-accept_step(tr::TrustRegion,rho::Float64)  = rho >= tr.accept_treshold 
+accept_step(tr::TrustRegion{T},rho::T) where T = rho >= tr.accept_treshold
 
 
 """
@@ -93,13 +93,13 @@ This method follows the procedure described in Trust Region Methods (Conn et. al
 - `ratio`: Value of the ratio `(mx_trial-mx) / pred`
 """
 function step_ratio(
-    mx::Float64,
-    mx_trial::Float64,
-    pred::Float64)
+    mx::T,
+    mx_trial::T,
+    pred::T) where T
 
 
-    eps_ratio = 10*eps(Float64)
-    delta_ratio = eps_ratio*max(1,abs(mx_trial))
+    eps_ratio = 10 * eps(T)
+    delta_ratio = eps_ratio * max(1, abs(mx_trial))
 
 
     delta_ared = mx_trial - mx - delta_ratio
@@ -135,9 +135,9 @@ The `radius` field of `tr` is modified in the following way:
 
 """
 function update_radius!(
-    tr::TrustRegion,
-    rho::Float64,
-    norm_step::Float64)  
+    tr::TrustRegion{T},
+    rho::T,
+    norm_step::T) where T
 
     tr.radius = if rho > tr.increase_treshold   # very successful step
         max(tr.increase_factor * norm_step, tr.radius) 
@@ -160,7 +160,12 @@ end
 
 Computes and returns the largest `α > 0` such that `||x + αd|| = Δ` where `||.||` denotes the euclidean norm.
 """
-function factor_to_boundary(x::Vector, d::Vector, delta::Float64; atol::Float64=sqrt(eps(Float64))) 
+function factor_to_boundary(
+    x::Vector{T},
+    d::Vector{T},
+    delta::T;
+    atol::T=sqrt(eps(T))) where T
+
     xtd = dot(x,d)
     norm_d2 = dot(d,d)
     discr = 4*(xtd^2 - norm_d2* (dot(x,x) - delta^2))
@@ -176,38 +181,11 @@ function factor_to_boundary(x::Vector, d::Vector, delta::Float64; atol::Float64=
     return alpha
 end
 
-"""
-    factor_to_boundary(p,w,wₗ,wᵤ,free_vars;atol)
-
-Computes the largest scalar `γ` such that `w + γp` stays in the box `[wₗ,wᵤ]`. The only components considered
-are the one encoded in `free_vars`.
-"""
-function factor_to_boundary(
-    p::Vector,
-    w::Vector,
-    w_l::Vector,
-    w_u::Vector,
-    free_vars::BitVector;
-    atol::Float64 = sqrt(eps(Float64))) 
-
-    gamma = Inf
-    for i in axes(w,1)
-        if free_vars[i]
-            if p[i] < -atol 
-                gamma = min(gamma, (w_l[i] - w[i]) / p[i])
-            elseif p[i] > atol
-                gamma = min(gamma, (w_u[i] - w[i]) / p[i])
-            end
-        end
-    end
-    return gamma
-end
-
 function check_stalling(
-    s::Vector,
-    x::Vector,
-    delta::Float64;
-    eps_rel = sqrt(eps(Float64)))
+    s::Vector{T},
+    x::Vector{T},
+    delta::T;
+    eps_rel = sqrt(eps(T))) where T
     
     # Check is the trial point x+s is undistinguishable (up to `eps_rel`) from current solution x
     

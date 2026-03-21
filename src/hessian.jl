@@ -116,6 +116,23 @@ function update_hessian!(
     return
 end
 
+"""
+    reset_hessian!(H,J₀,C₀,μ₀)
+
+Reset the Gauss-Newton approximation `H` by setting the `J`, `C` and `mu`
+attributes to, respectively, `J₀`, `C₀` and μ₀.
+"""
+function reset_hessian!(
+    H::GN{T},
+    J0::AbstractMatrix{T},
+    C0::AbstractMatrix{T},
+    mu0::T) where T
+    
+    H.J .= J0
+    H.C .= C0
+    H.mu = mu0
+    return
+end
 
 """
     SR1 <: ALHessian
@@ -209,8 +226,6 @@ function mul!(Hv::Vector{T}, sr1_op::SR1{T}, v::Vector{T}) where T
     m = size(sr1_op.J,1)
     p = size(sr1_op.C,1)
 
-    # Reset result values to make sure it is zero
-    # Hv .= 0.0
     # JᵀJv term
     temp_Jv = view(sr1_op.temp,1:m)
     mul!(temp_Jv, sr1_op.J, v) # form Jv
@@ -230,16 +245,20 @@ function update_hessian!(
     sr1_op::SR1{T}, 
     J_new::Matrix{T},
     C_new::Matrix{T},
+    rx::Vector{T},
+    cx::Vector{T},
+    g::Vector{T},
     y::Vector{T},
     s::Vector{T}) where T 
+
+    # Update components of the secant equation
+    # Right handside ← (Jₖ₊₁ - Jₖ)ᵀrₖ₊₁ + (Cₖ₊₁ - Cₖ)ᵀ(yₖ + μₖcₖ₊₁)
+    sr1_op.secant_rhs .= g - sr1_op.J' * rx .- sr1_op.C' * (y .+ sr1_op.mu.*cx)
+    sr1_op.step .= s
 
     # Update Jacobians 
     sr1_op.J .= J_new
     sr1_op.C .= C_new
-
-    # Update components of the secant equation
-    sr1_op.secant_rhs .= y 
-    sr1_op.step .= s 
 
     # Compute Second order terms
     update_sr1_second_order!(sr1_op)
@@ -276,6 +295,28 @@ function update_sr1_second_order!(sr1_op::SR1{T}) where T
         # Add (y - Ss)(y - Ss)ᵀ / (y - Ss)ᵀs to second order terms approximation
         mul!(sr1_op.S, ymSs, ymSs', 1/denom, 1)
     end
+
+    return
+end
+
+"""
+    reset_hessian!(H,J₀,C₀,μ₀)
+
+Reset the SR1 approximation `H` by setting the `J`, `C` and `mu`
+attributes to, respectively, `J₀`, `C₀` and μ₀.
+
+The second order terms in attribute `S` are set to `0`.
+"""
+function reset_hessian!(
+    H::SR1{T},
+    J0::AbstractMatrix{T},
+    C0::AbstractMatrix{T},
+    mu0::T) where T
+
+    H.J .= J0
+    H.C .= C0
+    H.mu = mu0
+    H.S .= 0
 
     return
 end

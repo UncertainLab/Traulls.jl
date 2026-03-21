@@ -33,8 +33,5 @@
 
     x0 = [3.0, 1., 3.]
 
-    model = Traulls.PolyhedralCnls(r,c,jac_r,jac_c,A,b,x_low,x_upp,x0,n,m,p,false)
-
-    println(model.eqmat)
-    
+    model = Traulls.PolyhedralCnls(r,c,jac_r,jac_c,A,b,x_low,x_upp,x0,n,m,p,false)    
 end

@@ -54,7 +54,7 @@ end
     P = Traulls.SubspaceProjector(A,chol_aat)
 
     @test all(.!(P.workspace_mat.fixvars))
-    Traulls.update_subspace_projector!(P,active)
+    Traulls.update_projector!(P,active)
 
     @test all(P.workspace_mat.fixvars[active]) &&
         all(.!(P.workspace_mat.fixvars[setdiff(1:n,active)]))
@@ -68,4 +68,34 @@ end
     @test P.workspace_mat*x ≈ greedy_B*x
     @test norm(proj_x[findall(fix_bounds)]) < 1e-12
     @test norm(P.workspace_mat*proj_x) < 1e-12
+end
+
+@testset "Coordinate subspace projector" begin
+
+    n = 10
+
+    # Initialize
+    P = Traulls.CoordinateSubspaceProjector(n)
+    v = ones(n)
+
+    @test all(.!P.fixvars)
+    @test P*v ≈ v
+
+    # Set some bounds active
+    fixed = collect(1:2:n)
+    Traulls.update_projector!(P,fixed)
+
+    @test all(P.fixvars[fixed]) && all(.!P.fixvars[setdiff(1:n,fixed)])
+    @test Traulls.nb_degrees_of_freedom(P) == n - size(fixed,1)
+
+
+    r = P*v
+
+    @test all(isapprox(0.0), r[P.fixvars]) && r[.!P.fixvars] ≈ v[.!P.fixvars]
+
+    # Reset subspace
+    Traulls.reset_projector!(P)
+    @test all(.!P.fixvars)
+
+
 end
