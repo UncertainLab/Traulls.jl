@@ -40,9 +40,9 @@
     # Testing for model defined with in-place methods
     model = Traulls.CnlsModel!(r!,c!,jac_r!,jac_c!,x_low,x_upp,x0,n,m,p,Val(:only_inequalities))
 
-    sol = Traulls.solve(model; verbose=true, hessian_approx=Traulls.sr1)
+    results = Traulls.solve(model; verbose=true, hessian_approx=Traulls.sr1)
 
-    @test sol.status isa Traulls.CriticalityStatus
-    @test sol.objective isa Real
-    @test eltype(sol.primal_vars) <: Real
+    @test results.status isa Traulls.CriticalityStatus
+    @test results.objective isa Real
+    @test eltype(results.solution) <: Real
 end

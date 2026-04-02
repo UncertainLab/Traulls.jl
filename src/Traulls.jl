@@ -15,7 +15,7 @@ abstract type Projector{T} end
 
 # Utils
 for f in ["print_info", "polyhedral_constraints", "trust_region", "cg", "hessian", 
-    "al_utils",  "workspace", "model"]
+    "al_utils",  "workspace", "execution_metrics", "model"]
 
     include("$f.jl")
 end

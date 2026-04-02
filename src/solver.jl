@@ -137,7 +137,6 @@ function solve(model::CnlsModel;
     # Prepare output stream to log iteration detail
     output_io = (output_file_name == "" ? stdout : open(output_file_name,"w"))
 
-
     # Dimensions of the problem
     n, nres, ncons = model.n, model.nres, model.ncons
     lincons_present = model.nlincons > 0
@@ -194,6 +193,8 @@ function solve(model::CnlsModel;
     verbose && print_boconls_header(n,nres,ncons,xlow,xupp,min_reltol_crit,min_tol_feas,
                                     tau;io=output_io)
     verbose && print_tr_header(tr;io=output_io)
+
+    start_time = time()
 
     while !solved && iter <= max_iter
 
@@ -255,10 +256,6 @@ function solve(model::CnlsModel;
         fx  = dot(rx,rx) # Evaluate objective
     end
 
-    verbose && print_termination_info(iter,mu,fx,pix,feas_measure;io=output_io)
-
-    model.x .= x
-
     solving_status = if solved
         first_order_critical
         elseif feas_measure <= min_tol_feas
@@ -267,10 +264,17 @@ function solve(model::CnlsModel;
         infeasible_non_critical
     end
 
+    #TODO: add counters within the execution
+    counters = TraullsCounters()
+    elapsed_time = time() - start_time
+    results = TraullsResults(x, y, fx, feas_measure, pix, solving_status, counters,
+                             elapsed_time)
+
+    verbose && print(output_io, results)
     # Close output stream
     output_file_name != "" && close(output_io)
 
-    return PrimalDualSolution(model.x, y, fx, pix, feas_measure, solving_status)
+    return results
 
 end
 

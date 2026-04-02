@@ -52,7 +52,7 @@ function print_outer_iter_header(
         @printf(io, "%.7e   %.6e   %.2e     %.2e     %.2e", objective, nl_feas, mu, pix, omega)
     end
     println(io,"\n",'='^80)
-    println(io,"iter     AL value       ||s||        Δ          ρ")
+    println(io,"iter     AL value       ||s||        Δ           ρ")
     return
 end
 
@@ -64,7 +64,7 @@ function print_inner_iter(
     rho::Float64;
     io::IO=stdout) 
 
-    @printf(io, "%4d   %.6e   %.2e   %.2e   %.2e\n", iter, obj, norm_step, radius, rho)
+    @printf(io, "%4d   %.6e   %.2e   %.2e   %9.2e\n", iter, obj, norm_step, radius, rho)
     return
 end
 
