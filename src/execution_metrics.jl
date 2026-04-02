@@ -1,7 +1,25 @@
 # `@enum` type for the different termination status in Traulls
 @enum CriticalityStatus first_order_critical feasible_non_critical infeasible_non_critical
 
-# Structure whose fields store the number of function evaluations
+#
+"""
+    TraullsCounters
+
+Structure whose fields store the number of function evaluations and iterations performed
+during the execution of Traulls.
+
+# Attributes
+
+- `nres_eval`: number of evaluations of the residuals
+- `ncons_eval`: number of evaluations of the nonlinear constraints
+- `nobj_eval`: number of evaluations of the objective
+- `njacres_eval`: number of evaluations of the residuals Jacobian
+- `jaccons_eval`: number of evaluations of the nonlinear constraints Jacobian
+- `nalobj_eval`: number of evaluations of the augmented Lagrangian objective
+- `nalgrad_eval`: number of evaluations of the augmened Lagrangian gradient
+- `niter_outer`: total number of outer iterations
+- `niter_inner`: total number of inner iterations
+"""
 mutable struct TraullsCounters
 
     # Residuals and constraints evaluation
@@ -34,7 +52,25 @@ function reset!(counters::TraullsCounters)
 
 end
 
-# Structure storing the execution infos
+"""
+    TraullsResults
+
+Mutable structure gathering the informations about a solution computed by `Traulls` solver.
+
+# Attributes
+
+- `solution`: optimal solution of the optimization problem found by the solver
+- `lagrange_mults`: vector of Lagrange multipliers associated to the equality constraints at
+ the solution
+- `objective`: value of the objective function, i.e. the squared sum of residuals at
+solution
+- `feasibility`: norm of the equality constraints at the solution
+- `criticality`: value of the criticality measure, i.e. measure of optimality, at the
+solution
+- `counters`: structure of type `TraullsCounters` storing the number of evaluation functions
+ and iterations performed
+- `elapsed_time`: solving time measured during the execution in seconds
+"""
 mutable struct TraullsResults{T}
 
     solution::Vector{T}
@@ -51,6 +87,7 @@ end
 
 import Base.print, Base.println
 
+# Pretting printing for `TraullsResults`
 function print(io::IO, results::TraullsResults)
 
     println(io, "\n")
