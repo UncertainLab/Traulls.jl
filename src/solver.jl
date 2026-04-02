@@ -158,6 +158,7 @@ function solve(model::CnlsModel;
     y = least_squares_multipliers(rx, J, C) # Initial Lagrange mutipliers
                                             # estimates
     g = al_grad(rx, cx, y, mu, J, C)        # Gradient of the AL
+    model.counters.nalgrad_eval += 1
 
     # Ininitialize Hessian approximation
     hess_op = @match hessian_approx begin
@@ -169,19 +170,15 @@ function solve(model::CnlsModel;
     tr = TrustRegion(accept_treshold, increase_treshold, decrease_factor,
     increase_factor, neg_ratio_factor)
 
-    # # Set up coordinate subspace projector
-    # proj_op = projector_operator(model, Val(false))
-    # proj_op = CoordinateSubspaceProjector(n)
     # Set up tolerances
     reltol_crit, tol_feas = initial_tolerances(mu, omega0, eta0, k_crit, k_feas)
 
     # Initial values of objective, feasibility and criticality
     fx = dot(rx,rx)
+    model.counters.nobj_eval += 1
     feas_measure = norm(cx, Inf)
     gproj = inner_workspace.proj_g
 
-    # TODO: add computation of criticality measure for polyhedral problem
-    # (when lincons_present = true)
     pix = lincons_present ?
         criticality_measure(x, g, gproj, proj_op) :
         criticality_measure(x, g, gproj, xlow, xupp)
@@ -194,6 +191,8 @@ function solve(model::CnlsModel;
                                     tau;io=output_io)
     verbose && print_tr_header(tr;io=output_io)
 
+    # Set counters
+    reset!(model.counters)
     start_time = time()
 
     while !solved && iter <= max_iter
@@ -265,9 +264,11 @@ function solve(model::CnlsModel;
     end
 
     #TODO: add counters within the execution
-    counters = TraullsCounters()
-    elapsed_time = time() - start_time
-    results = TraullsResults(x, y, fx, feas_measure, pix, solving_status, counters,
+
+    elapsed_time = time() - start_time # Save execution time
+    model.counters.niter_outer = iter  # Save number of outer iterations
+
+    results = TraullsResults(x, y, fx, feas_measure, pix, solving_status, model.counters,
                              elapsed_time)
 
     verbose && print(output_io, results)
@@ -437,7 +438,8 @@ function solve_subproblem!(
     # Evaluate objective and gradient of the AL at current point (x,y)
 
     alx = al_objgrad!(rx,cx,y,mu,J,C,g)
-
+    model.counters.nalgrad_eval += 1
+    model.counters.nalobj_eval += 1
     # Reset Hessian approximation and projector operator
     @match hessian_approx begin
         $gn     => reset_hessian!(hess_op,J,C,mu)
@@ -499,6 +501,7 @@ function solve_subproblem!(
         residuals!(model, rx, x)
         nlconstraints!(model, cx, x)
         alx = al_obj(rx,cx,y,mu)
+        model.counters.nalobj_eval += 1
 
         # Step taken on the slack variables, if any
         if nslack > 0
@@ -518,6 +521,7 @@ function solve_subproblem!(
             # step to pred
             pred -= alx
             alx = al_obj(rx,cx,y,mu)
+            model.counters.nalobj_eval += 1
             pred += alx
 
         end
@@ -532,6 +536,7 @@ function solve_subproblem!(
             jac_residuals!(model, J, x)
             jac_nlconstraints!(model, C, x)
             al_grad!(rx,cx,y,mu,J,C,g)
+            model.counters.nalgrad_eval += 1
 
             # Update Hessian approximation
             if hessian_approx == gn
@@ -565,6 +570,9 @@ function solve_subproblem!(
         solved = pix <= reltol_crit * tol_scale_factor
         iter += 1
     end
+
+    # Save number of inner iterations
+    model.counters.niter_inner += iter
 
     return pix
 end

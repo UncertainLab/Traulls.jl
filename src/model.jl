@@ -76,6 +76,9 @@ mutable struct CnlsModel{T<:Real} <: AbstractCnlsModel{T}
 
     # Starting point
     x::Vector{T}
+
+    # Counters
+    counters::TraullsCounters
 end
 
 # Constructor with in-place evaluation functions for a model with a mix of equalities and
@@ -114,7 +117,7 @@ function CnlsModel!(
     xstart = vcat(x0, u0)
 
     return CnlsModel(r!, h!, g!, jac_r!, jac_h!, jac_g!, lincons, b, xlow, xupp, n, nslack,
-                     nres, ncons, nlincons, xstart)
+                     nres, ncons, nlincons, xstart, TraullsCounters())
 end
 
 # Constructor with out-of-place evaluation functions for a model with a mix of
@@ -191,7 +194,7 @@ function CnlsModel!(
     ::Val{:only_equalities}) where T
 
     CnlsModel(r!, c!, nothing, jac_r!, jac_c!, nothing, A, b, low, upp, nvar, 0, nres,
-              ncons, size(A,1), x0)
+              ncons, size(A,1), x0, TraullsCounters())
 end
 
 function CnlsModel!(
@@ -225,7 +228,7 @@ function CnlsModel!(
     x_start = vcat(x0,u0)
 
     CnlsModel(r!, nothing, c!, jac_r!, nothing, jac_c!, lincons, b, xlow, xupp, n,
-              nslack, nres, ncons, nlincons, xstart)
+              nslack, nres, ncons, nlincons, xstart, TraullsCounters())
 end
 
 function CnlsModel(
@@ -299,7 +302,7 @@ function CnlsModel!(
     xstart = vcat(x0, u0)
 
     CnlsModel(r!, h!, g!, jac_r!, jac_h!, jac_g!, zeros(T,1,1), zeros(T,1),
-               xlow, xupp, n, nslack, nres, ncons, 0, xstart)
+               xlow, xupp, n, nslack, nres, ncons, 0, xstart, TraullsCounters())
 end
 
 # Constructor with out of place evaluation functions for models with mixed equalities and
@@ -371,7 +374,7 @@ function CnlsModel!(
     ::Val{:only_equalities}) where T
 
     CnlsModel(r!, c!, nothing, jac_r!, jac_c!, nothing, zeros(T,1,1), zeros(T,1), low, upp,
-              nvar, 0, nres, ncons, 0, x0)
+              nvar, 0, nres, ncons, 0, x0, TraullsCounters())
 end
 
 # Constructor with in-place evaluation functions for model with only inequalities and bounds
@@ -403,7 +406,7 @@ function CnlsModel!(
     xstart = vcat(x0,u0)
 
     CnlsModel(r!, nothing, c!, jac_r!, nothing, jac_c!, zeros(T,1,1), zeros(T,1), xlow,
-              xupp, n, nslack, nres, ncons, 0, xstart)
+              xupp, n, nslack, nres, ncons, 0, xstart, TraullsCounters())
 end
 
 # Constructor for model with only equalities or inequalities and bounds on the variables
@@ -453,6 +456,7 @@ result in `res`.
 function residuals!(model::CnlsModel{T}, rx::Vector{T}, x::Vector{T}) where T
     x_var = view(x, 1:model.n)
     model.res!(rx, x_var)
+    model.counters.nres_eval += 1
     return
 end
 
@@ -481,6 +485,7 @@ function nlconstraints!(model::CnlsModel{T}, cx::Vector{T}, x::Vector{T}) where 
 
     x_var = view(x,1:n_var)
 
+
     # Equality constraints components
     if p_eq > 0
         hx = view(cx,1:p_eq)
@@ -494,6 +499,8 @@ function nlconstraints!(model::CnlsModel{T}, cx::Vector{T}, x::Vector{T}) where 
         model.nlineq!(gxmu, x_var)   # gxmu ← g(x)
         gxmu .-= x_slack             # gxmu ← gxmu - u
     end
+
+    model.counters.ncons_eval += 1
 
     return
 end
@@ -530,6 +537,7 @@ function jac_residuals!(model::CnlsModel{T}, J::Matrix{T}, x::Vector{T}) where T
         J[:,n_var+1:end] .= zeros(m,n_slack)
     end
 
+    model.counters.njacres_eval += 1
     return
 end
 
@@ -582,6 +590,7 @@ function jac_nlconstraints!(model::CnlsModel{T}, C::Matrix{T}, x::Vector{T}) whe
         C[ineqrows, islack] .= Diagonal{T}(-I,n_slack)
     end
 
+    model.counters.njaccons_eval += 1
     return
 end
 

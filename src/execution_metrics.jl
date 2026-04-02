@@ -53,7 +53,9 @@ import Base.print, Base.println
 
 function print(io::IO, results::TraullsResults)
 
-    println(io, "\n\n")
+    println(io, "\n")
+    println(io, "Finished in $(results.counters.niter_outer) outer iterations
+(with $(results.counters.niter_inner) total inner iterations)\n")
     println(io, "Squared sum of residuals............................: ",
             @sprintf("%.6e", results.objective))
     println(io, "Criticality measure.................................: ",
@@ -66,9 +68,11 @@ function print(io::IO, results::TraullsResults)
     println(io, "Execution time......................................: ",
             @sprintf("%.3f seconds", results.elapsed_time))
     println(io, "Number of residuals evaluations.....................:",
-            @sprintf("%d", results.counters.nres_eval))
+            @sprintf(" %d", results.counters.nres_eval))
     println(io, "Number of residuals Jacobian evaluations............:",
-            @sprintf("%d", results.counters.njacres_eval))
+            @sprintf(" %d", results.counters.njacres_eval))
+    println(io, "Number of AL gradient evaluations...................:",
+            @sprintf(" %d", results.counters.nalgrad_eval))
 end
 
 println(io::IO, results::TraullsResults) = print(io,results)
