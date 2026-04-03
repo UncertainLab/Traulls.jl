@@ -1,3 +1,6 @@
+debug_io = open("debug_hs65.out", "w")
+debug = true
+
 """
     solve(model; kwargs...)
 
@@ -128,6 +131,8 @@ function solve(model::CnlsModel;
     output_file_name::String="",
     verbose::Bool=false)
 
+    global debug_io
+    global debug
     # Sanity checks on arguments
     # Trust region parameters
     !(0 < accept_treshold <= increase_treshold < 1 &&
@@ -140,6 +145,8 @@ function solve(model::CnlsModel;
     # Dimensions of the problem
     n, nres, ncons = model.n, model.nres, model.ncons
     lincons_present = model.nlincons > 0
+    debug && println(debug_io, "[solve] number of variables: $n")
+
 
     # Make initial point feasible and form subspace projector operator
     x = model.x
@@ -173,6 +180,7 @@ function solve(model::CnlsModel;
     # Set up tolerances
     reltol_crit, tol_feas = initial_tolerances(mu, omega0, eta0, k_crit, k_feas)
 
+    debug && @printf(debug_io, "[solve] reltol_crit = %.4e ; tol_feas = %.4e\n", reltol_crit, tol_feas)
     # Initial values of objective, feasibility and criticality
     fx = dot(rx,rx)
     model.counters.nobj_eval += 1
@@ -187,16 +195,17 @@ function solve(model::CnlsModel;
 
     iter = 1
 
-    verbose && print_boconls_header(n,nres,ncons,xlow,xupp,min_reltol_crit,min_tol_feas,
-                                    tau;io=output_io)
-    verbose && print_tr_header(tr;io=output_io)
+    # verbose && print_boconls_header(n,nres,ncons,xlow,xupp,min_reltol_crit,min_tol_feas,
+    #                                 tau;io=output_io)
+    # verbose && print_tr_header(tr;io=output_io)
 
+    verbose && print_traulls_header(model, min_reltol_crit, min_tol_feas, tau, tr)
     # Set counters
     reset!(model.counters)
     start_time = time()
 
     while !solved && iter <= max_iter
-
+        debug && println(debug_io, "\n[solve] outer iter $iter")
         verbose && print_outer_iter_header(iter,fx,feas_measure,mu,pix,reltol_crit; io=output_io)
 
         pix = solve_subproblem!(
@@ -224,7 +233,7 @@ function solve(model::CnlsModel;
             verbose=verbose,
             io=output_io)
 
-            feas_measure = norm(cx,Inf)
+            feas_measure = norm(cx, Inf)
 
             if feas_measure <= tol_feas
 
@@ -263,8 +272,6 @@ function solve(model::CnlsModel;
         infeasible_non_critical
     end
 
-    #TODO: add counters within the execution
-
     elapsed_time = time() - start_time # Save execution time
     model.counters.niter_outer = iter  # Save number of outer iterations
 
@@ -274,7 +281,7 @@ function solve(model::CnlsModel;
     verbose && print(output_io, results)
     # Close output stream
     output_file_name != "" && close(output_io)
-
+    close(debug_io)
     return results
 
 end
@@ -423,6 +430,8 @@ function solve_subproblem!(
     verbose::Bool=false,
     io::IO=stdout) where T
 
+    global debug_io
+    global debug
     # Dimensions
     n, nslack, ncons = model.n, model.nslack, model.ncons
     lincons_present = model.nlincons > 0
@@ -436,8 +445,9 @@ function solve_subproblem!(
     gproj = workspace.proj_g # projected gradient
 
     # Evaluate objective and gradient of the AL at current point (x,y)
-
+    debug && println(debug_io, "[solve_subproblem] ∇Lₐ avant calcul: ", g)
     alx = al_objgrad!(rx,cx,y,mu,J,C,g)
+    debug && println(debug_io, "[solve_subproblem] ∇Lₐ apres calcul: ", g)
     model.counters.nalgrad_eval += 1
     model.counters.nalobj_eval += 1
     # Reset Hessian approximation and projector operator
@@ -458,9 +468,12 @@ function solve_subproblem!(
         criticality_measure(x, g, gproj, proj_op) :
         criticality_measure(x, g, gproj, xlow, xupp)
 
-    tol_scale_factor = max(1, norm(g, Inf))
-    solved = pix <= reltol_crit * tol_scale_factor
 
+    tol_scale_factor = max(1, norm(g, Inf))
+
+    debug && @printf(debug_io, "[solve_subproblem] πx = %.3e ; rtol = %.3e ; scale_factor = %.3e\n", pix, reltol_crit, tol_scale_factor)
+    solved = pix <= reltol_crit * tol_scale_factor
+    println(debug_io, "[solve_subproblem] Initial solved status: $solved")
     short_circuit = false
 
     iter = 1
@@ -571,6 +584,7 @@ function solve_subproblem!(
         iter += 1
     end
 
+    debug && println(debug_io, "[solve_subproblem] Number of inner iterations: $iter")
     # Save number of inner iterations
     model.counters.niter_inner += iter
 

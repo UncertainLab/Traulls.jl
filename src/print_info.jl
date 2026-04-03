@@ -34,6 +34,36 @@ function print_boconls_header(
     return
 end
 
+function print_traulls_header(
+    model::CnlsModel{T},
+    omega_rel::T,
+    feas_tol::T,
+    tau::T,
+    tr::TrustRegion{T};
+    io::IO=stdout) where T
+
+    print(io,"\n\n")
+    println(io, '*'^80)
+    println(io, "*",' '^78,"*")
+
+    println(io, "*"," "^31,"Traulls.jl v-DEV"," "^31,"*")
+    println(io, "*",' '^78,"*")
+    println(io, "*       Trust Region Augmented Lagrangian nonLinear Least-squares Solver       *")
+    println(io, "*",' '^78,"*")
+    println(io, '*'^80)
+
+    # Problem information
+    println(io, model)
+
+    println(io, "\nAlgorithm parameters")
+    println(io, "Relative criticality tolerance.......................: ", @sprintf("%.6e", omega_rel))
+    println(io, "Feasibility tolerance for equality constraints.......: ", @sprintf("%.6e", feas_tol))
+    println(io, "Increase penalty parameter factor....................: ", @sprintf("%5f", tau))
+    println(io,"\n")
+
+    println(io, tr)
+end
+
 function print_outer_iter_header(
     iter::Int,
     objective::Float64,
@@ -52,7 +82,7 @@ function print_outer_iter_header(
         @printf(io, "%.7e   %.6e   %.2e     %.2e     %.2e", objective, nl_feas, mu, pix, omega)
     end
     println(io,"\n",'='^80)
-    println(io,"iter     AL value       ||s||        Δ           ρ")
+    println(io,"iter      AL value       ||s||        Δ           ρ")
     return
 end
 
@@ -64,24 +94,24 @@ function print_inner_iter(
     rho::Float64;
     io::IO=stdout) 
 
-    @printf(io, "%4d   %.6e   %.2e   %.2e   %9.2e\n", iter, obj, norm_step, radius, rho)
+    @printf(io, "%4d   %13.6e   %.2e   %.2e   %9.2e\n", iter, obj, norm_step, radius, rho)
     return
 end
 
-function print_termination_info(
-    iter::Int,
-    mu::Float64,
-    obj::Float64,
-    criticality::Float64,
-    feasibility::Float64;
-    io::IO=stdout)
+# function print_termination_info(
+#     iter::Int,
+#     mu::Float64,
+#     obj::Float64,
+#     criticality::Float64,
+#     feasibility::Float64;
+#     io::IO=stdout)
 
-    println(io,"\n",'='^80)
-    println(io, "\nTerminated after $(iter-1) outer iterations\n")
-    println(io, "Squared sum of residuals............................: ", @sprintf("%.6e", obj))
-    println(io, "Criticality measure.................................: ", @sprintf("%.6e", criticality))
-    println(io, "Feasibility of equality constraints.................: ", @sprintf("%.6e", feasibility))
-    println(io, "Final value of the penalty parameter................: ", @sprintf("%.3e", mu))
+#     println(io,"\n",'='^80)
+#     println(io, "\nTerminated after $(iter-1) outer iterations\n")
+#     println(io, "Squared sum of residuals............................: ", @sprintf("%.6e", obj))
+#     println(io, "Criticality measure.................................: ", @sprintf("%.6e", criticality))
+#     println(io, "Feasibility of equality constraints.................: ", @sprintf("%.6e", feasibility))
+#     println(io, "Final value of the penalty parameter................: ", @sprintf("%.3e", mu))
 
-    return
-end
+#     return
+# end

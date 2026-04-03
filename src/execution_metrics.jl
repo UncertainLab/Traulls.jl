@@ -85,8 +85,6 @@ mutable struct TraullsResults{T}
     elapsed_time::T
 end
 
-import Base.print, Base.println
-
 # Pretting printing for `TraullsResults`
 function print(io::IO, results::TraullsResults)
 

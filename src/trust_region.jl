@@ -26,22 +26,19 @@ function TrustRegion(eta1::T, eta2::T, alpha1::T, alpha2::T, gamma2::T) where T
     TrustRegion(Inf, eta1, eta2, alpha1, alpha2, gamma2)
 end
 
-"""
-    print_tr_header(tr;io)
-
-Prints in a formated way the parameters of a trust region `tr` within input/output flow `io` (default is `stdout`).
-"""
-function print_tr_header(tr::TrustRegion;io::IO=stdout) 
-    println(io,"\nTrust Region parameters")
+# Pretty printing of a trust region parameters
+function print(io::IO, tr::TrustRegion)
+    println(io, "Trust Region parameters")
     println(io, "Step acceptance treshold.............................: ", @sprintf("%5f", tr.accept_treshold))
     println(io, "Radius increase treshold.............................: ", @sprintf("%5f", tr.increase_treshold))
     println(io, "Radius increase factor...............................: ", @sprintf("%5f", tr.increase_factor))
     println(io, "Radius decrease factor...............................: ", @sprintf("%5f", tr.decrease_factor))
     println(io, "Negative ratio decrease factor.......................: ", @sprintf("%5f", tr.neg_ratio_factor))
-    println(io,"\n")
+
 end
 
-""" 
+println(io::IO, tr::TrustRegion) = print(io, "\n", tr)
+"""
     set_initial_radius!(tr,g;κ,p)
 
 Set the field `radius` of the trust region `tr` to `κ*||g||ₚ`, where:

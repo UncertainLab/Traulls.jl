@@ -393,6 +393,7 @@ function CnlsModel!(
     ::Val{:only_inequalities}) where T
 
     # Adjust dimensions for slack variables
+
     nslack = ncons
     n = nvar + nslack
 
@@ -605,3 +606,22 @@ function jac_nlconstraints(model::CnlsModel{T},x::Vector{T}) where T
     jac_nlconstraints!(model, Cx, x)
     return Cx
 end
+
+function print(io::IO, model::CnlsModel)
+
+    n, nslack, nres, ncons = model.n, model.nslack, model.nres, model.ncons
+    nvar = n - nslack
+
+    println(io, "Problem dimensions")
+    println(io, "Number of parameters.................: ", @sprintf("%5i", nvar))
+    println(io, "Number of slack variables............: ", @sprintf("%5i", nslack))
+    println(io, "Number of residuals..................: ", @sprintf("%5i", nres))
+    println(io, "Number of nonlinear constraints......: ", @sprintf("%5i", ncons))
+    println(io, "Number of linear constraints.........: ", @sprintf("%5i", model.nlincons))
+    println(io, "Number of lower bounds...............: ", @sprintf("%5i",
+                                                                    count(isfinite, model.xlow)))
+    println(io, "Number of upper bounds...............: ", @sprintf("%5i",
+                                                                    count(isfinite, model.xupp)))
+end
+
+println(io::IO, model::CnlsModel) = print(io,"\n", model)
