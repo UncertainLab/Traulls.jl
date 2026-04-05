@@ -292,8 +292,11 @@ function update_sr1_second_order!(sr1_op::SR1{T}) where T
     # Apply update if denominator (y - Ss)ᵀs not too small
     denom = dot(s,ymSs)
     if abs(denom) > max(eps_safeguard, eps_safeguard * norm(s) * norm(ymSs))
+        # println("[update_sr1_second_order] update not skipped")
+        # println("[update_sr1_second_order] S before update: ", sr1_op.S)
         # Add (y - Ss)(y - Ss)ᵀ / (y - Ss)ᵀs to second order terms approximation
         mul!(sr1_op.S, ymSs, ymSs', 1/denom, 1)
+        # println("[update_sr1_second_order] S after update: ", sr1_op.S)
     end
 
     return
