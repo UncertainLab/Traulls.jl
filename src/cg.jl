@@ -73,7 +73,9 @@ function pcg!(
     kappa_cg::T;
     atol::T = sqrt(eps(T))) where T
 
-    
+    global debug
+    global debug_io
+
     n = size(b,1)
 
     w .= 0.0
@@ -101,9 +103,12 @@ function pcg!(
         pHp = dot(p,Hp)
 
         if pHp <= tol_negcurve
+
             # Negative curvature 
             # Compute direction that stops at the feasible box and stop cg iterations
             neg_curvature = true
+            debug && @printf(debug_io, "\n[pcg!] ||p|| ≈ %.4e", norm(p,Inf))
+            debug && @printf(debug_io, "\n[pcg!] pᵀHp ≈ %.4e", pHp)
             if abs(pHp) > tol_negcurve # nonzero curvature
                 gamma = factor_to_boundary(p,w,w_l,w_u,P)
                 w .+= p .* gamma

@@ -193,7 +193,10 @@ function solve(
     pix = lincons_present ?
         criticality_measure(x, g, gproj, proj_op) :
         criticality_measure(x, g, gproj, xlow, xupp)
-    tol_scale_factor = max(1, norm(g, Inf))
+
+    # tol_scale_factor = max(1, norm(g, Inf))
+    tol_scale_factor = 1 + norm(g)
+
     solved = feas_measure <= min_tol_feas && pix <= reltol_crit * tol_scale_factor
 
     iter = 1
@@ -240,19 +243,30 @@ function solve(
         debug && println(debug_io, "[solve] after inner exit πx = ", pix)
         # Evaluate feasibility and objective
         feas_measure = norm(cx, Inf)
+        g .= J'*rx + C'*y
         fx  = dot(rx,rx)
 
         update_multipliers = feas_measure <= tol_feas
 
         if update_multipliers
 
-            # Evaluate termination status
-            tol_scale_factor = max(1, norm(g, Inf))
-            solved = feas_measure <= min_tol_feas &&
-                pix <= reltol_crit * tol_scale_factor
-
             # Update Lagrange multipliers
             first_order_multipliers!(y, cx, mu)
+
+            # Evaluate termination status
+            g .= J'*rx + C'*y # Lagrangian gradient
+
+            norm_proj_gradlag = lincons_present ?
+                criticality_measure(x, g, gproj, proj_op) :
+                criticality_measure(x, g, gproj, xlow, xupp)
+
+            # tol_scale_factor = max(1, norm(g, Inf))
+            tol_scale_factor = 1 + norm(g)
+
+            solved = feas_measure <= min_tol_feas &&
+                norm_proj_gradlag <= reltol_crit * tol_scale_factor
+
+
 
             if !solved
                 # Update the iterate, multipliers and decrease tolerances
@@ -479,8 +493,8 @@ function solve_subproblem!(
         criticality_measure(x, g, gproj, xlow, xupp)
 
 
-    tol_scale_factor = max(1, norm(g, Inf))
-
+    # tol_scale_factor = max(1, norm(g, Inf))
+    tol_scale_factor = 1 + norm(g)
     # debug && @printf(debug_io, "[solve_subproblem] πx = %.3e ; rtol = %.3e ; scale_factor = %.3e\n", pix, reltol_crit, tol_scale_factor)
     solved = pix <= reltol_crit * tol_scale_factor
     # println(debug_io, "[solve_subproblem] Initial solved status: $solved")
@@ -492,7 +506,7 @@ function solve_subproblem!(
 
     while !solved && iter <= max_iter && !short_circuit
 
-        debug && println(debug_io,"[solve_subproblem] inner iter $iter")
+        debug && println(debug_io,"\n[solve_subproblem] inner iter $iter")
         x_prev .= x
         rx_prev .= rx
         cx_prev .= cx
@@ -599,7 +613,9 @@ function solve_subproblem!(
         verbose && print_inner_iter(iter, alx_prev, norm_step, radius, ratio;io=io)
 
         debug && println(debug_io, "[solve_subproblem] criticality after step computation : $(pix)")
-        tol_scale_factor = max(1, norm(g, Inf))
+
+        # tol_scale_factor = max(1, norm(g, Inf))
+        tol_scale_factor = 1 + norm(g)
         solved = pix <= reltol_crit * tol_scale_factor
         iter += 1
     end
@@ -684,18 +700,29 @@ function projected_gradient!(
                 xupp,
                 radius)
 
-    debug && @printf(debug_io, "\n[projected_gradient]norm Cauchy step: %.4e\n", norm(s,Inf))
-    debug && println(debug_io, "Number of active constraints : ", count(proj_op.fixvars))
+    n_active_aftercauchy = count(proj_op.fixvars)
 
     # Form implicit bounds on the search direction
     w_low, w_upp = workspace.step_low, workspace.step_upp
     w_low .= (t -> max(-radius, t)).(xlow-x) .- s
-    w_upp .= (t -> min(radius,t)).(xupp-x) .- s
+    w_upp .= (t -> min(radius, t)).(xupp-x) .- s
+
+
+    # Update the set of fixed variables (implicitly updates the null space matrix Z)
+    update_active_set!(s, x, xlow, xupp, radius, proj_op)
 
     # Set up for conjugate gradient iterations
     mul!(Hs, hess_op, s)
     b = workspace.cg_rhs
     b .= Hs .+ g
+
+    n_active = count(proj_op.fixvars)
+
+    if n_active_aftercauchy > 0
+        debug && @printf(debug_io, "[projected_gradient]norm Cauchy step: %.4e\n", norm(s,Inf))
+        debug && println(debug_io, "Number of active constraints after Cauchy step: ", n_active_aftercauchy)
+        debug && println(debug_io, "Number of active constraints before CG iterations", n_active)
+    end
 
     # Buffers
     w = workspace.search_dir
@@ -787,6 +814,9 @@ function cauchy_step!(
     xupp::AbstractVector{T},
     radius::T) where T
 
+    global debug
+    global debug_io
+
     n = size(x,1)
     # Accumulated Cauchy step
     s .= 0.0
@@ -800,9 +830,11 @@ function cauchy_step!(
     # Handle the case where the first breakpoint is zero
     # Happens when bounds are active at x
     if iszero(breakpoints[1])
+
         popfirst!(breakpoints)                      # get rid of breakpoint tb = zero
-        first_active_indx = popfirst!(grp_idx)
-        update_projector!(proj_op,first_active_indx)
+        first_active_index = popfirst!(grp_idx)
+        debug && println(debug_io, "[cauchy_step] components with breakpoint at 0 = $(size(first_active_index,1))")
+        update_projector!(proj_op,first_active_index)
         mul!(d,proj_op,-g)
     end
 
@@ -1127,10 +1159,9 @@ function criticality_measure(
     x::AbstractVector{T},
     g::AbstractVector{T},
     projg::AbstractVector{T},
-    proj_op::SubspaceProjector{T};
-    p::Float64 = Inf) where T
+    proj_op::SubspaceProjector{T}) where T
 
     mul!(projg, proj_op, g)
 
-    norm(projg, p)
+    norm(projg)
 end

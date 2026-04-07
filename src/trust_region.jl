@@ -41,7 +41,7 @@ println(io::IO, tr::TrustRegion) = print(io, "\n", tr)
 """
     set_initial_radius!(tr,g;κ,p)
 
-Set the field `radius` of the trust region `tr` to `κ*||g||ₚ`, where:
+Set the field `radius` of the trust region `tr` to `max(1, κ*||g||ₚ)`, where:
 
 - `g` is the gradient of the objective function to minimize
 - `κ` is a constant (default value to `0.1`)
@@ -55,7 +55,7 @@ function set_initial_radius!(
     kappa_radius::T = T(0.1),
     p::T = T(Inf)) where T
 
-    tr.radius = kappa_radius * norm(g,p)
+    tr.radius = max(T(1), kappa_radius * norm(g,p))
     return
 end
 
@@ -94,6 +94,8 @@ function step_ratio(
     mx_trial::T,
     pred::T) where T
 
+    global debug
+    global debug_io
 
     eps_ratio = 10 * eps(T)
     delta_ratio = eps_ratio * max(1, abs(mx_trial))
@@ -103,6 +105,12 @@ function step_ratio(
     delta_pred = pred - delta_ratio
 
     ratio = abs(delta_ared) < eps_ratio && abs(delta_pred) < eps_ratio ? 1.0 : delta_ared / delta_pred
+
+    if ratio < 0 || ratio > T(1)
+
+        debug && @printf(debug_io,"\n[step_ratio] ratio = %.2e ; ared = %.4e ; pred = %.4e ", ratio, mx_trial - mx, pred)
+    end
+
 
     return ratio
 end

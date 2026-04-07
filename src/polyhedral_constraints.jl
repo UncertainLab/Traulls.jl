@@ -504,10 +504,15 @@ function reset_projector!(P::CoordinateSubspaceProjector)
     return
 end
 
+# Set component at index `i` active
+@inline function set_active!(P::CoordinateSubspaceProjector, i::Int)
+    P.fixvars[i] = true
+end
+
 # Set active the components of indices in `newly_active` into the projector
 # `P`
 
-function update_projector!(P::CoordinateSubspaceProjector, newly_active::Vector{Int})
+@inline function update_projector!(P::CoordinateSubspaceProjector, newly_active::Vector{Int})
 
     P.fixvars[newly_active] .= true
 
@@ -516,7 +521,7 @@ end
 
 # Identify which bounds from the box `[max(-Δ,ℓ), min(Δ,u)]` become active at
 # trial point `x + s` and set accordingly the coordinate subspace projector `P`.
-# Activity of bounds is measured up to positive tolerance `atol`.
+# Activity of bounds is measured up to positive tolerance `eps_active`.
 
 function update_active_set!(
     s::Vector{T},
@@ -525,21 +530,30 @@ function update_active_set!(
     x_upp::Vector{T},
     radius::T,
     P::CoordinateSubspaceProjector{T};
-    atol::T=sqrt(eps(T))) where T
+    eps_bound::T=sqrt(eps(T))) where T
 
-    newly_active = Vector{Int}([])
+    # newly_active = Vector{Int}([])
+
+    # for i in axes(x,1)
+    #     if !P.fixvars[i] &&
+    #         (s[i] <= atol + max(-radius,x_low[i] - x[i]) ||
+    #         min(radius,x_upp[i] - x[i])  <= s[i] + atol)
+
+    #         push!(newly_active,i)
+    #     end
+    # end
+
+    # update_projector!(P, newly_active)
 
     for i in axes(x,1)
-        if !P.fixvars[i] &&
-            (s[i] <= atol + max(-radius,x_low[i] - x[i]) ||
-            min(radius,x_upp[i] - x[i])  <= s[i] + atol)
+        if (s[i] <= eps_bound + max(-radius, x_low[i] - x[i]) ||
+            min(radius, x_upp[i] - x[i])  <= s[i] + eps_bound)
 
-            push!(newly_active,i)
+            P.fixvars[i] = true
+        else
+            P.fixvars[i] = false
         end
     end
-
-    update_projector!(P, newly_active)
-
     return
 end
 
@@ -585,9 +599,9 @@ function sort_breakpoints(
     # Compute the breakpoints
     for i=1:n
         if g[i] > atol
-            breakpoints[i] = max(x_low[i]-x[i],-delta) / -g[i]
+            breakpoints[i] = max(x_low[i]-x[i], -delta) / -g[i]
         elseif g[i] < -atol
-            breakpoints[i] = min(x_upp[i]-x[i],delta) / -g[i]
+            breakpoints[i] = min(x_upp[i]-x[i], delta) / -g[i]
         else
             breakpoints[i] = 0.0
         end 
