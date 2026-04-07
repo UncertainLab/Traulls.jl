@@ -1,5 +1,7 @@
-# debug_io = open("debug_hs65.out", "w")
-# debug = true
+using Dates
+debug_file = string(now(UTC))*"_debuglv511.out"
+debug_io = open(debug_file, "w")
+debug = false
 
 """
     solve(model; kwargs...)
@@ -133,8 +135,8 @@ function solve(
     verbose::Bool=false,
     inner_verbose::Bool=false)
 
-    # global debug_io
-    # global debug
+    global debug_io
+    global debug
     # Sanity checks on arguments
     # Trust region parameters
     !(0 < accept_treshold <= increase_treshold < 1 &&
@@ -147,7 +149,6 @@ function solve(
     # Dimensions of the problem
     n, nres, ncons = model.n, model.nres, model.ncons
     lincons_present = model.nlincons > 0
-    # debug && println(debug_io, "[solve] number of variables: $n")
 
 
     # Make initial point feasible and form subspace projector operator
@@ -208,8 +209,8 @@ function solve(
     start_time = time()
 
     while !solved && iter <= max_iter
-        # debug && println(debug_io, "\n[solve] outer iter $iter")
-        # verbose && print_outer_iter_header(iter,fx,feas_measure,mu,pix,reltol_crit; io=output_io)
+
+        debug && println(debug_io, "\n[solve] outer iter $iter", @sprintf(" relative tolerance : %.6e", reltol_crit))
 
         pix = solve_subproblem!(
             model,
@@ -236,6 +237,7 @@ function solve(
             verbose=inner_verbose,
             io=output_io)
 
+        debug && println(debug_io, "[solve] after inner exit πx = ", pix)
         # Evaluate feasibility and objective
         feas_measure = norm(cx, Inf)
         fx  = dot(rx,rx)
@@ -438,8 +440,8 @@ function solve_subproblem!(
     verbose::Bool=false,
     io::IO=stdout) where T
 
-    # global debug_io
-    # global debug
+    global debug_io
+    global debug
     # Dimensions
     n, nslack, ncons = model.n, model.nslack, model.ncons
     lincons_present = model.nlincons > 0
@@ -490,6 +492,7 @@ function solve_subproblem!(
 
     while !solved && iter <= max_iter && !short_circuit
 
+        debug && println(debug_io,"[solve_subproblem] inner iter $iter")
         x_prev .= x
         rx_prev .= rx
         cx_prev .= cx
@@ -515,7 +518,10 @@ function solve_subproblem!(
         # Check of the trial point is undistinguishable from current solution or
         # if the radius is too small
 
-        short_circuit = check_stalling(s,x,radius)
+        # short_circuit = check_stalling(s,x,radius)
+        short_circuit = false
+
+        # debug && println(debug_io, "[solve_subproblem] max(|sᵢ|/|xᵢ|) = ", maximum(abs.(s ./ (x .+ 1))))
 
         if short_circuit continue end
 
@@ -548,6 +554,8 @@ function solve_subproblem!(
             pred += alx
 
         end
+
+        # debug && println(debug_io, "[solve_subproblem] |fₖ₊₁ - fₖ|/ |fₖ| = ", abs(alx - alx_prev) / abs(alx_prev))
 
         # Compute the ratio actual reduction / predicted reduction
         ratio = step_ratio(alx_prev, alx, pred)
@@ -590,7 +598,7 @@ function solve_subproblem!(
 
         verbose && print_inner_iter(iter, alx_prev, norm_step, radius, ratio;io=io)
 
-        # println("[solve_subproblem] criticality: $(pix)")
+        debug && println(debug_io, "[solve_subproblem] criticality after step computation : $(pix)")
         tol_scale_factor = max(1, norm(g, Inf))
         solved = pix <= reltol_crit * tol_scale_factor
         iter += 1
@@ -656,6 +664,8 @@ function projected_gradient!(
     kappa_cg::T,
     workspace::Workspace{T}) where T
 
+    global debug_io
+    global debug
 
     # Hessian-vector product buffer
     Hs = workspace.hess_vec
@@ -673,6 +683,9 @@ function projected_gradient!(
                 xlow,
                 xupp,
                 radius)
+
+    debug && @printf(debug_io, "\n[projected_gradient]norm Cauchy step: %.4e\n", norm(s,Inf))
+    debug && println(debug_io, "Number of active constraints : ", count(proj_op.fixvars))
 
     # Form implicit bounds on the search direction
     w_low, w_upp = workspace.step_low, workspace.step_upp
@@ -705,6 +718,9 @@ function projected_gradient!(
             p,
             Hs,
             kappa_cg)
+
+        debug && println(debug_io, "\n[projected_gradient] CG status: " , cg_status)
+        debug && @printf(debug_io, "\n[projected_gradient] norm CG direction number %2d : %.4e\n", iter, norm(w,Inf))
 
         # Increment total step
         s .+= w

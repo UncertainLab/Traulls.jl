@@ -181,24 +181,26 @@ end
 function check_stalling(
     s::Vector{T},
     x::Vector{T},
-    delta::T;
-    eps_rel = sqrt(eps(T))) where T
-    
-    # Check is the trial point x+s is undistinguishable (up to `eps_rel`) from current solution x
+    delta::T) where T
+
+    eps_mach = eps(T)
+    eps_comp = sqrt(eps_mach)
+    eps_radius = 10 * eps_mach
+
+    # Check is the trial point x+s is undistinguishable (up to `eps_com`) from current
+    # solution x
     
     small_step = true
     i = 1
 
     while small_step && i <= size(s,1)
-        abs_xi = abs(x[i])
-        eps_step = abs_xi > 0 ? eps_rel*abs_xi : eps_rel
-        small_step = small_step && abs(s[i]) < eps_step
+        small_step = small_step && abs(s[i]) < eps_comp * (1 + abs(x[i]))
         i += 1
     end
 
     # Check if the trust region radius is too small 
     
-    small_radius = delta <= eps_rel * norm(x,Inf)
+    small_radius = delta <= eps_radius * (1 + norm(x, Inf))
 
     return small_step || small_radius
 end
