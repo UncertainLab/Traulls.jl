@@ -78,7 +78,7 @@ function al_grad(
     C::Matrix)  
     
     g = Vector{Float64}(undef,size(J,2))
-    al_grad!(rx,cx,y,mu,J,C,g)
+    al_grad!(rx, cx, y, mu, J, C, g)
     
     return g
 end
@@ -110,7 +110,7 @@ function al_objgrad!(
     g::Vector)  
 
     mx = al_obj(rx,cx,y,mu)
-    al_grad!(rx,cx,y,mu,J,C,g)
+    al_grad!(rx, cx, y, mu, J, C, g)
 
     return mx
 end
@@ -139,9 +139,9 @@ function al_objgrad(
     J::Matrix,
     C::Matrix)  
 
-    mx = al_obj(rx,cx,y,mu)
+    mx = al_obj(rx, cx, y, mu)
     g = Vector{Float64}(undef,size(J,2))
-    al_grad!(rx,cx,y,mu,J,C,g)
+    al_grad!(rx, cx, y, mu, J, C, g)
 
     return mx, g
 end
@@ -241,40 +241,3 @@ function step_slack!(
 
     return
 end
-
-
-
-# """
-#     PrimalDualSolution
-
-# Mutable structure gathering the informations about a solution computed by a solver. Each function associated to a solver returns a struct of this type.
-
-# # Attributes
-
-# - `primal_vars`: Optimal solution of the optimization problem found by the solver
-# - `lagrange_mults`: Lagrange multipliers associated to the equality constraints at the solution
-# - `objective`: value of the objective function; for least-squares problems, it is the squared sum of residuals
-# - `criticality`: value of the criticality measure, i.e. measure of optimality, at the solution
-# - `feasibility`: norm of the equality constraints at the solution
-# """
-# struct PrimalDualSolution
-#     primal_vars::Vector
-#     lagrange_mults::Vector
-#     objective::Float64
-#     criticality::Float64
-#     feasibility::Float64
-#     status::CriticalityStatus
-# end
-
-
-# """
-#     print_solution(sol;io=stdout)
-
-# Formats and prints in `io` (default is the stantard output `stdout`) the fields of a primal-dual solution encoded in `sol`.
-# """
-# function print_solution(sol::PrimalDualSolution;io::IO=stdout)
-#     println(io, "Squared sum of residuals............................: ", @sprintf("%.6e", sol.objective))
-#     println(io, "Criticality measure.................................: ", @sprintf("%.6e", sol.criticality))
-#     println(io, "Feasibility of equality constraints.................: ", @sprintf("%.6e", sol.feasibility))
-#     println(io, "Termination status..................................: $(sol.status)")
-# end
