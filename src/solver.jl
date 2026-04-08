@@ -113,7 +113,7 @@ function solve(
     tau::Float64 = 10.0,
     omega0::Float64 = 1.0,
     eta0::Float64 = 1.0,
-    min_tol_feas::Float64 = 1e-6,
+    min_tol_feas::Float64 = 1e-7,
     min_reltol_crit::Float64 = 1e-7,
     k_crit::Float64 = 1.0,
     k_feas::Float64 = 0.1,
@@ -195,7 +195,7 @@ function solve(
         criticality_measure(x, g, gproj, xlow, xupp)
 
     # tol_scale_factor = max(1, norm(g, Inf))
-    tol_scale_factor = 1 + norm(g)
+    tol_scale_factor = 1 + norm(g, Inf)
 
     solved = feas_measure <= min_tol_feas && pix <= reltol_crit * tol_scale_factor
 
@@ -261,7 +261,7 @@ function solve(
                 criticality_measure(x, g, gproj, xlow, xupp)
 
             # tol_scale_factor = max(1, norm(g, Inf))
-            tol_scale_factor = 1 + norm(g)
+            tol_scale_factor = 1 + norm(g, Inf)
 
             solved = feas_measure <= min_tol_feas &&
                 norm_proj_gradlag <= reltol_crit * tol_scale_factor
@@ -494,7 +494,7 @@ function solve_subproblem!(
 
 
     # tol_scale_factor = max(1, norm(g, Inf))
-    tol_scale_factor = 1 + norm(g)
+    tol_scale_factor = 1 + norm(g, Inf)
     # debug && @printf(debug_io, "[solve_subproblem] πx = %.3e ; rtol = %.3e ; scale_factor = %.3e\n", pix, reltol_crit, tol_scale_factor)
     solved = pix <= reltol_crit * tol_scale_factor
     # println(debug_io, "[solve_subproblem] Initial solved status: $solved")
@@ -615,7 +615,7 @@ function solve_subproblem!(
         debug && println(debug_io, "[solve_subproblem] criticality after step computation : $(pix)")
 
         # tol_scale_factor = max(1, norm(g, Inf))
-        tol_scale_factor = 1 + norm(g)
+        tol_scale_factor = 1 + norm(g, Inf)
         solved = pix <= reltol_crit * tol_scale_factor
         iter += 1
     end
@@ -1138,15 +1138,14 @@ function criticality_measure(
     g::AbstractVector{T},
     gproj::AbstractVector{T},
     xlow::AbstractVector{T},
-    xupp::AbstractVector{T};
-    p::Float64 = Inf) where T
+    xupp::AbstractVector{T}) where T
 
     # proj_g = Vector{Float64}(undef,size(x,1))
     # println("[criticality_measure] x = ", x)
     # println("[criticality_measure] g = ", g)
     project!(gproj, x .- g, xlow, xupp)
     # println("[criticality_measure] P[x-g] = ", gproj)
-    pix = norm(gproj .- x, p)
+    pix = norm(gproj .- x, Inf)
     # println("[criticality_measure] pix = ", pix)
 
     return pix
@@ -1163,5 +1162,5 @@ function criticality_measure(
 
     mul!(projg, proj_op, g)
 
-    norm(projg)
+    norm(projg, Inf)
 end
