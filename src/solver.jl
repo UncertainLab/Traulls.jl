@@ -1,7 +1,7 @@
 using Dates
-debug_file = string(now(UTC))*"_debuglv511.out"
+debug_file = string(now(UTC))*"_debughs65.out"
 debug_io = open(debug_file, "w")
-debug = false
+debug = true
 
 """
     solve(model; kwargs...)
@@ -185,6 +185,7 @@ function solve(
 
     # debug && @printf(debug_io, "[solve] reltol_crit = %.4e ; tol_feas = %.4e\n", reltol_crit, tol_feas)
     # Initial values of objective, feasibility and criticality
+    g = J'*rx + C'*y
     fx = dot(rx,rx)
     model.counters.nobj_eval += 1
     feas_measure = norm(cx, Inf)
@@ -195,9 +196,9 @@ function solve(
         criticality_measure(x, g, gproj, xlow, xupp)
 
     # tol_scale_factor = max(1, norm(g, Inf))
-    tol_scale_factor = 1 + norm(g, Inf)
+    tol_crit = min_reltol_crit * (1 + norm(g, Inf))
 
-    solved = feas_measure <= min_tol_feas && pix <= reltol_crit * tol_scale_factor
+    solved = feas_measure <= min_tol_feas && pix <= tol_crit
 
     iter = 1
 
@@ -240,7 +241,7 @@ function solve(
             verbose=inner_verbose,
             io=output_io)
 
-        debug && println(debug_io, "[solve] after inner exit πx = ", pix)
+
         # Evaluate feasibility and objective
         feas_measure = norm(cx, Inf)
         g .= J'*rx + C'*y
@@ -250,6 +251,7 @@ function solve(
 
         if update_multipliers
 
+            debug && @printf(debug_io, "\n[solve] ||λₖ₊₁ - λₖ|| = %.3e ", norm(cx*mu, Inf))
             # Update Lagrange multipliers
             first_order_multipliers!(y, cx, mu)
 
@@ -260,11 +262,12 @@ function solve(
                 criticality_measure(x, g, gproj, proj_op) :
                 criticality_measure(x, g, gproj, xlow, xupp)
 
+            debug && @printf(debug_io, "\n[solve] after inner exit πx = %.3e", pix)
             # tol_scale_factor = max(1, norm(g, Inf))
             tol_scale_factor = 1 + norm(g, Inf)
 
             solved = feas_measure <= min_tol_feas &&
-                norm_proj_gradlag <= reltol_crit * tol_scale_factor
+                norm_proj_gradlag <= tol_crit
 
 
 
@@ -470,7 +473,7 @@ function solve_subproblem!(
 
     # Evaluate objective and gradient of the AL at current point (x,y)
     # debug && println(debug_io, "[solve_subproblem] ∇Lₐ avant calcul: ", g)
-    alx = al_objgrad!(rx,cx,y,mu,J,C,g)
+    alx = al_objgrad!(rx, cx, y, mu, J, C, g)
     # debug && println(debug_io, "[solve_subproblem] ∇Lₐ apres calcul: ", g)
     model.counters.nalgrad_eval += 1
     model.counters.nalobj_eval += 1
@@ -494,9 +497,9 @@ function solve_subproblem!(
 
 
     # tol_scale_factor = max(1, norm(g, Inf))
-    tol_scale_factor = 1 + norm(g, Inf)
+    tol_crit = reltol_crit * (1 + norm(g, Inf))
     # debug && @printf(debug_io, "[solve_subproblem] πx = %.3e ; rtol = %.3e ; scale_factor = %.3e\n", pix, reltol_crit, tol_scale_factor)
-    solved = pix <= reltol_crit * tol_scale_factor
+    solved = pix <= tol_crit
     # println(debug_io, "[solve_subproblem] Initial solved status: $solved")
     short_circuit = false
 
@@ -506,7 +509,9 @@ function solve_subproblem!(
 
     while !solved && iter <= max_iter && !short_circuit
 
-        debug && println(debug_io,"\n[solve_subproblem] inner iter $iter")
+        debug && println(debug_io,"\n[solve_subproblem!] *** inner iter $iter *** ")
+        debug && @printf(debug_io, "\n[solve_subproblem!] ||∇f|| = %.3e", norm(g,Inf))
+
         x_prev .= x
         rx_prev .= rx
         cx_prev .= cx
@@ -529,6 +534,8 @@ function solve_subproblem!(
             kappa_cg,
             workspace)
 
+        debug && @printf(debug_io, "\n[solve_subproblem!] before magical step ||s|| = %.3f", norm(s,Inf))
+
         # Check of the trial point is undistinguishable from current solution or
         # if the radius is too small
 
@@ -545,6 +552,7 @@ function solve_subproblem!(
         nlconstraints!(model, cx, x)
         alx = al_obj(rx,cx,y,mu)
         model.counters.nalobj_eval += 1
+        norm_step = norm(s, Inf) # used for radius update
 
         # Step taken on the slack variables, if any
         if nslack > 0
@@ -563,9 +571,11 @@ function solve_subproblem!(
             # Add reduction of the true objective function after taking second
             # step to pred
             pred -= alx
-            alx = al_obj(rx,cx,y,mu)
+            alx = al_obj(rx, cx, y, mu)
             model.counters.nalobj_eval += 1
             pred += alx
+
+            debug && @printf(debug_io, "\n[solve_subproblem!] after magical step ||s|| = %.3f", norm(s,Inf))
 
         end
 
@@ -574,13 +584,13 @@ function solve_subproblem!(
         # Compute the ratio actual reduction / predicted reduction
         ratio = step_ratio(alx_prev, alx, pred)
 
-        if accept_step(tr,ratio)
+        if accept_step(tr, ratio)
 
             # Evaluate first derivative at trial point
 
             jac_residuals!(model, J, x)
             jac_nlconstraints!(model, C, x)
-            al_grad!(rx,cx,y,mu,J,C,g)
+            al_grad!(rx, cx, y, mu, J, C, g)
             model.counters.nalgrad_eval += 1
 
             # Update Hessian approximation
@@ -593,12 +603,9 @@ function solve_subproblem!(
                 update_hessian!(hess_op, J, C, rx, cx, g, y, s)
             end
 
-            # TODO: add computation of criticality measure for polyhedral problem
-            # (when lincons_present = true)
             pix = lincons_present ?
                 criticality_measure(x, g, gproj, proj_op) :
                 criticality_measure(x, g, gproj, xlow, xupp)
-
 
         else
             x .= x_prev
@@ -607,16 +614,16 @@ function solve_subproblem!(
             alx = alx_prev
         end
 
-        norm_step = norm(s,Inf)
-        update_radius!(tr,ratio,norm_step)
+        # norm_step = norm(s, Inf)
+        update_radius!(tr, ratio, norm_step)
 
-        verbose && print_inner_iter(iter, alx_prev, norm_step, radius, ratio;io=io)
+        verbose && print_inner_iter(iter, alx_prev, norm(s, Inf), radius, ratio;io=io)
 
-        debug && println(debug_io, "[solve_subproblem] criticality after step computation : $(pix)")
+        debug && @printf(debug_io, "\n[solve_subproblem] criticality after step computation : %.3e", pix)
 
         # tol_scale_factor = max(1, norm(g, Inf))
-        tol_scale_factor = 1 + norm(g, Inf)
-        solved = pix <= reltol_crit * tol_scale_factor
+        # tol_scale_factor = 1 + norm(g, Inf)
+        solved = pix <= tol_crit
         iter += 1
     end
 
@@ -718,7 +725,7 @@ function projected_gradient!(
 
     n_active = count(proj_op.fixvars)
 
-    if n_active_aftercauchy > 0
+    if false
         debug && @printf(debug_io, "[projected_gradient]norm Cauchy step: %.4e\n", norm(s,Inf))
         debug && println(debug_io, "Number of active constraints after Cauchy step: ", n_active_aftercauchy)
         debug && println(debug_io, "Number of active constraints before CG iterations", n_active)
@@ -746,8 +753,8 @@ function projected_gradient!(
             Hs,
             kappa_cg)
 
-        debug && println(debug_io, "\n[projected_gradient] CG status: " , cg_status)
-        debug && @printf(debug_io, "\n[projected_gradient] norm CG direction number %2d : %.4e\n", iter, norm(w,Inf))
+        # debug && println(debug_io, "\n[projected_gradient] CG status: " , cg_status)
+        # debug && @printf(debug_io, "\n[projected_gradient] norm CG direction number %2d : %.4e\n", iter, norm(w,Inf))
 
         # Increment total step
         s .+= w
@@ -833,7 +840,7 @@ function cauchy_step!(
 
         popfirst!(breakpoints)                      # get rid of breakpoint tb = zero
         first_active_index = popfirst!(grp_idx)
-        debug && println(debug_io, "[cauchy_step] components with breakpoint at 0 = $(size(first_active_index,1))")
+        # debug && println(debug_io, "[cauchy_step] components with breakpoint at 0 = $(size(first_active_index,1))")
         update_projector!(proj_op,first_active_index)
         mul!(d,proj_op,-g)
     end
@@ -1162,5 +1169,4 @@ function criticality_measure(
 
     mul!(projg, proj_op, g)
 
-    norm(projg, Inf)
 end
