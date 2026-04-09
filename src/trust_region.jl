@@ -138,25 +138,16 @@ function update_radius!(
     rho::T,
     norm_step::T) where T
 
-    global debug
-    global debug_io
-
-    debug && @printf(debug_io, "\n[update_radius!] radius before update : %.3e", tr.radius)
     tr.radius = if rho > tr.increase_treshold   # very successful step
-        max(tr.increase_factor * norm_step, tr.radius) 
-    
+        max(tr.increase_factor * norm_step, tr.radius)
     elseif 0 < rho < tr.accept_treshold         # bad step
-        debug && println(debug_io, "\n[update_radius!] step rejected")
-        tr.decrease_factor * norm_step 
-
+        tr.decrease_factor * norm_step
     elseif rho < 0                              # Very bad step
         min(tr.decrease_factor * norm_step, tr.neg_ratio_factor * tr.radius)
-    
     else                                        # successful step 
         tr.radius
     end
 
-    debug && @printf(debug_io, "\n[update_radius!] radius after update : %.3e", tr.radius)
     return
 end
 

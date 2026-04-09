@@ -22,7 +22,7 @@ Lagrange multipliers associated to the equality constraints `y₀`,
 each new iterate `xₖ₊₁` is an approximate solution, with respect to a tolerance
 `ωₖ > 0`, of the subproblem
 
-`minₓ Lₐ(x,yₖ,μₖ) = 1/2 * r(xₖ)ᵀr(xₖ) + c(xₖ)ᵀ[yₖ + μₖ/2 * c(xₖ)]`²`
+`minₓ Lₐ(x,yₖ,μₖ) = 1/2 * r(xₖ)ᵀr(xₖ) + c(xₖ)ᵀ[yₖ + μₖ/2 * c(xₖ)]`
 
 `s.t. ℓ ≤ x ≤ u,`
 
@@ -150,7 +150,6 @@ function solve(
     n, nres, ncons = model.n, model.nres, model.ncons
     lincons_present = model.nlincons > 0
 
-
     # Make initial point feasible and form subspace projector operator
     x = model.x
     proj_op = initial_point_and_projector!(model, x, Val(lincons_present))
@@ -196,7 +195,7 @@ function solve(
         criticality_measure(x, g, gproj, xlow, xupp)
 
     # tol_scale_factor = max(1, norm(g, Inf))
-    tol_crit = min_reltol_crit * (1 + norm(g, Inf))
+    tol_crit = min_reltol_crit * (1 + pix)
 
     solved = feas_measure <= min_tol_feas && pix <= tol_crit
 
@@ -214,8 +213,10 @@ function solve(
 
     while !solved && iter <= max_iter
 
-        debug && println(debug_io, "\n[solve] outer iter $iter", @sprintf(" relative tolerance : %.6e", reltol_crit))
+        debug && println(debug_io, "\n\n[solve] outer iter $iter", @sprintf(" relative tolerance : %.6e", reltol_crit))
 
+        debug && println(debug_io, "[solve] current solution : ", x)
+        debug && println(debug_io, "[solve] current multipliers : ", y, " ; current penalty parameter : ", mu)
         pix = solve_subproblem!(
             model,
             x,
@@ -495,9 +496,8 @@ function solve_subproblem!(
         criticality_measure(x, g, gproj, proj_op) :
         criticality_measure(x, g, gproj, xlow, xupp)
 
-
     # tol_scale_factor = max(1, norm(g, Inf))
-    tol_crit = reltol_crit * (1 + norm(g, Inf))
+    tol_crit = reltol_crit * (1 + pix)
     # debug && @printf(debug_io, "[solve_subproblem] πx = %.3e ; rtol = %.3e ; scale_factor = %.3e\n", pix, reltol_crit, tol_scale_factor)
     solved = pix <= tol_crit
     # println(debug_io, "[solve_subproblem] Initial solved status: $solved")
@@ -510,7 +510,7 @@ function solve_subproblem!(
     while !solved && iter <= max_iter && !short_circuit
 
         debug && println(debug_io,"\n[solve_subproblem!] *** inner iter $iter *** ")
-        debug && @printf(debug_io, "\n[solve_subproblem!] ||∇f|| = %.3e", norm(g,Inf))
+        debug && @printf(debug_io, "\n[solve_subproblem!] ||∇f|| = %.6e\n", norm(g))
 
         x_prev .= x
         rx_prev .= rx
@@ -534,7 +534,7 @@ function solve_subproblem!(
             kappa_cg,
             workspace)
 
-        debug && @printf(debug_io, "\n[solve_subproblem!] before magical step ||s|| = %.3f", norm(s,Inf))
+
 
         # Check of the trial point is undistinguishable from current solution or
         # if the radius is too small
@@ -574,8 +574,6 @@ function solve_subproblem!(
             alx = al_obj(rx, cx, y, mu)
             model.counters.nalobj_eval += 1
             pred += alx
-
-            debug && @printf(debug_io, "\n[solve_subproblem!] after magical step ||s|| = %.3f", norm(s,Inf))
 
         end
 
@@ -707,13 +705,13 @@ function projected_gradient!(
                 xupp,
                 radius)
 
+    debug && @printf(debug_io, "\n[projected_gradient!] Cauchy step ||s|| = %.4e", norm(s))
     n_active_aftercauchy = count(proj_op.fixvars)
 
     # Form implicit bounds on the search direction
     w_low, w_upp = workspace.step_low, workspace.step_upp
     w_low .= (t -> max(-radius, t)).(xlow-x) .- s
     w_upp .= (t -> min(radius, t)).(xupp-x) .- s
-
 
     # Update the set of fixed variables (implicitly updates the null space matrix Z)
     update_active_set!(s, x, xlow, xupp, radius, proj_op)
@@ -826,7 +824,8 @@ function cauchy_step!(
 
     n = size(x,1)
     # Accumulated Cauchy step
-    s .= 0.0
+    s .= T(0)
+    alphac = 0.0
 
     # Breakpoints values and group indices
     breakpoints, grp_idx = sort_breakpoints(x, g, xlow, xupp, radius)
@@ -850,6 +849,7 @@ function cauchy_step!(
 
     for (i, tb) in enumerate(breakpoints)
 
+        alphac = tb
         # Compute slope and curvature
         phi_p = gtd + dot(s,Hd)
         phi_pp = dot(d,Hd)
@@ -859,9 +859,13 @@ function cauchy_step!(
         l_interval = tb - prev_tb
 
         if phi_p >= 0
+            debug && println(debug_io, "[cauchy_step!] first minimum at tₖ")
+            alphac = prev_tb
             break
         elseif phi_pp > 0 && delta_t < l_interval # local minimum at t = tb - phi_p / phi_pp
             s .+= delta_t .* d
+            alphac = prev_tb + delta_t
+            debug && println(debug_io, "[cauchy_step] first minimum at tₖ₊₁")
             break
         end
 
@@ -872,10 +876,20 @@ function cauchy_step!(
         update_projector!(proj_op, newly_active)
 
         s .+= d .* l_interval
-        mul!(d,proj_op,-g)
-        gtd = dot(g,d)
+        mul!(d, proj_op, -g)
+        gtd = dot(g, d)
         mul!(Hd, hess_op, d)
     end
+
+    # Projected gradient (for debug)
+    xmtg = x .- (g .* alphac)
+    pxmtg = max.(xlow, min.(xmtg, xupp))
+
+    s .= pxmtg - x
+
+    debug && @printf(debug_io, "\n[cauchy_step!] Cauchy steplength : %.4e ", alphac)
+    debug && @printf(debug_io, "\n[cauchy_step!] norm \"true\" Cauchy step : %.4e\n",
+                     norm(pxmtg .- x))
 
     return
 end

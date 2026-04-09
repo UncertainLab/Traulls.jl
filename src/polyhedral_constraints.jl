@@ -563,7 +563,7 @@ end
 Computes the projection of `x` onto the box `[ℓ,u]` and stores the results in `v`.
 """
 function project!(v::Vector, x::Vector, x_low::Vector, x_upp::Vector) 
-    v[:] .= max.(x_low, min.(x,x_upp))
+    v[:] .= max.(x_low, min.(x, x_upp))
     return
 end
 
