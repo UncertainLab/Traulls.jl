@@ -84,7 +84,7 @@ function pcg!(
 
     nrm_v = norm(v)
     tol_cg = nrm_v * min(kappa_cg, sqrt(nrm_v))
-    tol_negcurve = atol
+    tol_zerocurve = atol
 
     iter = 1
     max_iter = 2*(nb_degrees_of_freedom(P))
@@ -99,14 +99,14 @@ function pcg!(
         mul!(Hp,H,p)
         pHp = dot(p,Hp)
 
-        if pHp <= tol_negcurve
+        if pHp <= 0
 
             # Negative curvature 
             # Compute direction that stops at the feasible box and stop cg iterations
             neg_curvature = true
 
-            if abs(pHp) > tol_negcurve # nonzero curvature
-                gamma = factor_to_boundary(p,w,w_l,w_u,P)
+            if abs(pHp) > tol_zerocurve # nonzero curvature to sill take a step
+                gamma = factor_to_boundary(p, w, w_l, w_u, P)
                 w .+= p .* gamma
             end
         else

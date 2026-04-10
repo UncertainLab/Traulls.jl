@@ -705,8 +705,12 @@ function projected_gradient!(
                 xupp,
                 radius)
 
-    debug && @printf(debug_io, "\n[projected_gradient!] Cauchy step ||s|| = %.4e", norm(s))
+    debug && @printf(debug_io, "\n[projected_gradient!] Cauchy step ||s|| = %.4e\n", norm(s))
     n_active_aftercauchy = count(proj_op.fixvars)
+
+    if n_active_aftercauchy > 0
+        debug && println(debug_io, "Active constraints after Cauchy step: ", findall(proj_op.fixvars))
+    end
 
     # Form implicit bounds on the search direction
     w_low, w_upp = workspace.step_low, workspace.step_upp
@@ -723,12 +727,11 @@ function projected_gradient!(
 
     n_active = count(proj_op.fixvars)
 
-    if false
-        debug && @printf(debug_io, "[projected_gradient]norm Cauchy step: %.4e\n", norm(s,Inf))
-        debug && println(debug_io, "Number of active constraints after Cauchy step: ", n_active_aftercauchy)
-        debug && println(debug_io, "Number of active constraints before CG iterations", n_active)
+    if n_active > 0
+        debug && println(debug_io, "Active constraints after reset and manual identification: ", findall(proj_op.fixvars))
     end
 
+    debug && @printf(debug_io, "norm reduced gradient: %.4e\n", norm(g[.!proj_op.fixvars]))
     # Buffers
     w = workspace.search_dir
     r, v, p = workspace.r, workspace.v, workspace.p
@@ -751,8 +754,8 @@ function projected_gradient!(
             Hs,
             kappa_cg)
 
-        # debug && println(debug_io, "\n[projected_gradient] CG status: " , cg_status)
-        # debug && @printf(debug_io, "\n[projected_gradient] norm CG direction number %2d : %.4e\n", iter, norm(w,Inf))
+        debug && println(debug_io, "\n[projected_gradient] CG status: " , cg_status)
+        debug && @printf(debug_io, "\n[projected_gradient] norm CG direction number %2d : %.4e\n", iter, norm(w))
 
         # Increment total step
         s .+= w
@@ -849,7 +852,6 @@ function cauchy_step!(
 
     for (i, tb) in enumerate(breakpoints)
 
-        alphac = tb
         # Compute slope and curvature
         phi_p = gtd + dot(s,Hd)
         phi_pp = dot(d,Hd)
@@ -859,13 +861,9 @@ function cauchy_step!(
         l_interval = tb - prev_tb
 
         if phi_p >= 0
-            debug && println(debug_io, "[cauchy_step!] first minimum at tₖ")
-            alphac = prev_tb
             break
         elseif phi_pp > 0 && delta_t < l_interval # local minimum at t = tb - phi_p / phi_pp
             s .+= delta_t .* d
-            alphac = prev_tb + delta_t
-            debug && println(debug_io, "[cauchy_step] first minimum at tₖ₊₁")
             break
         end
 
@@ -880,16 +878,6 @@ function cauchy_step!(
         gtd = dot(g, d)
         mul!(Hd, hess_op, d)
     end
-
-    # Projected gradient (for debug)
-    xmtg = x .- (g .* alphac)
-    pxmtg = max.(xlow, min.(xmtg, xupp))
-
-    s .= pxmtg - x
-
-    debug && @printf(debug_io, "\n[cauchy_step!] Cauchy steplength : %.4e ", alphac)
-    debug && @printf(debug_io, "\n[cauchy_step!] norm \"true\" Cauchy step : %.4e\n",
-                     norm(pxmtg .- x))
 
     return
 end
