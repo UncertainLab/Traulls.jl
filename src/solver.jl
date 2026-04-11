@@ -1,5 +1,5 @@
 using Dates
-debug_file = string(now(UTC))*"_debughs65.out"
+debug_file = string(now(UTC))*"_debuglv502.out"
 debug_io = open(debug_file, "w")
 debug = true
 
@@ -215,8 +215,8 @@ function solve(
 
         debug && println(debug_io, "\n\n[solve] outer iter $iter", @sprintf(" relative tolerance : %.6e", reltol_crit))
 
-        debug && println(debug_io, "[solve] current solution : ", x)
-        debug && println(debug_io, "[solve] current multipliers : ", y, " ; current penalty parameter : ", mu)
+        # debug && println(debug_io, "[solve] current solution : ", x)
+        # debug && println(debug_io, "[solve] current multipliers : ", y, " ; current penalty parameter : ", mu)
         pix = solve_subproblem!(
             model,
             x,
@@ -709,7 +709,7 @@ function projected_gradient!(
     n_active_aftercauchy = count(proj_op.fixvars)
 
     if n_active_aftercauchy > 0
-        debug && println(debug_io, "Active constraints after Cauchy step: ", findall(proj_op.fixvars))
+        debug && @printf(debug_io, "\n[projected_gradient!] Number of active constraints after Cauchy step: %2d", n_active_aftercauchy)
     end
 
     # Form implicit bounds on the search direction
@@ -718,20 +718,20 @@ function projected_gradient!(
     w_upp .= (t -> min(radius, t)).(xupp-x) .- s
 
     # Update the set of fixed variables (implicitly updates the null space matrix Z)
-    update_active_set!(s, x, xlow, xupp, radius, proj_op)
+    # update_active_set!(s, x, xlow, xupp, radius, proj_op)
 
     # Set up for conjugate gradient iterations
     mul!(Hs, hess_op, s)
     b = workspace.cg_rhs
     b .= Hs .+ g
 
-    n_active = count(proj_op.fixvars)
+    # n_active = count(proj_op.fixvars)
 
-    if n_active > 0
-        debug && println(debug_io, "Active constraints after reset and manual identification: ", findall(proj_op.fixvars))
-    end
+    # if n_active > 0
+    #     debug && @printf(debug_io, "\n[projected_gradient!] Number of active constraints after reset and manual identification: %2d ", n_active)
+    # end
 
-    debug && @printf(debug_io, "norm reduced gradient: %.4e\n", norm(g[.!proj_op.fixvars]))
+    debug && @printf(debug_io, "\n[projected_gradient!] Norm reduced gradient: %.4e\n", norm(g[.!proj_op.fixvars]))
     # Buffers
     w = workspace.search_dir
     r, v, p = workspace.r, workspace.v, workspace.p
@@ -780,6 +780,13 @@ function projected_gradient!(
 
         # Update the set of fixed variables (implicitly updates the null space matrix Z)
         update_active_set!(s, x, xlow, xupp, radius, proj_op)
+
+        debug && @printf(debug_io, "\n[projected_gradient!] Norm accumulated step ||s|| = %.4e\n", norm(s))
+        n_active = count(proj_op.fixvars)
+
+        if n_active > 0
+            debug && @printf(debug_io, "\n[projected_gradient!] Number of active constraints after search direction: %2d", n_active)
+        end
 
         iter += 1
     end
@@ -1149,15 +1156,9 @@ function criticality_measure(
     xlow::AbstractVector{T},
     xupp::AbstractVector{T}) where T
 
-    # proj_g = Vector{Float64}(undef,size(x,1))
-    # println("[criticality_measure] x = ", x)
-    # println("[criticality_measure] g = ", g)
-    project!(gproj, x .- g, xlow, xupp)
-    # println("[criticality_measure] P[x-g] = ", gproj)
-    pix = norm(gproj .- x, Inf)
-    # println("[criticality_measure] pix = ", pix)
-
-    return pix
+    project!(gproj, x .- g, xlow, xupp) # gproj ← P[x-g]
+    gproj .-= x                         # gproj ← gproj - x
+    norm(gproj, Inf)
 end
 
 # The measure computed is the norm of the projection of the steepest direction

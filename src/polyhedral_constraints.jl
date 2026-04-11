@@ -546,13 +546,9 @@ function update_active_set!(
     # update_projector!(P, newly_active)
 
     for i in axes(x,1)
-        if (s[i] <= eps_bound + max(-radius, x_low[i] - x[i]) ||
-            min(radius, x_upp[i] - x[i])  <= s[i] + eps_bound)
-
-            P.fixvars[i] = true
-        else
-            P.fixvars[i] = false
-        end
+        P.fixvars[i] =  P.fixvars[i] ||
+            s[i] <= eps_bound + max(-radius, x_low[i] - x[i]) ||
+            min(radius, x_upp[i] - x[i])  <= s[i] + eps_bound
     end
     return
 end
@@ -592,20 +588,25 @@ function sort_breakpoints(
     delta::Float64;
     atol = sqrt(eps(Float64)))  
 
-    
+    global debug
+    global debug_io
     n = size(x,1)
     breakpoints = Vector{Float64}(undef,n)
 
     # Compute the breakpoints
     for i=1:n
-        if g[i] > atol
-            breakpoints[i] = max(x_low[i]-x[i], -delta) / -g[i]
-        elseif g[i] < -atol
-            breakpoints[i] = min(x_upp[i]-x[i], delta) / -g[i]
+        if g[i] > 0
+            breakpoints[i] = -max(x_low[i]-x[i], -delta) / g[i]
+        elseif g[i] < 0
+            breakpoints[i] = -min(x_upp[i]-x[i], delta) / g[i]
         else
             breakpoints[i] = 0.0
         end 
     end
+
+    nzero = count(iszero, breakpoints)
+
+    nzero > 0 && debug && println(debug_io,"[sort_breakpoints] number 0 breakpoints: ", nzero)
 
     # Form sorted breakpoints values and corresponding indices 
     sorted_breakpoints, grouped_indices = group_breakpoints(breakpoints)
