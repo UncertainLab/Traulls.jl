@@ -497,8 +497,8 @@ function solve_subproblem!(
         criticality_measure(x, g, gproj, xlow, xupp)
 
     # tol_scale_factor = max(1, norm(g, Inf))
-    tol_crit = reltol_crit * (1 + pix)
-    # debug && @printf(debug_io, "[solve_subproblem] πx = %.3e ; rtol = %.3e ; scale_factor = %.3e\n", pix, reltol_crit, tol_scale_factor)
+    tol_crit = reltol_crit * (1 + norm(g, Inf))
+    debug && @printf(debug_io, "\n[solve_subproblem] effective tolerance = %.4e", tol_crit)
     solved = pix <= tol_crit
     # println(debug_io, "[solve_subproblem] Initial solved status: $solved")
     short_circuit = false
@@ -705,7 +705,7 @@ function projected_gradient!(
                 xupp,
                 radius)
 
-    debug && @printf(debug_io, "\n[projected_gradient!] Cauchy step ||s|| = %.4e\n", norm(s))
+    debug && @printf(debug_io, "\n[projected_gradient!] Cauchy step ||s|| = %.4e\n", norm(s, Inf))
     n_active_aftercauchy = count(proj_op.fixvars)
 
     if n_active_aftercauchy > 0
@@ -754,8 +754,9 @@ function projected_gradient!(
             Hs,
             kappa_cg)
 
-        debug && println(debug_io, "\n[projected_gradient] CG status: " , cg_status)
-        debug && @printf(debug_io, "\n[projected_gradient] norm CG direction number %2d : %.4e\n", iter, norm(w))
+        debug && println(debug_io, "CG status: ", cg_status)
+        debug && dot(w,g) > 0 &&  println(debug_io, "\n[projected_gradient] not descent, wᵀg = %.4e: " , dot(w,g))
+        debug && @printf(debug_io, "\n[projected_gradient] norm CG direction number %2d : %.4e\n", iter, norm(w, Inf))
 
         # Increment total step
         s .+= w
@@ -774,6 +775,8 @@ function projected_gradient!(
         norm_reduced_g = norm(proj_op * g)
         norm_reduced_gnext = norm(proj_op * b)
 
+        debug && @printf(debug_io, "\n[projected_gradient] ||Zᵀg|| = %.4e ;  ||Zᵀ(Hs+g)|| = %.4e", norm_reduced_g, norm_reduced_gnext)
+
         # Evaluate termination criteria
         quasi_optimal = norm_reduced_gnext <= kappa_step * norm_reduced_g
         cg_stop = cg_status == negative_curvature
@@ -781,7 +784,7 @@ function projected_gradient!(
         # Update the set of fixed variables (implicitly updates the null space matrix Z)
         update_active_set!(s, x, xlow, xupp, radius, proj_op)
 
-        debug && @printf(debug_io, "\n[projected_gradient!] Norm accumulated step ||s|| = %.4e\n", norm(s))
+        debug && @printf(debug_io, "\n[projected_gradient!] Norm accumulated step ||s|| = %.4e\n", norm(s, Inf))
         n_active = count(proj_op.fixvars)
 
         if n_active > 0

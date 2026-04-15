@@ -106,8 +106,7 @@ function pcg!(
             neg_curvature = true
 
             if abs(pHp) > tol_zerocurve # nonzero curvature to sill take a step
-                gamma = factor_to_boundary(p, w, w_l, w_u,
-                                           P)
+                gamma = factor_to_boundary(p, w, w_l, w_u,P)
                 w .+= p .* gamma
             end
         else
