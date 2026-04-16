@@ -509,6 +509,21 @@ end
     P.fixvars[i] = true
 end
 
+# Set active components of indices in `newly_fixed`
+@inline function set_active!(P::CoordinateSubspaceProjector, newly_fixed::Vector{Int})
+    P.fixvars[newly_fixed] .= true
+end
+
+# Set free component at index `i`
+@inline function set_free!(P::CoordinateSubspaceProjector, i::Int)
+    P.fixvars[i] = false
+end
+
+# Set free components at indices in `freed`
+@inline function set_free!(P::CoordinateSubspaceProjector, freed::Vector{Int})
+    P.fixvars[i] .= false
+end
+
 # Set active the components of indices in `newly_active` into the projector
 # `P`
 
@@ -633,9 +648,6 @@ function group_breakpoints(breakpoints::Vector)
 end
 
 
-#= Identify the bounds that become active when taking the step `s` from `x` in the intersection of the feasible domain and the trust region (up to `atol`) 
-Update the Cholesky decomposition used to compute projections on the resulting subspace =#
-
 # Returns the indices of bounds that stay active at `x` when taking direction `d`
 function initial_active_bounds(
     x::Vector,
@@ -654,4 +666,17 @@ function initial_active_bounds(
     end
 
     return findall(fix_vars)
+end
+
+# Identifies the components of `x` that, when taking direction `d` either lie at one of
+# their bound or take a zero direction
+# Returns the indices of the components of the search direction that equal 0.
+function initial_fixed(
+    x::Vector{T},
+    d::Vector{T},
+    xlow::Vector{T},
+    xupp::Vector{T})
+
+    return
+
 end
