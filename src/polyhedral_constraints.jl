@@ -504,6 +504,8 @@ function reset_projector!(P::CoordinateSubspaceProjector)
     return
 end
 
+# Assert if variable `i` is active or not
+is_active(P::CoordinateSubspaceProjector, i::Int) = P.fixvars[i]
 # Set component at index `i` active
 @inline function set_active!(P::CoordinateSubspaceProjector, i::Int)
     P.fixvars[i] = true
@@ -578,6 +580,72 @@ function project!(v::Vector, x::Vector, x_low::Vector, x_upp::Vector)
     return
 end
 
+# Finds the next breakpoint on the projected gradient path with a given set of variables
+# already fixed
+# Variables with breakpoint differing from a small quantity are associated to the same
+# breakpoint.
+#
+# Returns the breakpoint value and the indices at which a bound is encountered
+
+function next_breakpoint(
+    d::AbstractVector{T},
+    s::AbstractVector{T},
+    slow::AbstractVector{T},
+    supp::AbstractVector{T},
+    proj_op::CoordinateSubspaceProjector{T}) where T
+
+    epsbp = 10*eps(T) # Tolerance to gather similar breakpoint
+
+    bp_value = Inf # current breakpoint value
+    bp_idx = []    # indices of variables becoming active at breakpoint
+
+    # TODO: filter the axes with free variables to get the iterator with the right indices
+    for i in axes(d,1)
+        if !is_fixed(proj_op, i)
+            bp_try = if d[i] < 0
+                (slow[i] - s[i]) / d[i]
+            elseif d[i] > 0
+                (supp[i] - s[i]) / d[i]
+            else
+                Inf
+            end
+
+            also_bp = abs(bp_value - bp_try) < epsbp
+
+            if also_bp
+                push!(bp_idx, i)
+            elseif !also_bp && bp_try < bp_value
+                bp_value = bp_try
+                bp_idx = [i]
+            end
+        end
+    end
+
+    return bp_value, bp_idx
+end
+
+# Find and returns the sorted list of breakpoints on th eprjoected gradient path
+function sorted_breakpoints(
+    d::Vector{T},
+    x::AbstractVector{T},
+    xlow::AbstractVector{T},
+    xupp::AbstractVector{T},
+    radius::T)
+
+    breakpoints = zeros(T, size(x,1))
+
+    for i in axes(x,1)
+        breakpoints[i] = if d[i] < 0
+            max(xlow[i]-x[i], -radius) / d[i]
+        elseif d[i] > 0
+            min(xupp[i]-x[i], radius) /d[i]
+        end
+    end
+
+    sort!(breakpoints)
+
+    return breakpoints
+end
 
 """
     sort_breakpoints(x,g,ℓ,u,Δ;atol) -> unique_vals, grouped_indices
