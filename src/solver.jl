@@ -835,10 +835,15 @@ function cauchy_step!(
     global debug
     global debug_io
 
+    epsmch = eps(T)
+    epsrel = sqrt(epsrel)
+    eps_slope = 1e-10
+    eps_curv = 1e-10
+
     n = size(x,1)
     # Accumulated Cauchy step
     s .= T(0)
-    alphac = 0.0
+
 
     # Breakpoints values and group indices
     breakpoints, grp_idx = sort_breakpoints(x, g, xlow, xupp, radius)
@@ -856,6 +861,26 @@ function cauchy_step!(
         update_projector!(proj_op,first_active_index)
         mul!(d,proj_op,-g)
     end
+
+    # Find fix components
+
+    for i = 1:n
+        # Variable at lower bound
+        if x[i] <= xlow[i] + abs(xlow[i])*epsrel && d[i] <= epsrel
+            set_active!(proj_op, i)
+        # Variable at upper bound
+        elseif x[i] >= xupp[i] - abs(xupp[i])*epsrel && d[i] >= -epsrel
+            set_active!(proj_op, i)
+        end
+    end
+    # Variables with ≈ 0 direction
+    zero_dir = findall(t -> abs(t) <= epsrel, d)
+    set_active!(proj_op, zero_dir)
+
+    # Update direction
+    mul!(d, proj_op, -g)
+
+    # TODO: modify breakpoint finding method
 
     gtd = dot(g,d)
     mul!(Hd,hess_op,d)
@@ -889,6 +914,8 @@ function cauchy_step!(
         mul!(Hd, hess_op, d)
     end
 
+    # Set free variables fixed because of zero direction
+    set_free!(proj_op, )
     return
 end
 
