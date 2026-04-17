@@ -95,17 +95,27 @@ function Base.:*(A::TransposeSubspaceMatrix{T,S},x::Vector{T}) where {T,S}
     return res
 end
 """
-    update_subspace!(M,newly_active)
+    update_subspace!(M, newly_active)
 
-Add the bounds corresponding to indices in array `vᵢ = 0` for `i ∈ newly_active`
-to the subspace encoded in `SubspaceMatrix` `M`.
+Add the constraints `vᵢ = 0`, for `i ∈ newly_active` to the subspace represented by matrix
+`M`. Corresponds to adding rows to the latter.
 """
-function update_subspace!(M::SubspaceMatrix{T}, newly_active::Vector{Int}) where T
+function add_subspace!(M::SubspaceMatrix, newly_active::Vector{Int})
 
     M.fixvars[newly_active] .= true
     return
 end
 
+"""
+    remove_subspace!(M, removed)
+
+Remove the constraints `vᵢ = 0`, for `i ∈ removed` from the subspace represented by matrix
+`M`. Corresponds to removing rows from the latter.
+"""
+function remove_subspace!(M::SubspaceMatrix, removed::Vector{Int})
+    M.fixvars[removed] .= true
+    return
+end
 # Returns the number of fixed variables in the subsspace represented by the `SubspaceMatrix` `A`
 nb_fixed(submat::SubspaceMatrix) = count(submat.fixvars)
 
@@ -269,6 +279,59 @@ function update_projector!(proj_op::SubspaceProjector, newly_active::Vector{Int}
 end
 
 """
+    set_active!(proj_op, newly_active)
+
+Add constraints `vᵢ = 0` for `i ∈ newly_active` to the subspace encoded in
+`proj_op` and forms the corresponding projection operator by modifying the
+Cholesky decomposition involved in the normal equations solving.
+
+**Arguments**
+
+* `proj_op`: `SubspaceProjector`
+
+* `newly_active`: `Vector` containing the indices of the variables that are set
+active
+"""
+function set_active!(proj_op::SubspaceProjector, newly_active::Vector{Int})
+
+    # Set new constraints active
+    add_subspace!(proj_op.workspace_mat, newly_active)
+
+    # Update the Cholesky decomposition involved in the normal equations solving
+    proj_op.chol_gram_augmat = cholesky_augmented_gram_mat(
+        proj_op.workspace_mat.eqmat,
+        proj_op.workspace_mat.fixvars,
+        proj_op.chol_gram_eqmat)
+    return
+end
+
+"""
+    set_free!(proj_op, freevars)
+
+Remove constraints `vᵢ = 0` for `i ∈ freevars` to the subspace encoded in
+`proj_op` and forms the corresponding projection operator by modifying the
+Cholesky decomposition involved in the normal equations solving.
+
+**Arguments**
+
+* `proj_op`: `SubspaceProjector`
+
+* `freevars`: `Vector` containing the indices of the variables that are set free
+"""
+function set_free!(proj_op::SubspaceProjector, freevars::Vector{Int})
+    # Set new constraints active
+    remove_subspace!(proj_op.workspace_mat, freevars)
+
+    # Update the Cholesky decomposition involved in the normal equations solving
+    proj_op.chol_gram_augmat = cholesky_augmented_gram_mat(
+        proj_op.workspace_mat.eqmat,
+        proj_op.workspace_mat.fixvars,
+        proj_op.chol_gram_eqmat)
+    return
+end
+
+
+"""
     mul!(r,P,x)
 
 Computes the matrix-vector product `Px` and stores the result in `r`, where `P`
@@ -375,6 +438,8 @@ end
 
 saturated_subspace(P::SubspaceProjector) = nb_degrees_of_freedom(P) == 0
 
+# Returns `true` if the variable at index `i` is fixed in the subspace represented by `proj_op`
+is_fixed(proj_op::SubspaceProjector, i::Int) = proj_op.workspace_mat.fixvars[i]
 
 # Reset the projector operator by setting all bounds as inactive
 function reset_projector!(P::SubspaceProjector)
@@ -391,25 +456,24 @@ end
 function update_active_set!(
     s::AbstractVector{T},
     x::AbstractVector{T},
-    x_low::AbstractVector{T},
-    x_upp::AbstractVector{T},
-    radius::T,
+    xlow::AbstractVector{T},
+    xupp::AbstractVector{T},
     P::SubspaceProjector{T};
-    atol::T=sqrt(eps(T))) where T
+    eps_bound::T=sqrt(eps(T))) where T
 
     newly_active = Vector{Int}([])
     fixvars = P.workspace_mat.fixvars
 
     for i in axes(x,1)
         if !fixvars[i] &&
-            (s[i] <= atol + max(-radius, x_low[i] - x[i]) ||
-            min(radius, x_upp[i] - x[i])  <= s[i] + atol)
+            (x[i] + s[i] <= xlow[i] + eps_bound*abs(xlow[i]) || # at lower bound
+            x[i] + s[i] + eps_bound*abs(xupp[i]) >= xupp[i])    # at upper bound
 
             push!(newly_active,i)
         end
     end
 
-    update_projector!(P, newly_active)
+    set_active!(P, newly_active)
 
     return
 end
@@ -478,15 +542,14 @@ function factor_to_boundary(
     w::Vector{T},
     w_l::Vector{T},
     w_u::Vector{T},
-    P::CoordinateSubspaceProjector{T};
-    atol::T = sqrt(eps(T))) where T
+    proj_op::Projector{T}) where T
 
     gamma = Inf
     for i in axes(w,1)
-        if !P.fixvars[i]
-            if p[i] < -atol
+        if !is_fixed(proj_op, i)
+            if p[i] < 0
                 gamma = min(gamma, (w_l[i] - w[i]) / p[i])
-            elseif p[i] > atol
+            elseif p[i] > 0
                 gamma = min(gamma, (w_u[i] - w[i]) / p[i])
             end
         end
@@ -543,29 +606,15 @@ end
 function update_active_set!(
     s::Vector{T},
     x::Vector{T},
-    x_low::Vector{T},
-    x_upp::Vector{T},
-    radius::T,
+    xlow::Vector{T},
+    xupp::Vector{T},
     P::CoordinateSubspaceProjector{T};
     eps_bound::T=sqrt(eps(T))) where T
 
-    # newly_active = Vector{Int}([])
-
-    # for i in axes(x,1)
-    #     if !P.fixvars[i] &&
-    #         (s[i] <= atol + max(-radius,x_low[i] - x[i]) ||
-    #         min(radius,x_upp[i] - x[i])  <= s[i] + atol)
-
-    #         push!(newly_active,i)
-    #     end
-    # end
-
-    # update_projector!(P, newly_active)
-
     for i in axes(x,1)
         P.fixvars[i] =  P.fixvars[i] ||
-            s[i] <= eps_bound + max(-radius, x_low[i] - x[i]) ||
-            min(radius, x_upp[i] - x[i])  <= s[i] + eps_bound
+            x[i] + s[i] <= xlow[i] + eps_bound*abs(xlow[i]) ||
+            x[i] + s[i] + eps_bound*abs(xupp[i]) >= xupp[i]
     end
     return
 end
@@ -624,127 +673,114 @@ function next_breakpoint(
     return bp_value, bp_idx
 end
 
-# Find and returns the sorted list of breakpoints on th eprjoected gradient path
-function sorted_breakpoints(
-    d::Vector{T},
-    x::AbstractVector{T},
-    xlow::AbstractVector{T},
-    xupp::AbstractVector{T},
-    radius::T)
+# # Find and returns the sorted list of breakpoints on th eprjoected gradient path
+# function sorted_breakpoints(
+#     d::Vector{T},
+#     x::AbstractVector{T},
+#     xlow::AbstractVector{T},
+#     xupp::AbstractVector{T},
+#     radius::T)
 
-    breakpoints = zeros(T, size(x,1))
+#     breakpoints = zeros(T, size(x,1))
 
-    for i in axes(x,1)
-        breakpoints[i] = if d[i] < 0
-            max(xlow[i]-x[i], -radius) / d[i]
-        elseif d[i] > 0
-            min(xupp[i]-x[i], radius) /d[i]
-        end
-    end
+#     for i in axes(x,1)
+#         breakpoints[i] = if d[i] < 0
+#             max(xlow[i]-x[i], -radius) / d[i]
+#         elseif d[i] > 0
+#             min(xupp[i]-x[i], radius) /d[i]
+#         end
+#     end
 
-    sort!(breakpoints)
+#     sort!(breakpoints)
 
-    return breakpoints
-end
+#     return breakpoints
+# end
 
-"""
-    sort_breakpoints(x,g,ℓ,u,Δ;atol) -> unique_vals, grouped_indices
+# """
+#     sort_breakpoints(x,g,ℓ,u,Δ;atol) -> unique_vals, grouped_indices
 
-Computes the breakpoints of the projected gradient path `-tg` for `t ≥ 0` onto
-the box `{d | min(ℓ-x,-Δe) ≤ d ≤ max(u-x,Δe)}`.
+# Computes the breakpoints of the projected gradient path `-tg` for `t ≥ 0` onto
+# the box `{d | min(ℓ-x,-Δe) ≤ d ≤ max(u-x,Δe)}`.
 
-Breakpoints are then sorted in ascending order with duplicates removed. 
-For each unique breakpoint, the function returns the list of indices (from the 
-original array) his value occurs.
+# Breakpoints are then sorted in ascending order with duplicates removed.
+# For each unique breakpoint, the function returns the list of indices (from the
+# original array) his value occurs.
 
-# Returns
-- `unique_vals`: Sorted vector of unique breakpoints.
-- `grouped_indices`: A vector where entry `i` contains the indices of the
-variables associated to breakpoint number `i`, which are therefore the indices
-of `values` corresponding to the matching entry in `unique_vals`.
-"""
-function sort_breakpoints(
-    x::Vector,
-    g::Vector,
-    x_low::Vector,
-    x_upp::Vector,
-    delta::Float64;
-    atol = sqrt(eps(Float64)))  
+# # Returns
+# - `unique_vals`: Sorted vector of unique breakpoints.
+# - `grouped_indices`: A vector where entry `i` contains the indices of the
+# variables associated to breakpoint number `i`, which are therefore the indices
+# of `values` corresponding to the matching entry in `unique_vals`.
+# """
+# function sort_breakpoints(
+#     x::Vector,
+#     g::Vector,
+#     x_low::Vector,
+#     x_upp::Vector,
+#     delta::Float64;
+#     atol = sqrt(eps(Float64)))
 
-    global debug
-    global debug_io
-    n = size(x,1)
-    breakpoints = Vector{Float64}(undef,n)
+#     global debug
+#     global debug_io
+#     n = size(x,1)
+#     breakpoints = Vector{Float64}(undef,n)
 
-    # Compute the breakpoints
-    for i=1:n
-        if g[i] > 0
-            breakpoints[i] = -max(x_low[i]-x[i], -delta) / g[i]
-        elseif g[i] < 0
-            breakpoints[i] = -min(x_upp[i]-x[i], delta) / g[i]
-        else
-            breakpoints[i] = 0.0
-        end 
-    end
+#     # Compute the breakpoints
+#     for i=1:n
+#         if g[i] > 0
+#             breakpoints[i] = -max(x_low[i]-x[i], -delta) / g[i]
+#         elseif g[i] < 0
+#             breakpoints[i] = -min(x_upp[i]-x[i], delta) / g[i]
+#         else
+#             breakpoints[i] = 0.0
+#         end
+#     end
 
-    nzero = count(iszero, breakpoints)
+#     nzero = count(iszero, breakpoints)
 
-    nzero > 0 && debug && println(debug_io,"[sort_breakpoints] number 0 breakpoints: ", nzero)
+#     nzero > 0 && debug && println(debug_io,"[sort_breakpoints] number 0 breakpoints: ", nzero)
 
-    # Form sorted breakpoints values and corresponding indices 
-    sorted_breakpoints, grouped_indices = group_breakpoints(breakpoints)
+#     # Form sorted breakpoints values and corresponding indices
+#     sorted_breakpoints, grouped_indices = group_breakpoints(breakpoints)
 
-    return sorted_breakpoints, grouped_indices
-end
+#     return sorted_breakpoints, grouped_indices
+# end
 
-# Form sorted breakpoints values and corresponding indices 
-function group_breakpoints(breakpoints::Vector) 
-    
-    idx = sortperm(breakpoints)              # indices that sort the values
-    sorted_vals = breakpoints[idx]           # sorted values
-    
-    # Collect unique values and group corresponding indices
-    groups = Dict{Float64, Vector{Int}}()
-    for (v, i) in zip(sorted_vals, idx)
-        push!(get!(groups, v, Int[]), i)
-    end
-    
-    unique_vals = collect(keys(groups)) |> sort
-    grouped_indices = [groups[v] for v in unique_vals]
-    
-    return unique_vals, grouped_indices
-end
+# # Form sorted breakpoints values and corresponding indices
+# function group_breakpoints(breakpoints::Vector)
+
+#     idx = sortperm(breakpoints)              # indices that sort the values
+#     sorted_vals = breakpoints[idx]           # sorted values
+
+#     # Collect unique values and group corresponding indices
+#     groups = Dict{Float64, Vector{Int}}()
+#     for (v, i) in zip(sorted_vals, idx)
+#         push!(get!(groups, v, Int[]), i)
+#     end
+
+#     unique_vals = collect(keys(groups)) |> sort
+#     grouped_indices = [groups[v] for v in unique_vals]
+
+#     return unique_vals, grouped_indices
+# end
 
 
-# Returns the indices of bounds that stay active at `x` when taking direction `d`
-function initial_active_bounds(
-    x::Vector,
-    d::Vector,
-    x_low::Vector,
-    x_upp::Vector;
-    atol = sqrt(eps(Float64)))
+# # Returns the indices of bounds that stay active at `x` when taking direction `d`
+# function initial_active_bounds(
+#     x::Vector,
+#     d::Vector,
+#     x_low::Vector,
+#     x_upp::Vector;
+#     atol = sqrt(eps(Float64)))
 
-    fix_vars = falses(size(x,1))
+#     fix_vars = falses(size(x,1))
 
-    for i in axes(x,1)
+#     for i in axes(x,1)
 
-        fix_vars[i] = (x_upp[i] < x[i] + atol && d[i] > atol) || # positive direction at active upper bound
-            (x_low[i] + atol > x[i] && d[i] < -atol) ||          # negative direction at active lower bound
-            (abs(d[i]) < atol)                                 # zero direction
-    end
+#         fix_vars[i] = (x_upp[i] < x[i] + atol && d[i] > atol) || # positive direction at active upper bound
+#             (x_low[i] + atol > x[i] && d[i] < -atol) ||          # negative direction at active lower bound
+#             (abs(d[i]) < atol)                                 # zero direction
+#     end
 
-    return findall(fix_vars)
-end
-
-# Identifies the components of `x` that, when taking direction `d` either lie at one of
-# their bound or take a zero direction
-# Returns the indices of the components of the search direction that equal 0.
-function initial_fixed(
-    x::Vector{T},
-    d::Vector{T},
-    xlow::Vector{T},
-    xupp::Vector{T})
-
-    return
-
-end
+#     return findall(fix_vars)
+# end

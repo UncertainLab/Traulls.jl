@@ -15,16 +15,18 @@ abstract type AbstractCnlsModel{T} end
 
 abstract type Projector{T} end
 
-# Utils
-for f in ["polyhedral_constraints", "trust_region", "cg", "hessian",
-    "al_utils",  "workspace", "execution_metrics", "model", "print_info"]
+# Include files
 
-    include("$f.jl")
-end
-
-# Solver files
-for f in ["solver"]
-    include("$f.jl")
-end
+include("polyhedral_constraints.jl")
+include("trust_region.jl")
+include("cg.jl")
+include("hessian.jl")
+include("al_utils.jl")
+include("workspace.jl")
+include("cauchy.jl")
+include("execution_metrics.jl")
+incude("model.jl")
+include("print_info.jl")
+include("solver.jl")
 
 end 

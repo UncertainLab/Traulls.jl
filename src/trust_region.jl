@@ -177,6 +177,14 @@ function factor_to_boundary(
     return alpha
 end
 
+# Returns `true` if the step `s` lies on the boundary of an infinite norm trust region,
+# `false` if not
+
+step_on_region(s::AbstractVector{T}, radius::T; eps_region::T = sqrt(eps(T))) where T =
+    norm(s, Inf) + radius*epsregion >= radius
+
+
+
 function check_stalling(
     s::Vector{T},
     x::Vector{T},

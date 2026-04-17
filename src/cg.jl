@@ -3,15 +3,16 @@
 
 Enum representing the termination status of the projected conjugate gradient method:
 
-- `normal_exit`: The subproblem was solved successfully.
-- `bound_hit`: The search direction hit a bound constraint.
-- `negative_curvature`: Negative curvature was detected.
-- `max_iter_reached`: The maximum number of iterations was reached.
+- `normal_exit`: The subproblem was solved successfully
+- `on_boundary`: The search direction hits one of the bounds on the variables
+- `on_trust_region`: The search direction stops at the trust region boundary
+- `negative_curvature`: Negative curvature was detected
+- `max_iter_reached`: The maximum number of iterations was reached
 """
-@enum CG_status normal_exit on_boundary negative_curvature max_iter_reached
+@enum CG_status normal_exit on_boundary on_trust_region negative_curvature max_iter_reached
 
 """ 
-    pcg!(b, H, w_l, w_u, fix_vars, κ_cg)
+    pcg!(b, H, P, s,  s_l, s_u, radius, r, v, p, Hp, κ_cg; ε_curv)
 
 Approximately solves, w.r.t. `w` the subproblem:
 
@@ -25,6 +26,8 @@ Approximately solves, w.r.t. `w` the subproblem:
 
 using the projected conjugate gradient method.
 
+The search directions updates are accumulated in the current step `s`.
+
 Termination cases: 
 
 - the norm of the preconditionned gradient has been reduced by a factor `κ_cg`
@@ -32,9 +35,9 @@ Termination cases:
 - direction of negative curvature is encountered (can happen when the Hessian is
  updated with SR1 formula)
 
-- a conjugate direction goes beyond the feasible domain
+- a conjugate direction goes beyond the feasible domain (either a bound or the trust region)
 
-- a maximum number of iterations  have been done (defined to be twice the number of free variables)
+- a maximum number of iterations have been done (defined to be twice the number of free variables)
 
 # Arguments
 
@@ -42,40 +45,40 @@ Termination cases:
 
 - `H`: Operator associated to the Hessian matrix
 
-- `w_l`: Lower bounds for the variables
+- `P`: Projector operator to compute the projected directions
 
-- `w_u`: Upper bounds for the variables
+- `s_l`: Lower bounds for the step
 
-- `fix_vars`: Boolean vector indicating which variables are fixed
+- `s_u`: Upper bounds for the step
+
+- `radius`: Radius of the infinite norm trust region
  
 - `kappa_cg`: Tolerance parameter for convergence
 
-- `atol`: Optionnal argument. Corresponds to absolute tolerance for negative
-curvature detection (default: square root double relative precision)
+- `eps_curv`: Optionnal tolerance to assert if the Hessian curvature is high enough
+(default: 1e-10)
+
+- `r`, `v`, `p`, `Hp`: Buffer vectors
 
 # Returns
 
-- `w`: The computed descent direction
-
+- step `s` modified in place
 - `status`: The termination status, encoded in the `CG_status` Enum (see [`CG_status`](@ref))
 """
 function pcg!(
     b::AbstractVector{T},
     H::ALHessian,
     P::Projector{T},
-    w::AbstractVector{T},
-    w_l::AbstractVector{T},
-    w_u::AbstractVector{T},
+    s::AbstractVector{T},
+    s_l::AbstractVector{T},
+    s_u::AbstractVector{T},
+    radius::T,
     r::AbstractVector{T},
     v::AbstractVector{T},
     p::AbstractVector{T},
     Hp::AbstractVector{T},
     kappa_cg::T;
-    atol::T = sqrt(eps(T))) where T
-
-    n = size(b,1)
-
-    w .= 0.0
+    eps_curv::T = T(1e-10)) where T
 
     r .= b
     mul!(v, P, r) # v ← Pr
@@ -83,15 +86,16 @@ function pcg!(
     p .= -v
 
     nrm_v = norm(v)
-    tol_cg = nrm_v * min(kappa_cg, sqrt(nrm_v))
-    tol_zerocurve = atol
+    eps_cg = nrm_v * min(kappa_cg, sqrt(nrm_v))
 
+    # Prepare for CG iterations
     iter = 1
     max_iter = 2*(nb_degrees_of_freedom(P))
     # approx_solved = abs(rtv) < tol_cg
     approx_solved = false
     neg_curvature = false
     outside_region = false
+    trust_region_hit = false
 
     while !approx_solved && !neg_curvature && !outside_region && iter <= max_iter
 
@@ -105,32 +109,34 @@ function pcg!(
             # Compute direction that stops at the feasible box and stop cg iterations
             neg_curvature = true
 
-            if abs(pHp) > tol_zerocurve # nonzero curvature to sill take a step
-                gamma = factor_to_boundary(p, w, w_l, w_u,P)
-                w .+= p .* gamma
+            if abs(pHp) > eps_curv # nonzero curvature to sill take a step
+                gamma = factor_to_boundary(p, s, s_l, s_u, P)
+                s .+= p .* gamma
             end
         else
             rtv = dot(r,v)
             alpha = rtv / pHp
-            gamma = factor_to_boundary(p, w, w_l, w_u, P)
-            outside_region = alpha > gamma
+            gamma = factor_to_boundary(p, s, s_l, s_u, P)
+            outside_boundary = alpha > gamma
 
-            if outside_region
+            if outside_boundary
                 # Next direction goes beyond feasible box
                 # Compute direction that stops at the feasible box and stop cg
                 # iterations
-                w .+= p .* gamma
+                s .+= p .* gamma
+                # Check if the step lies at the trust region boundary
+                trust_region_hit = step_on_region(s, radius)
             else 
                 # Update search and conjugate directions, evaluate convergence
                 # criteria
-                w .+= alpha .* p
+                s .+= alpha .* p
                 r .+= alpha .* Hp
-                mul!(v,P,r) # v ← Pr
+                mul!(v, P, r) # v ← Pr
                 rtv_next = dot(r,v)
                 beta = rtv_next / rtv
-                axpby!(-1, v, beta, p)         # p ← -v + βp
+                axpby!(-1, v, beta, p) # p ← -v + βp
                 rtv = rtv_next
-                approx_solved = sqrt(rtv) < tol_cg  # ⟺ ||vₖ₊₁|| ≤ ε ||v₀||
+                approx_solved = sqrt(rtv) < eps_cg  # ⟺ ||vₖ₊₁|| ≤ ε ||v₀||
                 iter += 1
             end
         end
@@ -138,6 +144,8 @@ function pcg!(
 
     status = if approx_solved
         normal_exit
+    elseif trust_region_hit
+        on_trust_region
     elseif outside_region
         on_boundary
     elseif neg_curvature
