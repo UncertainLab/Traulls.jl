@@ -1,5 +1,5 @@
-using Dates
-debug_file = string(now(UTC))*"_debuglv502.out"
+# using Dates
+debug_file = "debuglv502.out"
 debug_io = open(debug_file, "w")
 debug = true
 
@@ -480,14 +480,14 @@ function solve_subproblem!(
     model.counters.nalobj_eval += 1
     # Reset Hessian approximation and projector operator
     @match hessian_approx begin
-        $gn     => reset_hessian!(hess_op,J,C,mu)
-        $sr1    => reset_hessian!(hess_op,J,C,mu)
+        $gn     => reset_hessian!(hess_op, J, C,mu)
+        $sr1    => reset_hessian!(hess_op, J, C,mu)
     end
 
     reset_projector!(proj_op)
 
     # Initialize trust region
-    set_initial_radius!(tr,g)
+    set_initial_radius!(tr, g)
 
     # Prepare for inner minimization loop
     # TODO: add computation of criticality measure for polyhedral problem
@@ -533,8 +533,6 @@ function solve_subproblem!(
             kappa_step,
             kappa_cg,
             workspace)
-
-
 
         # Check of the trial point is undistinguishable from current solution or
         # if the radius is too small
@@ -685,20 +683,22 @@ function projected_gradient!(
     kappa_cg::T,
     workspace::Workspace{T}) where T
 
+    global debug
+    global debug_io
 
     # Buffers
     Hs = workspace.hess_vec
-    s_low, s_upp = workspace.step_low, workspace.step_upp
+    slow, supp = workspace.step_low, workspace.step_upp
     w = workspace.search_dir
     r, v, p = workspace.r, workspace.v, workspace.p
 
     # Bounds the step  on the search direction
-    slow .= (t -> max(-radius, t)).(xlow-x) .- s
-    supp .= (t -> min(radius, t)).(xupp-x) .- s
+    slow .= (t -> max(-radius, t)).(xlow-x)
+    supp .= (t -> min(radius, t)).(xupp-x)
     # Reset active constraints
     reset_projector!(proj_op)
 
-    cauchy_step!(x,
+    pred = cauchy_step!(x,
                  s,
                  g,
                  xlow,
@@ -707,36 +707,51 @@ function projected_gradient!(
                  supp,
                  hess_op,
                  proj_op,
-                 gproj)
+                 gproj,
+                 Hs)
+
+    debug && @printf(debug_io, "\n[projected_gradient!] norm Cauchy step: %.4e\n", norm(s))
 
     # Update the set of fixed variables (implicitly updates the null space matrix Z)
 
     # Set up for conjugate gradient iterations
     mul!(Hs, hess_op, s)
+
     b = workspace.cg_rhs
     b .= Hs .+ g
 
+    quasi_optimal_cg = norm(proj_op * b) <= kappa_step * norm(proj_op*g)
+    if quasi_optimal_cg && debug
+        println(debug_io, "[cauchy_step] cauchy step gives sufficient decrease")
+    end
     quasi_optimal = false
     cg_stop = false
     iter = 1
 
+    debug && println(debug_io, "[projected_gradient] no more free variables : ", saturated_subspace(proj_op))
+
     while !quasi_optimal && !cg_stop && iter <= max_cg_iter && !saturated_subspace(proj_op)
 
-        cg_status = pcg!(
+        cg_status, pred_cg = pcg!(
             b,
             hess_op,
             proj_op,
             s,
             slow,
             supp,
+            radius,
             r,
             v,
             p,
             Hs,
             kappa_cg)
 
+        # Increment predicted reduction
+        pred += pred_cg
 
+        debug && println(debug_io, "[projected_gradient] CG status: ", cg_status)
         # Prepare for next CG iterations
+        debug && @printf(debug_io, "\n[projected_gradient] norm accumulated step: %.4e\n", norm(s))
         mul!(Hs, hess_op, s) # form Hs
         b .= Hs .+ g
 
@@ -754,15 +769,15 @@ function projected_gradient!(
         cg_stop = cg_status == negative_curvature || cg_status == on_trust_region
 
         # Identify the newly active bounds
-        update_active_set!(s, x, xlow, xupp, radius, proj_op)
+        update_active_set!(s, x, xlow, xupp, proj_op)
 
         iter += 1
     end
 
     # Predicted reduction of the model taking step s
-    pred = dot(g,s) + 0.5*dot(s,Hs)
+    pred_greedy = dot(g,s) + 0.5*dot(s,Hs)
 
-    return pred
+    return pred_greedy
 end
 
 # """ cauchy_step!(x,g,H,ℓ,u,Δ)

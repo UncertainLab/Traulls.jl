@@ -586,8 +586,11 @@ end
 
 # Set free components at indices in `freed`
 @inline function set_free!(P::CoordinateSubspaceProjector, freed::Vector{Int})
-    P.fixvars[i] .= false
+    P.fixvars[freed] .= false
 end
+
+# Returns `true` if variable at index `i` is fixed, false if not
+is_fixed(P::CoordinateSubspaceProjector, i::Int) = P.fixvars[i]
 
 # Set active the components of indices in `newly_active` into the projector
 # `P`

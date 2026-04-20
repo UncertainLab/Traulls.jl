@@ -85,8 +85,8 @@ function pcg!(
     rtv = dot(r,v)
     p .= -v
 
-    nrm_v = norm(v)
-    eps_cg = nrm_v * min(kappa_cg, sqrt(nrm_v))
+    nrm_r = norm(r)
+    eps_cg = nrm_r * min(kappa_cg, sqrt(nrm_r))
 
     # Prepare for CG iterations
     iter = 1
@@ -94,10 +94,11 @@ function pcg!(
     # approx_solved = abs(rtv) < tol_cg
     approx_solved = false
     neg_curvature = false
-    outside_region = false
+    outside_boundary = false
     trust_region_hit = false
+    pred = zero(T)
 
-    while !approx_solved && !neg_curvature && !outside_region && iter <= max_iter
+    while !approx_solved && !neg_curvature && !outside_boundary && iter <= max_iter
 
         # Form Hp and pᵀHp
         mul!(Hp,H,p)
@@ -110,8 +111,11 @@ function pcg!(
             neg_curvature = true
 
             if abs(pHp) > eps_curv # nonzero curvature to sill take a step
+                # Compute direction that stops at the feasible box and stop cg
+                # iterations
                 gamma = factor_to_boundary(p, s, s_l, s_u, P)
                 s .+= p .* gamma
+                pred += -gamma * rtv + 0.5 * gamma^2 * pHp
             end
         else
             rtv = dot(r,v)
@@ -124,29 +128,33 @@ function pcg!(
                 # Compute direction that stops at the feasible box and stop cg
                 # iterations
                 s .+= p .* gamma
+                pred += -gamma * rtv + 0.5 * gamma^2 * pHp
                 # Check if the step lies at the trust region boundary
                 trust_region_hit = step_on_region(s, radius)
             else 
-                # Update search and conjugate directions, evaluate convergence
-                # criteria
+                # Increment step and predicted reduction
                 s .+= alpha .* p
+                pred -= 0.5 * alpha * rtv
+
+                # Form next conjugate directions and evaluate termination criteria
                 r .+= alpha .* Hp
                 mul!(v, P, r) # v ← Pr
                 rtv_next = dot(r,v)
                 beta = rtv_next / rtv
                 axpby!(-1, v, beta, p) # p ← -v + βp
                 rtv = rtv_next
-                approx_solved = sqrt(rtv) < eps_cg  # ⟺ ||vₖ₊₁|| ≤ ε ||v₀||
+                approx_solved = sqrt(rtv) < eps_cg  # ⟺ ||rₖ₊₁|| ≤ ε ||r₀||
                 iter += 1
             end
         end
     end
 
+
     status = if approx_solved
         normal_exit
     elseif trust_region_hit
         on_trust_region
-    elseif outside_region
+    elseif outside_boundary
         on_boundary
     elseif neg_curvature
         negative_curvature
@@ -154,5 +162,5 @@ function pcg!(
         max_iter_reached
     end
 
-    return status
+    return status, pred
 end

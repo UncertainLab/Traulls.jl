@@ -181,7 +181,7 @@ end
 # `false` if not
 
 step_on_region(s::AbstractVector{T}, radius::T; eps_region::T = sqrt(eps(T))) where T =
-    norm(s, Inf) + radius*epsregion >= radius
+    norm(s, Inf) + radius*eps_region >= radius
 
 
 

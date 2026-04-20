@@ -51,6 +51,8 @@ function cauchy_step!(
     d::AbstractVector{T},
     Hd::AbstractVector{T}) where T
 
+    global debug
+    global debug_io
     # Constants
     zeroT = T(0.0)
     eps_slope = 1e-10
@@ -64,13 +66,13 @@ function cauchy_step!(
     fixed = vcat(active, zero_dir)
 
     # Update the projector operator and search direction
-    !isempty(fixed) && set_active(proj_op, fixed)
+    !isempty(fixed) && set_active!(proj_op, fixed)
     mul!(d, proj_op, -g)
 
     # Find first breakpoint
     s .= zeroT
     prev_tb = zeroT
-    tb, idx = next_preakpoint(d, s, slow, supp, proj_op)
+    tb, idx = next_breakpoint(d, s, slow, supp, proj_op)
 
 
     # Form gᵀd and Hd
@@ -81,6 +83,7 @@ function cauchy_step!(
     # active or breakpoints can be found
 
     found = false
+    pred = zeroT
 
     while !found && !saturated_subspace(proj_op) && !isempty(idx)
 
@@ -98,13 +101,16 @@ function cauchy_step!(
 
         # Positive curvature and local minimum within current interval
         elseif phi_pp > 0 && delta_t < l_interval
-            s .+= detla_t * d
+            s .+= delta_t * d
             found = true
+            pred += phi_p * delta_t + 0.5 * phi_pp * delta_t^2 # Predicted reduction at local min
 
         # No local minimum in [prev_tb, tb)
         # Prepare for next interval
         else
-            s .+= d .* l_interval # Accumulated step
+            # Increment accumulated step and predicted reduction
+            s .+= d .* l_interval
+            pred += phi_p * l_interval + 0.5 * phi_pp * l_interval^2
 
             # Form next search direction
             set_active!(proj_op, idx)
@@ -118,11 +124,10 @@ function cauchy_step!(
             tb = prev_tb + gap
         end
     end
-
     # Remove zero directions from fixed variables
     set_free!(proj_op, zero_dir)
 
-    return
+    return pred
 end
 
 # Finds the variables fixed during the Cauchy step computation
@@ -140,18 +145,23 @@ function initial_fixed(
     xupp::AbstractVector{T};
     epsrel::T = sqrt(eps(T))) where T
 
-    active = []
-    zero_dir = []
+    global debug
+    global deubg_io
+
+    active = Vector{Int}()
+    zero_dir = Vector{Int}()
 
     # Components at bounds wiht direction moving out of the feasible region
     for i in axes(x,1)
 
         # Variable at lower bound with negative direction
-        if x[i] <= xlow[i] + abs(xlow[i])*epsrel && d[i] < epsrel
+        if isfinite(xlow[i]) && x[i] <= xlow[i] + abs(xlow[i])*epsrel && d[i] < epsrel
+            debug && println(debug_io, "[initial_fixed] $i at lower + negative direction")
             push!(active, i)
 
         # Variable at upper bound with positive direction
-        elseif x[i] + abs(xupp[i])*epsrel >= xupp[i] && d[i] > -epsrel
+        elseif isfinite(xupp[i]) && x[i] + abs(xupp[i])*epsrel >= xupp[i] && d[i] > -epsrel
+            debug && println(debug_io, "[initial_fixed] $i at upper + positive direction")
             push!(active, i)
 
         # Variable between its bounds but with zero direction
@@ -178,8 +188,8 @@ function next_breakpoint(
     proj_op::Projector{T};
     epsbp::T = 10*eps(T)) where T
 
-    bp_value = Inf # current breakpoint value
-    bp_idx = []    # indices of variables becoming active at breakpoint
+    bp_value = Inf         # current breakpoint value
+    bp_idx = Vector{Int}() # indices of variables becoming active at breakpoint
 
     # TODO: filter the axes with free variables to get directly the iterator with the right
     # indices

@@ -25,7 +25,7 @@ include("al_utils.jl")
 include("workspace.jl")
 include("cauchy.jl")
 include("execution_metrics.jl")
-incude("model.jl")
+include("model.jl")
 include("print_info.jl")
 include("solver.jl")
 
