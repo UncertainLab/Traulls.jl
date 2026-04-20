@@ -278,7 +278,7 @@ the approximation to break down.
 function update_sr1_second_order!(sr1_op::SR1{T}) where T
 
     # Tolerance for the skipping update safeguard
-    eps_safeguard = sqrt(eps(T))
+    eps_safeguard = 1e-8
 
     # Vectors of the secant Equation Ss = y
     y = sr1_op.secant_rhs
@@ -289,14 +289,12 @@ function update_sr1_second_order!(sr1_op::SR1{T}) where T
     ymSs .= y
     mul!(ymSs, sr1_op.S, s, -1, 1) # Form ymSs = y - Ss
 
-    # Apply update if denominator (y - Ss)ᵀs not too small
+    # Add (y - Ss)(y - Ss)ᵀ / (y - Ss)ᵀs to second order terms approximation
+    # Update applied if denominator (y - Ss)ᵀs not too small
     denom = dot(s,ymSs)
-    if abs(denom) > max(eps_safeguard, eps_safeguard * norm(s) * norm(ymSs))
-        # println("[update_sr1_second_order] update not skipped")
-        # println("[update_sr1_second_order] S before update: ", sr1_op.S)
-        # Add (y - Ss)(y - Ss)ᵀ / (y - Ss)ᵀs to second order terms approximation
+    if abs(denom) > eps_safeguard * (1 + norm(s)*norm(ymSs))
+
         mul!(sr1_op.S, ymSs, ymSs', 1/denom, 1)
-        # println("[update_sr1_second_order] S after update: ", sr1_op.S)
     end
 
     return

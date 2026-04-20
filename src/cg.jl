@@ -114,7 +114,7 @@ function pcg!(
                 # Compute direction that stops at the feasible box and stop cg
                 # iterations
                 gamma = factor_to_boundary(p, s, s_l, s_u, P)
-                s .+= p .* gamma
+                s .+= gamma .* p
                 pred += -gamma * rtv + 0.5 * gamma^2 * pHp
             end
         else
@@ -127,7 +127,7 @@ function pcg!(
                 # Next direction goes beyond feasible box
                 # Compute direction that stops at the feasible box and stop cg
                 # iterations
-                s .+= p .* gamma
+                s .+= gamma .* p
                 pred += -gamma * rtv + 0.5 * gamma^2 * pHp
                 # Check if the step lies at the trust region boundary
                 trust_region_hit = step_on_region(s, radius)

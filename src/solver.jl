@@ -270,10 +270,8 @@ function solve(
             solved = feas_measure <= min_tol_feas &&
                 norm_proj_gradlag <= tol_crit
 
-
-
             if !solved
-                # Update the iterate, multipliers and decrease tolerances
+                # Decrease tolerances
                 # Penalty parameter is unchanged
                 reltol_crit = max(reltol_crit / mu^beta_crit, min_reltol_crit)
                 tol_feas = max(tol_feas / mu^beta_feas, min_tol_feas)
@@ -548,7 +546,7 @@ function solve_subproblem!(
         x .+= s
         residuals!(model, rx, x)
         nlconstraints!(model, cx, x)
-        alx = al_obj(rx,cx,y,mu)
+        alx = al_obj(rx, cx, y, mu)
         model.counters.nalobj_eval += 1
         norm_step = norm(s, Inf) # used for radius update
 
@@ -710,7 +708,7 @@ function projected_gradient!(
                  gproj,
                  Hs)
 
-    debug && @printf(debug_io, "\n[projected_gradient!] norm Cauchy step: %.4e\n", norm(s))
+    debug && @printf(debug_io, "\n[projected_gradient!] ∞-norm Cauchy step: %.4e\n", norm(s, Inf))
 
     # Update the set of fixed variables (implicitly updates the null space matrix Z)
 
@@ -722,13 +720,15 @@ function projected_gradient!(
 
     quasi_optimal_cg = norm(proj_op * b) <= kappa_step * norm(proj_op*g)
     if quasi_optimal_cg && debug
-        println(debug_io, "[cauchy_step] cauchy step gives sufficient decrease")
+        println(debug_io, "[projected_gradient!] cauchy step gives sufficient decrease")
     end
     quasi_optimal = false
     cg_stop = false
     iter = 1
 
-    debug && println(debug_io, "[projected_gradient] no more free variables : ", saturated_subspace(proj_op))
+    debug && println(debug_io, "[projected_gradient!] no more free variables : ", saturated_subspace(proj_op))
+    debug && @printf(debug_io, "\n[projected_gradient!] predicted reduction cauchy (incremental): %.4e\n", pred)
+    debug && @printf(debug_io, "\n[projected_gradient!] predicted reduction cauchy (greedy): %.4e\n", dot(g,s) + 0.5 * dot(s,Hs))
 
     while !quasi_optimal && !cg_stop && iter <= max_cg_iter && !saturated_subspace(proj_op)
 
@@ -749,9 +749,9 @@ function projected_gradient!(
         # Increment predicted reduction
         pred += pred_cg
 
-        debug && println(debug_io, "[projected_gradient] CG status: ", cg_status)
+        debug && println(debug_io, "[projected_gradient] CG iter $iter solving status: ", cg_status)
         # Prepare for next CG iterations
-        debug && @printf(debug_io, "\n[projected_gradient] norm accumulated step: %.4e\n", norm(s))
+        debug && @printf(debug_io, "\n[projected_gradient] ∞-norm accumulated step: %.4e\n", norm(s,Inf))
         mul!(Hs, hess_op, s) # form Hs
         b .= Hs .+ g
 
@@ -776,6 +776,9 @@ function projected_gradient!(
 
     # Predicted reduction of the model taking step s
     pred_greedy = dot(g,s) + 0.5*dot(s,Hs)
+
+    debug && @printf(debug_io, "\n[projected_gradient!] predicted reduction (incremental): %.4e\n", pred)
+    debug && @printf(debug_io, "\n[projected_gradient!] predicted reduction (greedy): %.4e\n", pred_greedy)
 
     return pred_greedy
 end

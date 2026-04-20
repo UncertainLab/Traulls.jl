@@ -97,14 +97,17 @@ function step_ratio(
     global debug
     global debug_io
 
+    debug && @printf(debug_io, "\n[step_ratio] ared : %.4e ; pred : %.4e", mx_trial-mx, pred)
+
     eps_ratio = 10 * eps(T)
     delta_ratio = eps_ratio * max(1, abs(mx_trial))
-
+    debug && @printf(debug_io, "\n[step_ratio] δ_ratio : %.4e", delta_ratio)
 
     delta_ared = mx_trial - mx - delta_ratio
     delta_pred = pred - delta_ratio
 
-    ratio = abs(delta_ared) < eps_ratio && abs(delta_pred) < eps_ratio ? 1.0 : delta_ared / delta_pred
+    ratio = abs(delta_ared) < eps_ratio && abs(delta_pred) < eps_ratio ? 1.0 :
+        delta_ared / delta_pred
 
     return ratio
 end
