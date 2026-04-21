@@ -76,7 +76,7 @@ function cauchy_step!(
 
 
     # Form gᵀd and Hd
-    gtd = dot(g,d)
+    gd = dot(g,d)
     mul!(Hd, hess_op, d) # Hd ← H*d
 
     # Search for the first local minimum on the Cauchy path as long as bounds can become
@@ -84,11 +84,13 @@ function cauchy_step!(
 
     found = false
     pred = zeroT
-
+    tc = zeroT
+    i = 1
     while !found && !saturated_subspace(proj_op) && !isempty(idx)
 
+        debug && @printf(debug_io,"\n[cauchy_step!] breakpoint %d : %.4e\n", i, tb)
         # Compute slope and curvature
-        phi_p = gtd + dot(s, Hd)
+        phi_p = gd + dot(s, Hd)
         phi_pp = dot(d, Hd)
 
         # Study the current interval [prev_tb, tb)
@@ -102,6 +104,7 @@ function cauchy_step!(
         # Positive curvature and local minimum within current interval
         elseif phi_pp > 0 && delta_t < l_interval
             s .+= delta_t * d
+            tc = prev_tb + delta_t
             found = true
             pred += phi_p * delta_t + 0.5 * phi_pp * delta_t^2 # Predicted reduction at local min
 
@@ -111,21 +114,25 @@ function cauchy_step!(
             # Increment accumulated step and predicted reduction
             s .+= d .* l_interval
             pred += phi_p * l_interval + 0.5 * phi_pp * l_interval^2
+            tc = tb
 
             # Form next search direction
             set_active!(proj_op, idx)
             mul!(d, proj_op, -g)
-            gdt = dot(g, d)
+            gd = dot(g, d)
             mul!(Hd, hess_op, d)
 
             # Find next breakpoint
             prev_tb = tb
             gap, idx = next_breakpoint(d, s, slow, supp, proj_op)
             tb = prev_tb + gap
+            i += 1
         end
     end
     # Remove zero directions from fixed variables
     set_free!(proj_op, zero_dir)
+
+    debug && @printf(debug_io, "\n[cauchy_step!] cauchy steplength: %.4e\n", tc)
 
     return pred
 end

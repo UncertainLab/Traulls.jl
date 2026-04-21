@@ -1,7 +1,7 @@
 # using Dates
 debug_file = "debuglv502.out"
 debug_io = open(debug_file, "w")
-debug = true
+debug = false
 
 """
     solve(model; kwargs...)
@@ -214,6 +214,8 @@ function solve(
     while !solved && iter <= max_iter
 
         debug && println(debug_io, "\n\n[solve] outer iter $iter", @sprintf(" relative tolerance : %.6e", reltol_crit))
+        debug && println(debug_io, "[solve] penalty parameter: ", mu)
+        debug && println(debug_io, "[solve] multipliers: ", y)
 
         # debug && println(debug_io, "[solve] current solution : ", x)
         # debug && println(debug_io, "[solve] current multipliers : ", y, " ; current penalty parameter : ", mu)
@@ -517,6 +519,8 @@ function solve_subproblem!(
 
         radius = tr.radius
 
+        debug && @printf(debug_io, "\n[solve_subproblem!] Δ = %.6e\n", radius)
+
         pred = projected_gradient!(
             x,
             s,
@@ -727,6 +731,7 @@ function projected_gradient!(
     iter = 1
 
     debug && println(debug_io, "[projected_gradient!] no more free variables : ", saturated_subspace(proj_op))
+    debug && println(debug_io, "[projected_gradient] current iterate: ", x)
     debug && @printf(debug_io, "\n[projected_gradient!] predicted reduction cauchy (incremental): %.4e\n", pred)
     debug && @printf(debug_io, "\n[projected_gradient!] predicted reduction cauchy (greedy): %.4e\n", dot(g,s) + 0.5 * dot(s,Hs))
 
@@ -780,7 +785,7 @@ function projected_gradient!(
     debug && @printf(debug_io, "\n[projected_gradient!] predicted reduction (incremental): %.4e\n", pred)
     debug && @printf(debug_io, "\n[projected_gradient!] predicted reduction (greedy): %.4e\n", pred_greedy)
 
-    return pred_greedy
+    return pred
 end
 
 # """ cauchy_step!(x,g,H,ℓ,u,Δ)

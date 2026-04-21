@@ -192,14 +192,14 @@ attributes to `0`.
 * `μ`: Penalty parameter
 """
 function SR1(
-    J::AbstractMatrix,
-    C::AbstractMatrix,
-    mu::Float64)
+    J::AbstractMatrix{T},
+    C::AbstractMatrix{T},
+    mu::T) where T
 
     (m,n) = size(J)
     p = size(C,1)
 
-    return SR1(copy(J),copy(C),zeros(n,n),mu,zeros(n),zeros(n),zeros(max(n,m,p)))
+    return SR1(copy(J),copy(C),Matrix{T}(I,n,n),mu,zeros(T,n),zeros(T,n),zeros(T,max(n,m,p)))
 end
 
 """ Base.:*(H::SR1, v)
