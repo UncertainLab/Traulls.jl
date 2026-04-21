@@ -1,7 +1,8 @@
 # using Dates
-debug_file = "debuglv502.out"
+debug_file = "debuglv501.out"
 debug_io = open(debug_file, "w")
-debug = false
+debug = true
+
 
 """
     solve(model; kwargs...)
@@ -460,6 +461,7 @@ function solve_subproblem!(
 
     global debug_io
     global debug
+
     # Dimensions
     n, nslack, ncons = model.n, model.nslack, model.ncons
     lincons_present = model.nlincons > 0
@@ -518,8 +520,9 @@ function solve_subproblem!(
         alx_prev = alx
 
         radius = tr.radius
-
-        debug && @printf(debug_io, "\n[solve_subproblem!] Δ = %.6e\n", radius)
+        # Set tolerance for the CG iterations
+        eps_cg = min(kappa_cg, sqrt(pix)) * pix
+        debug && @printf(debug_io, "\n[solve_subproblem!] Δ = %.6e ; ε_cg = %.4e\n", radius, eps_cg)
 
         pred = projected_gradient!(
             x,
@@ -604,7 +607,6 @@ function solve_subproblem!(
             pix = lincons_present ?
                 criticality_measure(x, g, gproj, proj_op) :
                 criticality_measure(x, g, gproj, xlow, xupp)
-
         else
             x .= x_prev
             rx .= rx_prev
@@ -682,7 +684,7 @@ function projected_gradient!(
     radius::T,
     max_cg_iter::Int,
     kappa_step::T,
-    kappa_cg::T,
+    eps_cg::T,
     workspace::Workspace{T}) where T
 
     global debug
@@ -730,10 +732,8 @@ function projected_gradient!(
     cg_stop = false
     iter = 1
 
-    debug && println(debug_io, "[projected_gradient!] no more free variables : ", saturated_subspace(proj_op))
-    debug && println(debug_io, "[projected_gradient] current iterate: ", x)
-    debug && @printf(debug_io, "\n[projected_gradient!] predicted reduction cauchy (incremental): %.4e\n", pred)
-    debug && @printf(debug_io, "\n[projected_gradient!] predicted reduction cauchy (greedy): %.4e\n", dot(g,s) + 0.5 * dot(s,Hs))
+    # debug && println(debug_io, "[projected_gradient!] no more free variables : ", saturated_subspace(proj_op))
+    # debug && println(debug_io, "[projected_gradient] current iterate: ", x)
 
     while !quasi_optimal && !cg_stop && iter <= max_cg_iter && !saturated_subspace(proj_op)
 
@@ -749,7 +749,7 @@ function projected_gradient!(
             v,
             p,
             Hs,
-            kappa_cg)
+            eps_cg)
 
         # Increment predicted reduction
         pred += pred_cg
@@ -771,7 +771,7 @@ function projected_gradient!(
 
         # Stop if negative curvature encountered or if the step lies at the trust region
         # boundary
-        cg_stop = cg_status == negative_curvature || cg_status == on_trust_region
+        cg_stop = cg_status == negative_curvature # || cg_status == on_trust_region
 
         # Identify the newly active bounds
         update_active_set!(s, x, xlow, xupp, proj_op)
@@ -780,10 +780,7 @@ function projected_gradient!(
     end
 
     # Predicted reduction of the model taking step s
-    pred_greedy = dot(g,s) + 0.5*dot(s,Hs)
-
-    debug && @printf(debug_io, "\n[projected_gradient!] predicted reduction (incremental): %.4e\n", pred)
-    debug && @printf(debug_io, "\n[projected_gradient!] predicted reduction (greedy): %.4e\n", pred_greedy)
+    # pred_greedy = dot(g,s) + 0.5*dot(s,Hs)
 
     return pred
 end
@@ -1093,7 +1090,7 @@ function initial_point_and_projector!(
     n, m = model.n, model.nlincons
     xlow, xupp = model.xlow, model.xupp
 
-    solve_linfeas_pb!(A, x0, b, xlow, xupp, m, n)
+    solve_linfeas_pb!(A, x, b, xlow, xupp, m, n)
 
     # Identity active bounds at starting point
     initial_active = falses(n)
@@ -1123,7 +1120,7 @@ function solve_linfeas_pb!(
     feas_model = Model(HiGHS.Optimizer)
     set_silent(feas_model)
 
-    @variable(feas_model, lb[i] <= x[i=1:n] <= lb[i], start = x0[i])
+    @variable(feas_model, lb[i] <= x[i=1:n] <= ub[i], start = x0[i])
     @variable(feas_model, r[1:m])
 
     @constraint(feas_model, A*x + r == b)
@@ -1189,5 +1186,5 @@ function criticality_measure(
     proj_op::SubspaceProjector{T}) where T
 
     mul!(projg, proj_op, g)
-
+    norm(projg, Inf)
 end

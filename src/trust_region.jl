@@ -52,10 +52,10 @@ This value correponds to the initial radius of an optimization process.
 function set_initial_radius!(
     tr::TrustRegion{T},
     g::Vector{T};
-    kappa_radius::T = T(0.1),
+    kappa_radius::T = T(1//10),
     p::T = T(Inf)) where T
 
-    tr.radius = max(T(1), kappa_radius * norm(g,p))
+    tr.radius = kappa_radius * norm(g,p)
     return
 end
 
@@ -94,15 +94,11 @@ function step_ratio(
     mx_trial::T,
     pred::T) where T
 
-    global debug
-    global debug_io
-
-    debug && @printf(debug_io, "\n[step_ratio] ared : %.4e ; pred : %.4e", mx_trial-mx, pred)
-
+    # Constants
     eps_ratio = 10 * eps(T)
     delta_ratio = eps_ratio * max(1, abs(mx_trial))
-    debug && @printf(debug_io, "\n[step_ratio] δ_ratio : %.4e", delta_ratio)
 
+    # Adjusted actual and predicted reductions to avoid roundoff errors
     delta_ared = mx_trial - mx - delta_ratio
     delta_pred = pred - delta_ratio
 

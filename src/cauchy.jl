@@ -51,8 +51,6 @@ function cauchy_step!(
     d::AbstractVector{T},
     Hd::AbstractVector{T}) where T
 
-    global debug
-    global debug_io
     # Constants
     zeroT = T(0.0)
     eps_slope = 1e-10
@@ -88,7 +86,6 @@ function cauchy_step!(
     i = 1
     while !found && !saturated_subspace(proj_op) && !isempty(idx)
 
-        debug && @printf(debug_io,"\n[cauchy_step!] breakpoint %d : %.4e\n", i, tb)
         # Compute slope and curvature
         phi_p = gd + dot(s, Hd)
         phi_pp = dot(d, Hd)
@@ -129,10 +126,9 @@ function cauchy_step!(
             i += 1
         end
     end
+
     # Remove zero directions from fixed variables
     set_free!(proj_op, zero_dir)
-
-    debug && @printf(debug_io, "\n[cauchy_step!] cauchy steplength: %.4e\n", tc)
 
     return pred
 end
@@ -163,12 +159,10 @@ function initial_fixed(
 
         # Variable at lower bound with negative direction
         if isfinite(xlow[i]) && x[i] <= xlow[i] + abs(xlow[i])*epsrel && d[i] < epsrel
-            debug && println(debug_io, "[initial_fixed] $i at lower + negative direction")
             push!(active, i)
 
         # Variable at upper bound with positive direction
         elseif isfinite(xupp[i]) && x[i] + abs(xupp[i])*epsrel >= xupp[i] && d[i] > -epsrel
-            debug && println(debug_io, "[initial_fixed] $i at upper + positive direction")
             push!(active, i)
 
         # Variable between its bounds but with zero direction

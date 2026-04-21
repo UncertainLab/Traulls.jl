@@ -113,7 +113,7 @@ Remove the constraints `vᵢ = 0`, for `i ∈ removed` from the subspace represe
 `M`. Corresponds to removing rows from the latter.
 """
 function remove_subspace!(M::SubspaceMatrix, removed::Vector{Int})
-    M.fixvars[removed] .= true
+    M.fixvars[removed] .= false
     return
 end
 # Returns the number of fixed variables in the subsspace represented by the `SubspaceMatrix` `A`

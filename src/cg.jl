@@ -77,8 +77,11 @@ function pcg!(
     v::AbstractVector{T},
     p::AbstractVector{T},
     Hp::AbstractVector{T},
-    kappa_cg::T;
+    eps_cg::T;
     eps_curv::T = T(1e-10)) where T
+
+    global debug
+    global debug_io
 
     r .= b
     mul!(v, P, r) # v ← Pr
@@ -86,7 +89,9 @@ function pcg!(
     p .= -v
 
     nrm_r = norm(r)
-    eps_cg = nrm_r * min(kappa_cg, sqrt(nrm_r))
+    old_eps = nrm_r * min(0.1, sqrt(nrm_r))
+    debug && @printf(debug_io, "\n[pcg!] previous version CG tolerance : %.4e\n", old_eps)
+    # eps_cg = nrm_r * min(kappa_cg, sqrt(nrm_r))
 
     # Prepare for CG iterations
     iter = 1
@@ -143,12 +148,14 @@ function pcg!(
                 beta = rtv_next / rtv
                 axpby!(-1, v, beta, p) # p ← -v + βp
                 rtv = rtv_next
-                approx_solved = sqrt(rtv) < eps_cg  # ⟺ ||rₖ₊₁|| ≤ ε ||r₀||
+                approx_solved = norm(r) < eps_cg
+                # approx_solved = sqrt(rtv) < eps_cg
                 iter += 1
             end
         end
     end
 
+    debug && println(debug_io, "[pcg!] number of CG iterations : ", iter)
 
     status = if approx_solved
         normal_exit
