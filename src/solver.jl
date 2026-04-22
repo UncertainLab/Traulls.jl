@@ -1,5 +1,5 @@
 # using Dates
-debug_file = "debuglv501.out"
+debug_file = "debug.out"
 debug_io = open(debug_file, "w")
 debug = true
 
@@ -109,32 +109,32 @@ Returns the solution vector and additional information encoded in a
 [`PrimalDualSolution`](@ref).
 """
 function solve(
-    model::CnlsModel;
-    mu::Float64 = 10.0,
-    tau::Float64 = 10.0,
-    omega0::Float64 = 1.0,
-    eta0::Float64 = 1.0,
-    min_tol_feas::Float64 = 1e-7,
-    min_reltol_crit::Float64 = 1e-7,
-    k_crit::Float64 = 1.0,
-    k_feas::Float64 = 0.1,
-    beta_crit::Float64 = 1.0,
-    beta_feas::Float64 = 0.9,
-    accept_treshold::Float64 = 0.25,
-    increase_treshold::Float64 = 0.75,
-    decrease_factor::Float64 = 0.5,
-    increase_factor::Float64 = 2.5,
-    neg_ratio_factor::Float64 = 0.0625,
-    kappa_step::Float64 = 0.1,
-    kappa_cg::Float64 = 0.1,
+    model::CnlsModel{T};
+    mu::T = T(10),
+    tau::T = T(10),
+    omega0::T = T(1),
+    eta0::T = T(1),
+    min_tol_feas::T = T(1e-7),
+    min_reltol_crit::T = T(1e-7),
+    k_crit::T = T(1),
+    k_feas::T = T(1//10),
+    beta_crit::T = T(1),
+    beta_feas::T = T(9//10),
+    accept_treshold::T = T(0.25),
+    increase_treshold::T = T(0.75),
+    decrease_factor::T = T(0.5),
+    increase_factor::T = T(2.5),
+    neg_ratio_factor::T = T(0.0625),
+    kappa_step::T = T(1//10),
+    kappa_cg::T = T(1//10),
     hessian_approx::HessianApprox = gn,
-    mu_max::Float64 = 1e6,
+    mu_max::T = 1/eps(T),
     max_iter::Int = 200,
     max_inner_iter::Int = 200,
     max_cg_iter::Int = 50,
     output_file_name::String="",
     verbose::Bool=false,
-    inner_verbose::Bool=false)
+    inner_verbose::Bool=false) where T
 
     global debug_io
     global debug
@@ -157,7 +157,7 @@ function solve(
     xlow, xupp = model.xlow, model.xupp
 
      # Allocate memory for buffer vectors involved in inner minimization
-    inner_workspace = Workspace(Float64, n, nres ,ncons)
+    inner_workspace = Workspace(T, n, nres ,ncons)
 
     # Allocate buffers for functions and first derivatives evaluation
     rx = residuals(model, x)
@@ -499,10 +499,11 @@ function solve_subproblem!(
         criticality_measure(x, g, gproj, xlow, xupp)
 
     # tol_scale_factor = max(1, norm(g, Inf))
-    tol_crit = reltol_crit * (1 + norm(g, Inf))
-    debug && @printf(debug_io, "\n[solve_subproblem] effective tolerance = %.4e", tol_crit)
+    # tol_crit = reltol_crit * (1 + norm(g, Inf))
+    tol_crit = reltol_crit * (1 + pix)
+    debug && @printf(debug_io, "\n[solve_subproblem!] effective tolerance = %.4e\n", tol_crit)
     solved = pix <= tol_crit
-    # println(debug_io, "[solve_subproblem] Initial solved status: $solved")
+    debug &&  println(debug_io, "[solve_subproblem!] Initial solved status: $solved")
     short_circuit = false
 
     iter = 1
@@ -535,8 +536,8 @@ function solve_subproblem!(
             xupp,
             radius,
             max_cg_iter,
-            kappa_step,
-            kappa_cg,
+            reltol_crit,
+            reltol_crit,
             workspace)
 
         # Check of the trial point is undistinguishable from current solution or
@@ -580,7 +581,9 @@ function solve_subproblem!(
 
         end
 
-        # debug && println(debug_io, "[solve_subproblem] |fₖ₊₁ - fₖ|/ |fₖ| = ", abs(alx - alx_prev) / abs(alx_prev))
+        debug && @printf(debug_io, "\n[solve_subproblem!] mx_prev = %.4e ; mx = %.4e ; pred = %.4e\n", alx_prev, alx, pred)
+        debug && println(debug_io, "[solve_subproblem!] residuals: ", rx)
+        debug && println(debug_io, "[solve_subproblem!] constraints: ", cx)
 
         # Compute the ratio actual reduction / predicted reduction
         ratio = step_ratio(alx_prev, alx, pred)
@@ -683,8 +686,8 @@ function projected_gradient!(
     xupp::AbstractVector{T},
     radius::T,
     max_cg_iter::Int,
-    kappa_step::T,
-    eps_cg::T,
+    kappa_pg::T,
+    kappa_cg::T,
     workspace::Workspace{T}) where T
 
     global debug
@@ -724,11 +727,13 @@ function projected_gradient!(
     b = workspace.cg_rhs
     b .= Hs .+ g
 
-    quasi_optimal_cg = norm(proj_op * b) <= kappa_step * norm(proj_op*g)
+    quasi_optimal_cg = norm(proj_op * b) <= kappa_pg * norm(proj_op*g)
+
     if quasi_optimal_cg && debug
         println(debug_io, "[projected_gradient!] cauchy step gives sufficient decrease")
     end
-    quasi_optimal = false
+
+    quasi_optimal = norm(proj_op * b) <= kappa_pg * norm(proj_op*g)
     cg_stop = false
     iter = 1
 
@@ -749,7 +754,7 @@ function projected_gradient!(
             v,
             p,
             Hs,
-            eps_cg)
+            kappa_cg)
 
         # Increment predicted reduction
         pred += pred_cg
@@ -767,17 +772,19 @@ function projected_gradient!(
         norm_reduced_gnext = norm(proj_op * b)
 
         # Stop if the step provides sufficient decrease in the reduced gradient
-        quasi_optimal = norm_reduced_gnext <= kappa_step * norm_reduced_g
+        quasi_optimal = norm_reduced_gnext <= kappa_pg * norm_reduced_g
 
         # Stop if negative curvature encountered or if the step lies at the trust region
         # boundary
-        cg_stop = cg_status == negative_curvature # || cg_status == on_trust_region
+        cg_stop = cg_status == negative_curvature || cg_status == on_trust_region
 
         # Identify the newly active bounds
         update_active_set!(s, x, xlow, xupp, proj_op)
 
         iter += 1
     end
+
+    debug && println(debug_io, "[projected_gradient!] number of CG executions: $iter")
 
     # Predicted reduction of the model taking step s
     # pred_greedy = dot(g,s) + 0.5*dot(s,Hs)

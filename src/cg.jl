@@ -64,6 +64,7 @@ Termination cases:
 
 - step `s` modified in place
 - `status`: The termination status, encoded in the `CG_status` Enum (see [`CG_status`](@ref))
+- `pred`: value of the reduction of the model after taking step `s`
 """
 function pcg!(
     b::AbstractVector{T},
@@ -77,7 +78,7 @@ function pcg!(
     v::AbstractVector{T},
     p::AbstractVector{T},
     Hp::AbstractVector{T},
-    eps_cg::T;
+    kappa_cg::T;
     eps_curv::T = T(1e-10)) where T
 
     global debug
@@ -88,25 +89,23 @@ function pcg!(
     rtv = dot(r,v)
     p .= -v
 
-    nrm_r = norm(r)
-    old_eps = nrm_r * min(0.1, sqrt(nrm_r))
-    debug && @printf(debug_io, "\n[pcg!] previous version CG tolerance : %.4e\n", old_eps)
-    # eps_cg = nrm_r * min(kappa_cg, sqrt(nrm_r))
+
+    eps_cg = kappa_cg * sqrt(rtv) # ϵ ← κ * ||v₀||
 
     # Prepare for CG iterations
     iter = 1
     max_iter = 2*(nb_degrees_of_freedom(P))
     # approx_solved = abs(rtv) < tol_cg
-    approx_solved = false
+    solved = false
     neg_curvature = false
     outside_boundary = false
     trust_region_hit = false
     pred = zero(T)
 
-    while !approx_solved && !neg_curvature && !outside_boundary && iter <= max_iter
+    while !solved && !neg_curvature && !outside_boundary && iter <= max_iter
 
         # Form Hp and pᵀHp
-        mul!(Hp,H,p)
+        mul!(Hp, H, p)
         pHp = dot(p,Hp)
 
         if pHp <= 0
@@ -141,15 +140,20 @@ function pcg!(
                 s .+= alpha .* p
                 pred -= 0.5 * alpha * rtv
 
-                # Form next conjugate directions and evaluate termination criteria
+                # Form next conjugate directions
                 r .+= alpha .* Hp
                 mul!(v, P, r) # v ← Pr
                 rtv_next = dot(r,v)
                 beta = rtv_next / rtv
                 axpby!(-1, v, beta, p) # p ← -v + βp
                 rtv = rtv_next
-                approx_solved = norm(r) < eps_cg
-                # approx_solved = sqrt(rtv) < eps_cg
+
+                # Evaluate termination criteria
+                nrm_v = sqrt(rtv)
+                optimal = nrm_v < eps_cg
+                too_small = nrm_v + T(1) <= T(1)
+                solved = optimal || too_small
+
                 iter += 1
             end
         end
@@ -157,7 +161,7 @@ function pcg!(
 
     debug && println(debug_io, "[pcg!] number of CG iterations : ", iter)
 
-    status = if approx_solved
+    status = if solved
         normal_exit
     elseif trust_region_hit
         on_trust_region

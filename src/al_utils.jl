@@ -6,21 +6,25 @@
 Compute the augmented Lagrangian objective function value.
 
 # Arguments
-- `rx::Vector`: Residual vector.
-- `cx::Vector`: Constraint violation vector.
-- `y::Vector`: Lagrange multiplier vector.
-- `mu::Float64`: Penalty parameter.
+- `rx`: Residual vector.
+- `cx`: Constraint violation vector.
+- `y`: Lagrange multiplier vector.
+- `mu`: Penalty parameter.
 
 # Returns
 - The value of the augmented Lagrangian objective.
 """
 function al_obj(
-    rx::Vector,
-    cx::Vector,
-    y::Vector,
-    mu::Float64)  
-    
-    return 0.5*dot(rx,rx) + dot(y,cx) + 0.5*mu*dot(cx,cx)
+    rx::AbstractVector{T},
+    cx::AbstractVector{T},
+    y::AbstractVector{T},
+    mu::T) where T
+
+    global debug
+    global debug_io
+
+    debug && @printf(debug_io, "\n[al_obj] rxᵀrx = %.4e ; cxᵀcx = %.4e\n", dot(rx,rx), dot(cx,cx))
+    return (1/2)*dot(rx, rx) + dot(y, cx) + (1/2)*mu*dot(cx, cx)
 end
 
 """
@@ -29,25 +33,25 @@ end
 Compute the gradient of the augmented Lagrangian objective and store it in `g`.
 
 # Arguments
-- `rx::Vector`: Residual vector.
-- `cx::Vector`: Constraint violation vector.
-- `y::Vector`: Lagrange multiplier vector.
-- `mu::Float64`: Penalty parameter.
+- `rx::AbstractVector{T}`: Residual vector.
+- `cx::AbstractVector{T}`: Constraint violation vector.
+- `y::AbstractVector{T}`: Lagrange multiplier vector.
+- `mu::T`: Penalty parameter.
 - `J::Matrix`: Jacobian matrix of the residuals.
 - `C::Matrix`: Jacobian matrix of the constraints.
-- `g::Vector`: Output vector to store the computed gradient (modified in-place).
+- `g::AbstractVector{T}`: Output vector to store the computed gradient (modified in-place).
 
 # Returns
 - `Nothing`: The result is stored in `g`.
 """
 function al_grad!(
-    rx::Vector,
-    cx::Vector,
-    y::Vector,
-    mu::Float64,
+    rx::AbstractVector{T},
+    cx::AbstractVector{T},
+    y::AbstractVector{T},
+    mu::T,
     J::Matrix,
     C::Matrix,
-    g::Vector)  
+    g::AbstractVector{T}) where T
 
     g .= J'*rx + C'*(y + cx .* mu)
     return
@@ -59,10 +63,10 @@ end
 Compute and return the gradient of the augmented Lagrangian objective.
 
 # Arguments
-- `rx::Vector`: Residual vector.
-- `cx::Vector`: Constraint violation vector.
-- `y::Vector`: Lagrange multiplier vector.
-- `mu::Float64`: Penalty parameter.
+- `rx::AbstractVector{T}`: Residual vector.
+- `cx::AbstractVector{T}`: Constraint violation vector.
+- `y::AbstractVector{T}`: Lagrange multiplier vector.
+- `mu::T`: Penalty parameter.
 - `J::Matrix`: Jacobian matrix of the residuals.
 - `C::Matrix`: Jacobian matrix of the constraints.
 
@@ -70,14 +74,14 @@ Compute and return the gradient of the augmented Lagrangian objective.
 - `g`: gradient of the Augmented Lagrangian evaluated at `x`
 """
 function al_grad(
-    rx::Vector,
-    cx::Vector,
-    y::Vector,
-    mu::Float64,
+    rx::AbstractVector{T},
+    cx::AbstractVector{T},
+    y::AbstractVector{T},
+    mu::T,
     J::Matrix,
-    C::Matrix)  
+    C::Matrix) where T
     
-    g = Vector{Float64}(undef,size(J,2))
+    g = similar(rx, size(J, 2))
     al_grad!(rx, cx, y, mu, J, C, g)
     
     return g
@@ -89,27 +93,27 @@ end
 Compute both the augmented Lagrangian objective value and its gradient, storing the gradient in `g`.
 
 # Arguments
-- `rx::Vector`: Residual vector.
-- `cx::Vector`: Constraint violation vector.
-- `y::Vector`: Lagrange multiplier vector.
-- `mu::Float64`: Penalty parameter.
+- `rx::AbstractVector{T}`: Residual vector.
+- `cx::AbstractVector{T}`: Constraint violation vector.
+- `y::AbstractVector{T}`: Lagrange multiplier vector.
+- `mu::T`: Penalty parameter.
 - `J::Matrix`: Jacobian matrix of the residuals.
 - `C::Matrix`: Jacobian matrix of the constraints.
-- `g::Vector`: Output vector to store the computed gradient (modified in-place).
+- `g::AbstractVector{T}`: Output vector to store the computed gradient (modified in-place).
 
 # Returns
 - Value of the augmented Lagrangian objective.
 """
 function al_objgrad!(
-    rx::Vector,
-    cx::Vector,
-    y::Vector,
-    mu::Float64,
-    J::Matrix,
-    C::Matrix,
-    g::Vector)  
+    rx::AbstractVector{T},
+    cx::AbstractVector{T},
+    y::AbstractVector{T},
+    mu::T,
+    J::AbstractMatrix{T},
+    C::AbstractMatrix{T},
+    g::AbstractVector{T}) where T
 
-    mx = al_obj(rx,cx,y,mu)
+    mx = al_obj(rx, cx, y, mu)
     al_grad!(rx, cx, y, mu, J, C, g)
 
     return mx
@@ -121,10 +125,10 @@ end
 Compute and return both the augmented Lagrangian objective value and its gradient.
 
 # Arguments
-- `rx::Vector`: Residual vector.
-- `cx::Vector`: Constraint violation vector.
-- `y::Vector`: Lagrange multiplier vector.
-- `mu::Float64`: Penalty parameter.
+- `rx::AbstractVector{T}`: Residual vector.
+- `cx::AbstractVector{T}`: Constraint violation vector.
+- `y::AbstractVector{T}`: Lagrange multiplier vector.
+- `mu::T`: Penalty parameter.
 - `J::Matrix`: Jacobian matrix of the residuals.
 - `C::Matrix`: Jacobian matrix of the constraints.
 
@@ -132,15 +136,15 @@ Compute and return both the augmented Lagrangian objective value and its gradien
 - Tuple containing the objective value and the gradient vector.
 """
 function al_objgrad(
-    rx::Vector,
-    cx::Vector,
-    y::Vector,
-    mu::Float64,
-    J::Matrix,
-    C::Matrix)  
+    rx::AbstractVector{T},
+    cx::AbstractVector{T},
+    y::AbstractVector{T},
+    mu::T,
+    J::AbstractMatrix{T},
+    C::AbstractMatrix{T}) where T
 
     mx = al_obj(rx, cx, y, mu)
-    g = Vector{Float64}(undef,size(J,2))
+    g = AbstractVector{T}{T}(undef,size(J,2))
     al_grad!(rx, cx, y, mu, J, C, g)
 
     return mx, g
@@ -154,15 +158,15 @@ Computes and returns `ω` and `η`, the respective optimality and feasibility to
 
 # Arguments 
 
-- `μ::Float64`: intitial penalty paramerer associated to the Augmented Lagrangian function
+- `μ::T`: intitial penalty paramerer associated to the Augmented Lagrangian function
 - `ω₀,η₀,κᵪ,κₑ`: positive constants 
 """
 function initial_tolerances(
-    mu::Float64,
-    omega0::Float64,
-    eta0::Float64,
-    k_crit::Float64,
-    k_feas::Float64) 
+    mu::T,
+    omega0::T,
+    eta0::T,
+    k_crit::T,
+    k_feas::T) where T
 
     omega = omega0 / (mu^k_crit)
     eta = eta0 / (mu^k_feas)
@@ -177,12 +181,15 @@ Computes the least-squares multipliers estimates by solving the linear least-squ
 This problem is solved by the normal equations approach, so matrix `C` must be full rank.
 
 # Arguments 
-- `rx::Vector`: residuals evaluated at current point 
+- `rx::AbstractVector{T}`: residuals evaluated at current point
 - `J::Matrix`: Jacobian of the residuals at current point
 - `C::Matrix`: Jacobian of the equality constraints at current
 
 """
-function least_squares_multipliers(rx::Vector, J::Matrix, C::Matrix)  
+function least_squares_multipliers(
+    rx::AbstractVector{T},
+    J::AbstractMatrix{T},
+    C::AbstractMatrix{T}) where T
 
     gf = J'*rx
     chol_cct = cholesky(C*C')
@@ -200,11 +207,11 @@ Update of the Lagrange multipliers in an Augmented Lagrangian algorithm
 Computes and returns the first-order multipliers update `y + μ*cx`.
 
 # Arguments 
-- `y::Vector`: vector of Lagrange multipliers 
-- `cx::Vector`: equality constraints at current point 
-- `mu::Float64`: penalty parameter
+- `y::AbstractVector{T}`: vector of Lagrange multipliers
+- `cx::AbstractVector{T}`: equality constraints at current point
+- `mu::T`: penalty parameter
 """
-function first_order_multipliers(y::Vector, cx::Vector, mu::Float64) 
+function first_order_multipliers(y::AbstractVector{T}, cx::AbstractVector{T}, mu::T) where T
     return y + mu*cx
 end
 
@@ -216,22 +223,26 @@ Update of the Lagrange multipliers in an Augmented Lagrangian algorithm (in plac
 Overwrites the vector `y` with the first-order multipliers update `y + μ*cx`.
 
 # Arguments 
-- `y::Vector`: vector of Lagrange multipliers 
-- `cx::Vector`: equality constraints at current point 
-- `mu::Float64`: penalty parameter
+- `y::AbstractVector{T}`: vector of Lagrange multipliers
+- `cx::AbstractVector{T}`: equality constraints at current point
+- `mu::T`: penalty parameter
 """
-function first_order_multipliers!(y::Vector, cx::Vector, mu::Float64)  
+function first_order_multipliers!(
+    y::AbstractVector{T},
+    cx::AbstractVector{T},
+    mu::T) where T
+
     y .+= cx .* mu
     return
 end
 
 function step_slack!(
-    x::Vector,
-    y::Vector,
-    cx::Vector,
-    mu::Float64,
+    x::AbstractVector{T},
+    y::AbstractVector{T},
+    cx::AbstractVector{T},
+    mu::T,
     n_slack::Int,
-    p::Int)
+    p::Int) where T
     
     n = size(x,1)
     slack_idx = n - n_slack + 1 : n

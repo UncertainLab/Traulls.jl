@@ -199,7 +199,13 @@ function SR1(
     (m,n) = size(J)
     p = size(C,1)
 
-    return SR1(copy(J),copy(C),Matrix{T}(I,n,n),mu,zeros(T,n),zeros(T,n),zeros(T,max(n,m,p)))
+    return SR1(copy(J),
+               copy(C),
+               zeros(T,n,n),
+               mu,
+               zeros(T,n),
+               zeros(T,n),
+               zeros(T,max(n,m,p)))
 end
 
 """ Base.:*(H::SR1, v)
@@ -278,7 +284,7 @@ the approximation to break down.
 function update_sr1_second_order!(sr1_op::SR1{T}) where T
 
     # Tolerance for the skipping update safeguard
-    eps_safeguard = 1e-8
+    eps_safeguard = T(1e-8)
 
     # Vectors of the secant Equation Ss = y
     y = sr1_op.secant_rhs
@@ -292,8 +298,8 @@ function update_sr1_second_order!(sr1_op::SR1{T}) where T
     # Add (y - Ss)(y - Ss)ᵀ / (y - Ss)ᵀs to second order terms approximation
     # Update applied if denominator (y - Ss)ᵀs not too small
     denom = dot(s,ymSs)
-    if abs(denom) > eps_safeguard * (1 + norm(s)*norm(ymSs))
 
+    if abs(denom) > eps_safeguard * (1 + norm(s)*norm(ymSs))
         mul!(sr1_op.S, ymSs, ymSs', 1/denom, 1)
     end
 
