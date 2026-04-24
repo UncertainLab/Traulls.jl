@@ -6,8 +6,10 @@
 - `gn`: Gauss-Newton approximation 
 - `sr1`: second-order terms updates by a SR1 formula
 """
-
-@enum HessianApprox gn sr1
+@enum HessianApprox begin
+    gn
+    sr1
+end
 
 """
     GN <: ALHessian 

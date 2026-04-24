@@ -1,7 +1,8 @@
 # using Dates
+debug = false
 debug_file = "debug.out"
-debug_io = open(debug_file, "w")
-debug = true
+debug && (debug_io = open(debug_file, "w"))
+
 
 
 """
@@ -120,8 +121,8 @@ function solve(
     k_feas::T = T(1//10),
     beta_crit::T = T(1),
     beta_feas::T = T(9//10),
-    accept_treshold::T = T(0.25),
-    increase_treshold::T = T(0.75),
+    accept_threshold::T = T(0.25),
+    increase_threshold::T = T(0.75),
     decrease_factor::T = T(0.5),
     increase_factor::T = T(2.5),
     neg_ratio_factor::T = T(0.0625),
@@ -138,11 +139,6 @@ function solve(
 
     global debug_io
     global debug
-    # Sanity checks on arguments
-    # Trust region parameters
-    !(0 < accept_treshold <= increase_treshold < 1 &&
-    0 < decrease_factor < 1 < increase_factor) &&
-    error("ArgumentError: trust regions parameters are not valid")
 
     # Prepare output stream to log iteration detail
     output_io = (output_file_name == "" ? stdout : open(output_file_name,"w"))
@@ -200,19 +196,22 @@ function solve(
 
     solved = feas_measure <= min_tol_feas && pix <= tol_crit
 
+    stopped; max_penalty_reached = false, false
+
     iter = 1
 
     # verbose && print_boconls_header(n,nres,ncons,xlow,xupp,min_reltol_crit,min_tol_feas,
     #                                 tau;io=output_io)
     # verbose && print_tr_header(tr;io=output_io)
 
-    verbose && print_traulls_header(model, fx, feas_measure, pix, min_reltol_crit, min_tol_feas, tau, tr; io=output_io)
+    verbose && print_traulls_header(model, fx, feas_measure, pix, min_reltol_crit,
+                                    min_tol_feas, tau, tr; io=output_io)
 
     # Set counters
     reset!(model.counters)
     start_time = time()
 
-    while !solved && iter <= max_iter
+    while !solved && iter <= max_iter && !stopped
 
         debug && println(debug_io, "\n\n[solve] outer iter $iter", @sprintf(" relative tolerance : %.6e", reltol_crit))
         debug && println(debug_io, "[solve] penalty parameter: ", mu)
@@ -289,6 +288,8 @@ function solve(
 
         verbose && print_outer_iteration(iter, fx, feas_measure, mu, pix, Val(update_multipliers); io=output_io)
 
+        max_penalty_reached = mu >= max
+
         iter += 1
 
     end
@@ -297,6 +298,8 @@ function solve(
         first_order_critical
         elseif feas_measure <= min_tol_feas
         feasible_non_critical
+        elseif max_penalty_reached
+        penalty_too_high
         else
         infeasible_non_critical
     end
@@ -456,6 +459,7 @@ function solve_subproblem!(
     max_iter::Int,
     max_cg_iter::Int,
     workspace::Workspace{T};
+    patience_counter::Int = 3,
     verbose::Bool=false,
     io::IO=stdout) where T
 
@@ -503,8 +507,9 @@ function solve_subproblem!(
     tol_crit = reltol_crit * (1 + pix)
     debug && @printf(debug_io, "\n[solve_subproblem!] effective tolerance = %.4e\n", tol_crit)
     solved = pix <= tol_crit
-    debug &&  println(debug_io, "[solve_subproblem!] Initial solved status: $solved")
+
     short_circuit = false
+    plateau_iter = 0
 
     iter = 1
 
@@ -539,12 +544,6 @@ function solve_subproblem!(
             reltol_crit,
             reltol_crit,
             workspace)
-
-        # Check of the trial point is undistinguishable from current solution or
-        # if the radius is too small
-
-        # short_circuit = check_stalling(s,x,radius)
-        short_circuit = false
 
         # debug && println(debug_io, "[solve_subproblem] max(|sᵢ|/|xᵢ|) = ", maximum(abs.(s ./ (x .+ 1))))
 
@@ -582,13 +581,17 @@ function solve_subproblem!(
         end
 
         debug && @printf(debug_io, "\n[solve_subproblem!] mx_prev = %.4e ; mx = %.4e ; pred = %.4e\n", alx_prev, alx, pred)
-        debug && println(debug_io, "[solve_subproblem!] residuals: ", rx)
-        debug && println(debug_io, "[solve_subproblem!] constraints: ", cx)
+        debug && @printf(debug_io, "\n[solve_subproblem!] max( |sᵢ| / |xᵢ| ) = %.6e\n", maximum(abs.(s) ./ (1 .+ abs.(x_prev))))
+        debug && @printf(debug_io, "\n[solve_subproblem!] |ared| / fₖ = %.4e\n", abs(alx-alx_prev) / alx_prev)
+        # debug && println(debug_io, "[solve_subproblem!] residuals: ", rx)
+        # debug && println(debug_io, "[solve_subproblem!] constraints: ", cx)
 
         # Compute the ratio actual reduction / predicted reduction
         ratio = step_ratio(alx_prev, alx, pred)
 
-        if accept_step(tr, ratio)
+        accepted = accept_step(tr, ratio)
+
+        if accepted
 
             # Evaluate first derivative at trial point
 
@@ -610,6 +613,8 @@ function solve_subproblem!(
             pix = lincons_present ?
                 criticality_measure(x, g, gproj, proj_op) :
                 criticality_measure(x, g, gproj, xlow, xupp)
+
+
         else
             x .= x_prev
             rx .= rx_prev
@@ -622,11 +627,23 @@ function solve_subproblem!(
 
         verbose && print_inner_iter(iter, alx_prev, norm(s, Inf), radius, ratio;io=io)
 
-        debug && @printf(debug_io, "\n[solve_subproblem] criticality after step computation : %.3e", pix)
+        debug && @printf(debug_io, "\n[solve_subproblem] criticality after step computation : %.3e\n", pix)
 
         # tol_scale_factor = max(1, norm(g, Inf))
         # tol_scale_factor = 1 + norm(g, Inf)
+
+        # Evaluate termination criteria
         solved = pix <= tol_crit
+
+        # Stop if stalling on `patience_counter` consecutive accepted steps or trust region
+        # has shrinked too much
+        stalling = check_stalling(s, x_prev, alx_prev, alx, accepted)
+        plateau_iter = stalling ? plateau_iter + 1 : 0
+        shrinked_tr = small_radius(x, radius)
+        short_circuit = plateau_iter == patience_counter || shrinked_tr
+
+        debug && println(debug_io, "[solve_subproblem] plateau_iter = $(plateau_iter) ; stalling = $stalling ; small radius = $(shrinked_tr)")
+
         iter += 1
     end
 
@@ -783,11 +800,6 @@ function projected_gradient!(
 
         iter += 1
     end
-
-    debug && println(debug_io, "[projected_gradient!] number of CG executions: $iter")
-
-    # Predicted reduction of the model taking step s
-    # pred_greedy = dot(g,s) + 0.5*dot(s,Hs)
 
     return pred
 end

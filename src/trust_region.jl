@@ -15,22 +15,28 @@ Mutable structure to represent a trust region constraint of the form `||s|| ≤ 
 """
 mutable struct TrustRegion{T<:Real}
     radius::T
-    accept_treshold::T
-    increase_treshold::T
+    accept_threshold::T
+    increase_threshold::T
     decrease_factor::T
     increase_factor::T
     neg_ratio_factor::T
 end
 
 function TrustRegion(eta1::T, eta2::T, alpha1::T, alpha2::T, gamma2::T) where T
+
+    # Check trust region parameters are valid
+    !(0 < eta1 <= eta2 < 1 &&
+    0 < alpha1 < 1 < alpha2) &&
+    error("ArgumentError: trust regions parameters are not valid")
+
     TrustRegion(Inf, eta1, eta2, alpha1, alpha2, gamma2)
 end
 
 # Pretty printing of a trust region parameters
 function print(io::IO, tr::TrustRegion)
     println(io, "Trust Region parameters")
-    println(io, "Step acceptance treshold.............................: ", @sprintf("%5f", tr.accept_treshold))
-    println(io, "Radius increase treshold.............................: ", @sprintf("%5f", tr.increase_treshold))
+    println(io, "Step acceptance threshold.............................: ", @sprintf("%5f", tr.accept_threshold))
+    println(io, "Radius increase threshold.............................: ", @sprintf("%5f", tr.increase_threshold))
     println(io, "Radius increase factor...............................: ", @sprintf("%5f", tr.increase_factor))
     println(io, "Radius decrease factor...............................: ", @sprintf("%5f", tr.decrease_factor))
     println(io, "Negative ratio decrease factor.......................: ", @sprintf("%5f", tr.neg_ratio_factor))
@@ -51,7 +57,7 @@ This value correponds to the initial radius of an optimization process.
 """
 function set_initial_radius!(
     tr::TrustRegion{T},
-    g::Vector{T};
+    g::AbstractVector{T};
     kappa_radius::T = T(1//10),
     p::T = T(Inf)) where T
 
@@ -90,17 +96,23 @@ This method follows the procedure described in Trust Region Methods (Conn et. al
 - `ratio`: Value of the ratio `(mx_trial-mx) / pred`
 """
 function step_ratio(
-    mx::T,
-    mx_trial::T,
+    fx::T,
+    fx_trial::T,
     pred::T) where T
+
+    global debug
+    global debug_io
 
     # Constants
     eps_ratio = 10 * eps(T)
-    delta_ratio = eps_ratio * max(1, abs(mx_trial))
+    delta_ratio = eps_ratio * max(1, abs(fx))
 
     # Adjusted actual and predicted reductions to avoid roundoff errors
-    delta_ared = mx_trial - mx - delta_ratio
+    delta_ared = fx_trial - fx - delta_ratio
     delta_pred = pred - delta_ratio
+
+    debug && @printf(debug_io, "\n[step_ratio] ared = %.5e\n", fx_trial - fx)
+    debug && @printf(debug_io, "\n[step_ratio] δ = %.5e ; δared = %.5e ; δpred = %.5e\n", delta_ratio, delta_ared, delta_pred)
 
     ratio = abs(delta_ared) < eps_ratio && abs(delta_pred) < eps_ratio ? 1.0 :
         delta_ared / delta_pred
@@ -137,9 +149,9 @@ function update_radius!(
     rho::T,
     norm_step::T) where T
 
-    tr.radius = if rho > tr.increase_treshold   # very successful step
+    tr.radius = if rho > tr.increase_threshold   # very successful step
         max(tr.increase_factor * norm_step, tr.radius)
-    elseif 0 < rho < tr.accept_treshold         # bad step
+    elseif 0 < rho < tr.accept_threshold         # bad step
         tr.decrease_factor * norm_step
     elseif rho < 0                              # Very bad step
         min(tr.decrease_factor * norm_step, tr.neg_ratio_factor * tr.radius)
@@ -156,8 +168,8 @@ end
 Computes and returns the largest `α > 0` such that `||x + αd|| = Δ` where `||.||` denotes the euclidean norm.
 """
 function factor_to_boundary(
-    x::Vector{T},
-    d::Vector{T},
+    x::AbstractVector{T},
+    d::AbstractVector{T},
     delta::T;
     atol::T=sqrt(eps(T))) where T
 
@@ -179,34 +191,35 @@ end
 # Returns `true` if the step `s` lies on the boundary of an infinite norm trust region,
 # `false` if not
 
-step_on_region(s::AbstractVector{T}, radius::T; eps_region::T = sqrt(eps(T))) where T =
-    norm(s, Inf) + radius*eps_region >= radius
+step_on_region(s::AbstractVector{T}, radius::T) where T =
+    norm(s, Inf) + radius * sqrt(eps(T)) >= radius
 
+# Returns true if the trust region radius is too small to make relevant progress
+small_radius(x::AbstractVector{T}, radius::T) where T =
+    radius <= 10 * eps(T) * (1 + norm(x, Inf))
 
-
+# Returns `true` if two consecutive iterates have similar components and value of objective
+# function, up to given relative tolerances
 function check_stalling(
     s::Vector{T},
     x::Vector{T},
-    delta::T) where T
+    fx::T,
+    fx_next::T,
+    accepted::Bool) where T
 
-    eps_mach = eps(T)
-    eps_comp = sqrt(eps_mach)
-    eps_radius = 10 * eps_mach
+    global debug
+    global debug_io
 
-    # Check is the trial point x+s is undistinguishable (up to `eps_com`) from current
-    # solution x
-    
-    small_step = true
-    i = 1
+    eps_comp =1e-7
+    eps_obj = 1e-10
 
-    while small_step && i <= size(s,1)
-        small_step = small_step && abs(s[i]) < eps_comp * (1 + abs(x[i]))
-        i += 1
-    end
+    # Consecutive iterates are undistinguishable (up to `eps_comp`)
+    small_step = all(abs.(s) .<= eps_comp .* (1 .+ abs.(x)))
 
-    # Check if the trust region radius is too small 
-    
-    small_radius = delta <= eps_radius * (1 + norm(x, Inf))
+    # Small variation of the objective after iteration
+    small_obj_variation = abs(fx_next - fx) <= eps_obj * max(1, abs(fx))
 
-    return small_step || small_radius
+    debug && println(debug_io, "[check_stalling] small_step : $(small_step) ; small_obj_variation : $(small_obj_variation)")
+
+    return accepted && small_step && small_obj_variation
 end

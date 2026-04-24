@@ -1,5 +1,10 @@
 # `@enum` type for the different termination status in Traulls
-@enum CriticalityStatus first_order_critical feasible_non_critical infeasible_non_critical
+@enum CriticalityStatus begin
+    first_order_critical
+    feasible_non_critical
+    infeasible_non_critical
+    penalty_too_high
+end
 
 #
 """

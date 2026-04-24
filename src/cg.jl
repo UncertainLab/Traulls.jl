@@ -9,7 +9,13 @@ Enum representing the termination status of the projected conjugate gradient met
 - `negative_curvature`: Negative curvature was detected
 - `max_iter_reached`: The maximum number of iterations was reached
 """
-@enum CG_status normal_exit on_boundary on_trust_region negative_curvature max_iter_reached
+@enum CG_status begin
+    normal_exit
+    on_boundary
+    on_trust_region
+    negative_curvature
+    max_iter_reached
+end
 
 """ 
     pcg!(b, H, P, s,  s_l, s_u, radius, r, v, p, Hp, κ_cg; ε_curv)
