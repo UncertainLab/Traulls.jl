@@ -1,5 +1,5 @@
 # using Dates
-debug = false
+debug = true
 debug_file = "debug.out"
 debug && (debug_io = open(debug_file, "w"))
 
@@ -121,13 +121,11 @@ function solve(
     k_feas::T = T(1//10),
     beta_crit::T = T(1),
     beta_feas::T = T(9//10),
-    accept_threshold::T = T(0.25),
-    increase_threshold::T = T(0.75),
-    decrease_factor::T = T(0.5),
+    accept_threshold::T = T(0.05),
+    increase_threshold::T = T(0.9),
+    decrease_factor::T = T(0.25),
     increase_factor::T = T(2.5),
     neg_ratio_factor::T = T(0.0625),
-    kappa_step::T = T(1//10),
-    kappa_cg::T = T(1//10),
     hessian_approx::HessianApprox = gn,
     mu_max::T = 1/eps(T),
     max_iter::Int = 200,
@@ -173,7 +171,7 @@ function solve(
     end
 
     # Set up trust region
-    tr = TrustRegion(accept_treshold, increase_treshold, decrease_factor,
+    tr = TrustRegion(accept_threshold, increase_threshold, decrease_factor,
     increase_factor, neg_ratio_factor)
 
     # Set up tolerances
@@ -196,7 +194,7 @@ function solve(
 
     solved = feas_measure <= min_tol_feas && pix <= tol_crit
 
-    stopped; max_penalty_reached = false, false
+    stopped, max_penalty_reached = false, false
 
     iter = 1
 
@@ -235,8 +233,6 @@ function solve(
             proj_op,
             tr,
             reltol_crit,
-            kappa_step,
-            kappa_cg,
             hessian_approx,
             max_inner_iter,
             max_cg_iter,
@@ -288,7 +284,7 @@ function solve(
 
         verbose && print_outer_iteration(iter, fx, feas_measure, mu, pix, Val(update_multipliers); io=output_io)
 
-        max_penalty_reached = mu >= max
+        max_penalty_reached = mu >= mu_max
 
         iter += 1
 
@@ -453,8 +449,6 @@ function solve_subproblem!(
     proj_op::Projector{T},
     tr::TrustRegion{T},
     reltol_crit::T,
-    kappa_step::T,
-    kappa_cg::T,
     hessian_approx::HessianApprox,
     max_iter::Int,
     max_cg_iter::Int,
@@ -526,9 +520,8 @@ function solve_subproblem!(
         alx_prev = alx
 
         radius = tr.radius
-        # Set tolerance for the CG iterations
-        eps_cg = min(kappa_cg, sqrt(pix)) * pix
-        debug && @printf(debug_io, "\n[solve_subproblem!] Δ = %.6e ; ε_cg = %.4e\n", radius, eps_cg)
+
+        debug && @printf(debug_io, "\n[solve_subproblem!] Δ = %.6e\n", radius)
 
         pred = projected_gradient!(
             x,

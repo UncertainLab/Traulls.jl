@@ -71,7 +71,7 @@ end
 
 Asserts if the ratio `ρ` associated to the step computed in the current trust region `tr` is accepted or not.
 """
-accept_step(tr::TrustRegion{T},rho::T) where T = rho >= tr.accept_treshold
+accept_step(tr::TrustRegion{T},rho::T) where T = rho >= tr.accept_threshold
 
 
 """
@@ -105,16 +105,23 @@ function step_ratio(
 
     # Constants
     eps_ratio = 10 * eps(T)
-    delta_ratio = eps_ratio * max(1, abs(fx))
+    abs_fx = abs(fx)
+    delta_ratio = eps_ratio * max(1, abs_fx)
 
     # Adjusted actual and predicted reductions to avoid roundoff errors
     delta_ared = fx_trial - fx - delta_ratio
     delta_pred = pred - delta_ratio
 
+    # Value of the model at trial point
+    mx_next = pred + fx
+
+
+    debug && @printf(debug_io, "\n[step_ratio] fx_trial = %.7e ; mx_trial = %.7e ; |fx_trial - mx_trial| = %.7e\n", fx_trial, pred + fx, abs(fx_trial - pred - fx))
     debug && @printf(debug_io, "\n[step_ratio] ared = %.5e\n", fx_trial - fx)
     debug && @printf(debug_io, "\n[step_ratio] δ = %.5e ; δared = %.5e ; δpred = %.5e\n", delta_ratio, delta_ared, delta_pred)
 
-    ratio = abs(delta_ared) < eps_ratio && abs(delta_pred) < eps_ratio ? 1.0 :
+    # Set ratio to 1 if numerical roundoff errors are likely when computing the ratio
+    ratio = abs(delta_ared) < eps_ratio * abs_fx || abs(delta_pred) < eps_ratio ? 1.0 :
         delta_ared / delta_pred
 
     return ratio
@@ -218,6 +225,7 @@ function check_stalling(
 
     # Small variation of the objective after iteration
     small_obj_variation = abs(fx_next - fx) <= eps_obj * max(1, abs(fx))
+
 
     debug && println(debug_io, "[check_stalling] small_step : $(small_step) ; small_obj_variation : $(small_obj_variation)")
 
