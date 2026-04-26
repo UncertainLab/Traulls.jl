@@ -87,9 +87,6 @@ function pcg!(
     kappa_cg::T;
     eps_curv::T = T(1e-10)) where T
 
-    global debug
-    global debug_io
-
     r .= b
     mul!(v, P, r) # v ← Pr
     rtv = dot(r,v)
@@ -164,8 +161,6 @@ function pcg!(
             end
         end
     end
-
-    debug && println(debug_io, "[pcg!] number of CG iterations : ", iter)
 
     status = if solved
         normal_exit

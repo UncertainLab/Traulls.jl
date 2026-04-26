@@ -100,9 +100,6 @@ function step_ratio(
     fx_trial::T,
     pred::T) where T
 
-    global debug
-    global debug_io
-
     # Constants
     eps_ratio = 10 * eps(T)
     abs_fx = abs(fx)
@@ -114,11 +111,6 @@ function step_ratio(
 
     # Value of the model at trial point
     mx_next = pred + fx
-
-
-    debug && @printf(debug_io, "\n[step_ratio] fx_trial = %.7e ; mx_trial = %.7e ; |fx_trial - mx_trial| = %.7e\n", fx_trial, pred + fx, abs(fx_trial - pred - fx))
-    debug && @printf(debug_io, "\n[step_ratio] ared = %.5e\n", fx_trial - fx)
-    debug && @printf(debug_io, "\n[step_ratio] δ = %.5e ; δared = %.5e ; δpred = %.5e\n", delta_ratio, delta_ared, delta_pred)
 
     # Set ratio to 1 if numerical roundoff errors are likely when computing the ratio
     ratio = abs(delta_ared) < eps_ratio * abs_fx || abs(delta_pred) < eps_ratio ? 1.0 :
@@ -214,9 +206,6 @@ function check_stalling(
     fx_next::T,
     accepted::Bool) where T
 
-    global debug
-    global debug_io
-
     eps_comp =1e-7
     eps_obj = 1e-10
 
@@ -225,9 +214,6 @@ function check_stalling(
 
     # Small variation of the objective after iteration
     small_obj_variation = abs(fx_next - fx) <= eps_obj * max(1, abs(fx))
-
-
-    debug && println(debug_io, "[check_stalling] small_step : $(small_step) ; small_obj_variation : $(small_obj_variation)")
 
     return accepted && small_step && small_obj_variation
 end

@@ -20,10 +20,6 @@ function al_obj(
     y::AbstractVector{T},
     mu::T) where T
 
-    global debug
-    global debug_io
-
-    false && @printf(debug_io, "\n[al_obj] rxᵀrx = %.4e ; cxᵀcx = %.4e\n", dot(rx,rx), dot(cx,cx))
     return (1/2)*dot(rx, rx) + dot(y, cx) + (1/2)*mu*dot(cx, cx)
 end
 

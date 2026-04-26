@@ -1,10 +1,3 @@
-# using Dates
-debug = true
-debug_file = "debug.out"
-debug && (debug_io = open(debug_file, "w"))
-
-
-
 """
     solve(model; kwargs...)
 
@@ -177,7 +170,6 @@ function solve(
     # Set up tolerances
     reltol_crit, tol_feas = initial_tolerances(mu, omega0, eta0, k_crit, k_feas)
 
-    # debug && @printf(debug_io, "[solve] reltol_crit = %.4e ; tol_feas = %.4e\n", reltol_crit, tol_feas)
     # Initial values of objective, feasibility and criticality
     g = J'*rx + C'*y
     fx = dot(rx,rx)
@@ -211,12 +203,6 @@ function solve(
 
     while !solved && iter <= max_iter && !stopped
 
-        debug && println(debug_io, "\n\n[solve] outer iter $iter", @sprintf(" relative tolerance : %.6e", reltol_crit))
-        debug && println(debug_io, "[solve] penalty parameter: ", mu)
-        debug && println(debug_io, "[solve] multipliers: ", y)
-
-        # debug && println(debug_io, "[solve] current solution : ", x)
-        # debug && println(debug_io, "[solve] current multipliers : ", y, " ; current penalty parameter : ", mu)
         pix = solve_subproblem!(
             model,
             x,
@@ -250,7 +236,6 @@ function solve(
 
         if update_multipliers
 
-            debug && @printf(debug_io, "\n[solve] ||λₖ₊₁ - λₖ|| = %.3e ", norm(cx*mu, Inf))
             # Update Lagrange multipliers
             first_order_multipliers!(y, cx, mu)
 
@@ -261,8 +246,6 @@ function solve(
                 criticality_measure(x, g, gproj, proj_op) :
                 criticality_measure(x, g, gproj, xlow, xupp)
 
-            debug && @printf(debug_io, "\n[solve] after inner exit πx = %.3e", pix)
-            # tol_scale_factor = max(1, norm(g, Inf))
             tol_scale_factor = 1 + norm(g, Inf)
 
             solved = feas_measure <= min_tol_feas &&
@@ -309,7 +292,7 @@ function solve(
     verbose && print(output_io, results)
     # Close output stream
     output_file_name != "" && close(output_io)
-    # close(debug_io)
+
     return results
 
 end
@@ -473,9 +456,7 @@ function solve_subproblem!(
     gproj = workspace.proj_g # projected gradient
 
     # Evaluate objective and gradient of the AL at current point (x,y)
-    # debug && println(debug_io, "[solve_subproblem] ∇Lₐ avant calcul: ", g)
     alx = al_objgrad!(rx, cx, y, mu, J, C, g)
-    # debug && println(debug_io, "[solve_subproblem] ∇Lₐ apres calcul: ", g)
     model.counters.nalgrad_eval += 1
     model.counters.nalobj_eval += 1
     # Reset Hessian approximation and projector operator
@@ -496,23 +477,15 @@ function solve_subproblem!(
         criticality_measure(x, g, gproj, proj_op) :
         criticality_measure(x, g, gproj, xlow, xupp)
 
-    # tol_scale_factor = max(1, norm(g, Inf))
-    # tol_crit = reltol_crit * (1 + norm(g, Inf))
     tol_crit = reltol_crit * (1 + pix)
-    debug && @printf(debug_io, "\n[solve_subproblem!] effective tolerance = %.4e\n", tol_crit)
     solved = pix <= tol_crit
-
     short_circuit = false
     plateau_iter = 0
-
     iter = 1
 
     verbose && print_inner_iter_header(io)
 
     while !solved && iter <= max_iter && !short_circuit
-
-        debug && println(debug_io,"\n[solve_subproblem!] *** inner iter $iter *** ")
-        debug && @printf(debug_io, "\n[solve_subproblem!] ||∇f|| = %.6e\n", norm(g))
 
         x_prev .= x
         rx_prev .= rx
@@ -520,8 +493,6 @@ function solve_subproblem!(
         alx_prev = alx
 
         radius = tr.radius
-
-        debug && @printf(debug_io, "\n[solve_subproblem!] Δ = %.6e\n", radius)
 
         pred = projected_gradient!(
             x,
@@ -573,12 +544,6 @@ function solve_subproblem!(
 
         end
 
-        debug && @printf(debug_io, "\n[solve_subproblem!] mx_prev = %.4e ; mx = %.4e ; pred = %.4e\n", alx_prev, alx, pred)
-        debug && @printf(debug_io, "\n[solve_subproblem!] max( |sᵢ| / |xᵢ| ) = %.6e\n", maximum(abs.(s) ./ (1 .+ abs.(x_prev))))
-        debug && @printf(debug_io, "\n[solve_subproblem!] |ared| / fₖ = %.4e\n", abs(alx-alx_prev) / alx_prev)
-        # debug && println(debug_io, "[solve_subproblem!] residuals: ", rx)
-        # debug && println(debug_io, "[solve_subproblem!] constraints: ", cx)
-
         # Compute the ratio actual reduction / predicted reduction
         ratio = step_ratio(alx_prev, alx, pred)
 
@@ -620,11 +585,6 @@ function solve_subproblem!(
 
         verbose && print_inner_iter(iter, alx_prev, norm(s, Inf), radius, ratio;io=io)
 
-        debug && @printf(debug_io, "\n[solve_subproblem] criticality after step computation : %.3e\n", pix)
-
-        # tol_scale_factor = max(1, norm(g, Inf))
-        # tol_scale_factor = 1 + norm(g, Inf)
-
         # Evaluate termination criteria
         solved = pix <= tol_crit
 
@@ -635,12 +595,9 @@ function solve_subproblem!(
         shrinked_tr = small_radius(x, radius)
         short_circuit = plateau_iter == patience_counter || shrinked_tr
 
-        debug && println(debug_io, "[solve_subproblem] plateau_iter = $(plateau_iter) ; stalling = $stalling ; small radius = $(shrinked_tr)")
-
         iter += 1
     end
 
-    # debug && println(debug_io, "[solve_subproblem] Number of inner iterations: $iter")
     # Indicate inner iteration finish
     verbose && println(io,'='^92)
     # Save number of inner iterations
@@ -727,28 +684,16 @@ function projected_gradient!(
                  gproj,
                  Hs)
 
-    debug && @printf(debug_io, "\n[projected_gradient!] ∞-norm Cauchy step: %.4e\n", norm(s, Inf))
-
-    # Update the set of fixed variables (implicitly updates the null space matrix Z)
-
     # Set up for conjugate gradient iterations
     mul!(Hs, hess_op, s)
 
     b = workspace.cg_rhs
     b .= Hs .+ g
 
-    quasi_optimal_cg = norm(proj_op * b) <= kappa_pg * norm(proj_op*g)
-
-    if quasi_optimal_cg && debug
-        println(debug_io, "[projected_gradient!] cauchy step gives sufficient decrease")
-    end
-
+    # If Cauchy step provides sufficient decrease, exit
     quasi_optimal = norm(proj_op * b) <= kappa_pg * norm(proj_op*g)
     cg_stop = false
     iter = 1
-
-    # debug && println(debug_io, "[projected_gradient!] no more free variables : ", saturated_subspace(proj_op))
-    # debug && println(debug_io, "[projected_gradient] current iterate: ", x)
 
     while !quasi_optimal && !cg_stop && iter <= max_cg_iter && !saturated_subspace(proj_op)
 
@@ -769,14 +714,11 @@ function projected_gradient!(
         # Increment predicted reduction
         pred += pred_cg
 
-        debug && println(debug_io, "[projected_gradient] CG iter $iter solving status: ", cg_status)
         # Prepare for next CG iterations
-        debug && @printf(debug_io, "\n[projected_gradient] ∞-norm accumulated step: %.4e\n", norm(s,Inf))
         mul!(Hs, hess_op, s) # form Hs
         b .= Hs .+ g
 
         # Compute norms of reduced gradients ||Zᵀg|| and ||Zᵀ(Hs+g)||
-
         # TODO: in-place computations for norms of reduced gradients
         norm_reduced_g = norm(proj_op * g)
         norm_reduced_gnext = norm(proj_op * b)
@@ -797,285 +739,6 @@ function projected_gradient!(
     return pred
 end
 
-# """ cauchy_step!(x,g,H,ℓ,u,Δ)
-
-# Compute a Cauchy step that provides a sufficient reduction of the quadratic
-# model `q(s) = <s,Hs> + <g,s>`.
-
-# The step is defined by `s_c = s(t_c)` , where `s(t)`, for `t ≥ 0`, is the
-# projected gradient step `P(x-t*g) - x` with `P` denoting the projection over
-#  `{v |  max(-Δe,ℓ-x) ≤ v ≤ min(Δe,u-x)}`.
-
-# This method finds the first local minimum of the quadratic model along the
-# projected gradient path, i.e. the first local minimum of `t ↦ q(s(t))`
-# on `[0, ∞)`.
-
-# The associated Cauchy step is computed in place into vector `s`
-# Returns the `BitAbstractVector{T}` `fix_vars` that encodes the indices of active bounds
-# at the Cauchy point `x + s`.
-
-# Follows the procedure of algorithm 17.3.1 from Trust Regions Methods
-# (Conn, Gould and Toint, SIAM, 2000).
-# """
-# function cauchy_step!(
-#     x::AbstractVector{T},
-#     s::AbstractVector{T},
-#     g::AbstractVector{T},
-#     d::AbstractVector{T},
-#     hess_op::ALHessian{T},
-#     proj_op::CoordinateSubspaceProjector{T},
-#     Hd::AbstractVector{T},
-#     xlow::AbstractVector{T},
-#     xupp::AbstractVector{T},
-#     radius::T) where T
-
-#     global debug
-#     global debug_io
-
-#     epsmch = eps(T)
-#     epsrel = sqrt(epsrel)
-#     eps_slope = 1e-10
-#     eps_curv = 1e-10
-
-#     n = size(x,1)
-#     # Accumulated Cauchy step
-#     s .= T(0)
-
-
-#     # Breakpoints values and group indices
-#     breakpoints, grp_idx = sort_breakpoints(x, g, xlow, xupp, radius)
-#     prev_tb = 0.0
-#     d .= -g
-
-
-#     # Handle the case where the first breakpoint is zero
-#     # Happens when bounds are active at x
-#     if iszero(breakpoints[1])
-
-#         popfirst!(breakpoints)                      # get rid of breakpoint tb = zero
-#         first_active_index = popfirst!(grp_idx)
-#         # debug && println(debug_io, "[cauchy_step] components with breakpoint at 0 = $(size(first_active_index,1))")
-#         update_projector!(proj_op,first_active_index)
-#         mul!(d,proj_op,-g)
-#     end
-
-#     # Find fix components
-
-#     for i = 1:n
-#         # Variable at lower bound
-#         if x[i] <= xlow[i] + abs(xlow[i])*epsrel && d[i] <= epsrel
-#             set_active!(proj_op, i)
-#         # Variable at upper bound
-#         elseif x[i] >= xupp[i] - abs(xupp[i])*epsrel && d[i] >= -epsrel
-#             set_active!(proj_op, i)
-#         end
-#     end
-#     # Variables with ≈ 0 direction
-#     zero_dir = findall(t -> abs(t) <= epsrel, d)
-#     set_active!(proj_op, zero_dir)
-
-#     # Update direction
-#     mul!(d, proj_op, -g)
-
-#     # TODO: modify breakpoint finding method
-
-#     gtd = dot(g,d)
-#     mul!(Hd,hess_op,d)
-
-#     for (i, tb) in enumerate(breakpoints)
-
-#         # Compute slope and curvature
-#         phi_p = gtd + dot(s,Hd)
-#         phi_pp = dot(d,Hd)
-
-#         # Study the current interval [prev_tb, tb)
-#         delta_t = (phi_pp > 0 ? -phi_p / phi_pp : 0.0)
-#         l_interval = tb - prev_tb
-
-#         if phi_p >= 0
-#             break
-#         elseif phi_pp > 0 && delta_t < l_interval # local minimum at t = tb - phi_p / phi_pp
-#             s .+= delta_t .* d
-#             break
-#         end
-
-#         # No local minimum in [prev_tb, tb)
-#         # Prepare for the next interval
-#         prev_tb = tb
-#         newly_active = grp_idx[i]
-#         update_projector!(proj_op, newly_active)
-
-#         s .+= d .* l_interval
-#         mul!(d, proj_op, -g)
-#         gtd = dot(g, d)
-#         mul!(Hd, hess_op, d)
-#     end
-
-#     # Set free variables fixed because of zero direction
-#     set_free!(proj_op, )
-#     return
-# end
-
-
-# """
-#     cauchy_step!(x,g,H,proj_op,ℓ,u,Δ)
-
-# Compute a Cauchy step that provides a sufficient reduction of the quadratic model
-# `q(s) = <s,Hs> + <g,s>`.
-
-# The step is defined by `s_c = s(t_c)` , where `s(t)`, for `t ≥ 0`, is the
-# projected gradient step `P(x-t*g) - x` with `P` denoting the projection over
-# `{v | Av = 0 and max(-Δ,ℓ) ≤ x + v ≤ min(Δ,u)}`.
-
-# This method finds the first local minimum of the quadratic model along the
-# projected gradient path, i.e. the first local minimum of `t ↦ q(s(t))` on `[0, ∞)`.
-
-# The associated Cauchy step is computed in place into vector `s`
-# Returns the `BitAbstractVector{T}` `fix_vars` that encodes the indices of active bounds
-# at the Cauchy point `x + s`.
-
-# Follows the procedure of algorithm 17.3.1 from Trust Regions Methods
-# (Conn, Gould and Toint, SIAM, 2000).
-
-# # Arguments
-
-# - `x::Vector`: current iterate
-# - `s::Vector`: buffer vector for the Cauchy step
-# - `g::Vector`: gradient of the augmented Lagrangian at current point
-# - `d::Vector`: buffer vector the the projected steepest direction
-# - `hess_op`: Hessian approximation of type `ALHessian` at current point
-# - `proj_op`: [`SubspaceProjector`](@ref) operator to project the negative gradient on
-# tangent spaces
-# - `Hd::Vector`: buffer vector for the
-# - `xlow::Vector`: lower bounds on the variables `x`
-# - `xupp::Vector`: upper bounds on the variables `x`
-# - `radius::T`: Current trust region radius
-
-# # On return
-
-# - `s` argument modified in place with components set to the Cauchy step
-
-# """
-# function cauchy_step!(
-#     x::AbstractVector{T},
-#     s::AbstractVector{T},
-#     g::AbstractVector{T},
-#     d::AbstractVector{T},
-#     hess_op::ALHessian{T},
-#     proj_op::SubspaceProjector{T},
-#     Hd::AbstractVector{T},
-#     xlow::AbstractVector{T},
-#     xupp::AbstractVector{T},
-#     radius::T) where T
-
-#     (m,n) = size(proj_op.workspace_mat.eqmat)
-
-#     # Initial projected steepest direction
-#     mul!(d, proj_op, -g)
-
-#     # Check if they are bounds active at x
-#     prev_tb = 0
-#     initial_fixed = initial_active_bounds(x, d, xlow, xupp)
-
-#     if !isempty(initial_fixed)
-#         update_projector!(proj_op, initial_fixed)
-#     end
-
-#     # Update the projection
-#     mul!(d, proj_op, -g)
-
-#     # Prepare the first interval
-#     # Find the first breakpoint
-#     tb, idx = next_breakpoint(d, s, xlow, xupp, radius, proj_op.workspace_mat.fixvars)
-
-#     # Form gᵀd and Hd
-#     gtd = dot(g,d)
-#     mul!(Hd, hess_op, d) # Hd ← H*d
-
-#     # Search while constraints can be added to the active set or breakpoints exist
-#     while !saturated_subspace(proj_op) && !isempty(idx)
-
-#         # Compute slope and curvature
-#         phi_p = gtd + dot(s,Hd)
-#         phi_pp = dot(d,Hd)
-
-#         # Study the current interval [prev_tb, tb)
-#         delta_t = (phi_pp > 0 ? -phi_p / phi_pp : 0.0)
-#         l_interval = tb - prev_tb
-
-#         if phi_p >= 0
-#             # local minimum at previous breakpoint
-#             break
-#         elseif phi_pp > 0 && delta_t < l_interval
-#             # local minimum at t = tb - phi_p / phi_pp
-#             s .+= delta_t .* d
-#             break
-#         end
-
-#         # No local minimum in [prev_tb, tb)
-#         # Update accumulated step
-#         s .+= d .* l_interval
-
-#         # Compute the projected direction on the next interval
-#         update_projector!(proj_op,idx)
-#         mul!(d, proj_op, -g)
-
-#         # Prepare for the next interval
-#         gtd = dot(g,d)
-#         mul!(Hd, hess_op, d)
-
-#         prev_tb = tb
-#         # Find next breakpoint
-#         tb, idx = next_breakpoint(d,s,d_low,d_upp,proj_op.workpsace_mat.fixvars)
-
-#     end
-
-#     return
-# end
-
-# """ next_breakpoint(d,s,dₗ,dᵤ,fix_bounds)
-
-# Finds the smallest scalar `θ` such that one or more components not in `fix_bounds`
-# of `s + θ*d` lie at one of their bounds `dₗ` or `dᵤ`.
-
-# Returns the scalar `θ` and `idx`, the index of the components that becomes active.
-# """
-# function next_breakpoint(
-#     d::AbstractVector{T},
-#     s::AbstractVector{T},
-#     xlow::AbstractVector{T},
-#     xupp::AbstractVector{T},
-#     radius::T,
-#     fix_bounds::BitVector;
-#     atol::T=sqrt(eps(T))) where T
-
-#     theta = Inf # current breakpoint value
-#     idx = []    # list of bounds indicices becoming active at theta
-
-#     for i in axes(d,1)
-#         if !fix_bounds[i]
-
-#             theta_try = if d[i] < -atol
-#                 (max(xlow[i] - x[i], -radius) - s[i]) / d[i]
-#             elseif d[i] > atol
-#                 (min(xupp[i] - x[i], radius) - s[i]) / d[i]
-#             else
-#                 Inf
-#             end
-
-#             also_bp = abs(theta_try-theta) < atol
-
-#             if also_bp
-#                 push!(idx,i)
-
-#             elseif !also_bp && theta_try < theta
-#                 theta = theta_try
-#                 idx = [i]
-#             end
-#         end
-#     end
-#     return theta, idx
-# end
 
 # Modifies the initial guess for the solution such that it is feasible to the bounds
 # Forms and returns the operator computing projections on coordinate subspaces

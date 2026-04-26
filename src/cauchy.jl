@@ -148,9 +148,6 @@ function initial_fixed(
     xupp::AbstractVector{T};
     epsrel::T = sqrt(eps(T))) where T
 
-    global debug
-    global deubg_io
-
     active = Vector{Int}()
     zero_dir = Vector{Int}()
 
