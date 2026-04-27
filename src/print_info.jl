@@ -31,7 +31,11 @@ function print_traulls_header(
     println(io, tr)
 
     # Initial optimality quantities
-    @printf(io, "\nobjective = %.6e ; nl feasibility = %.6e ; criticality = %.6e\n", fx, feas_measure, pix)
+    println(io, "\nAt starting point: ")
+    println(io, "Objective...................: ", @sprintf("%.6e", fx))
+    println(io, "Nonlinear feasibility.......: ", @sprintf("%.6e", feas_measure))
+    println(io, "Criticality measure.........: ", @sprintf("%.6e", pix))
+
 
     # Iteration detail header
     println(io,"\n",'='^37, " Iteration detail ", '='^37)

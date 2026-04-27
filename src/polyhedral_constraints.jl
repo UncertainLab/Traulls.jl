@@ -353,7 +353,7 @@ Overloads the `LinearAlgebra.mul!` method.
 
 Nothing is returned, the result is stored in vector `r`.
 """
-function mul!(r::Vector{T},P::SubspaceProjector{T},x::Vector{T}) where T
+function mul!(r::Vector{T}, P::SubspaceProjector{T}, x::Vector{T}) where T
 
     temp = P.workspace_mat * x # form A₊x
     ldiv!(P.chol_gram_augmat,temp) # solve for y (A₊A₊ᵀ)y = A₊x
@@ -384,8 +384,8 @@ Overloads the base multiplication `*` method.
 """
 function Base.:*(P::SubspaceProjector{T}, x::Vector{T}) where T
 
-    res = Vector{T}(undef,size(x,1))
-    mul!(res,P,x)
+    res = Vector{T}(undef, size(x,1))
+    mul!(res, P, x)
     return res
 end
 

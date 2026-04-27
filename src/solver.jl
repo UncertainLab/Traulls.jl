@@ -128,9 +128,6 @@ function solve(
     verbose::Bool=false,
     inner_verbose::Bool=false) where T
 
-    global debug_io
-    global debug
-
     # Prepare output stream to log iteration detail
     output_io = (output_file_name == "" ? stdout : open(output_file_name,"w"))
 
@@ -172,7 +169,8 @@ function solve(
 
     # Initial values of objective, feasibility and criticality
     g = J'*rx + C'*y
-    fx = dot(rx,rx)
+    fx = dot(rx, rx)
+
     model.counters.nobj_eval += 1
     feas_measure = norm(cx, Inf)
     gproj = inner_workspace.proj_g
@@ -189,10 +187,6 @@ function solve(
     stopped, max_penalty_reached = false, false
 
     iter = 1
-
-    # verbose && print_boconls_header(n,nres,ncons,xlow,xupp,min_reltol_crit,min_tol_feas,
-    #                                 tau;io=output_io)
-    # verbose && print_tr_header(tr;io=output_io)
 
     verbose && print_traulls_header(model, fx, feas_measure, pix, min_reltol_crit,
                                     min_tol_feas, tau, tr; io=output_io)
@@ -239,31 +233,30 @@ function solve(
             # Update Lagrange multipliers
             first_order_multipliers!(y, cx, mu)
 
-            # Evaluate termination status
-            g .= J'*rx + C'*y # Lagrangian gradient
+            # Decrease tolerances
+            # Penalty parameter is unchanged
+            reltol_crit = max(reltol_crit / mu^beta_crit, min_reltol_crit)
+            tol_feas = max(tol_feas / mu^beta_feas, min_tol_feas)
 
-            norm_proj_gradlag = lincons_present ?
-                criticality_measure(x, g, gproj, proj_op) :
-                criticality_measure(x, g, gproj, xlow, xupp)
-
-            tol_scale_factor = 1 + norm(g, Inf)
-
-            solved = feas_measure <= min_tol_feas &&
-                norm_proj_gradlag <= tol_crit
-
-            if !solved
-                # Decrease tolerances
-                # Penalty parameter is unchanged
-                reltol_crit = max(reltol_crit / mu^beta_crit, min_reltol_crit)
-                tol_feas = max(tol_feas / mu^beta_feas, min_tol_feas)
-            end
         else
             # Increase the penalty parameter lesser decrease of the tolerances
             # Iterate and multipliers are unchanged
-            mu = min(mu_max, tau * mu)
+            mu *= tau
             reltol_crit = max(omega0 / mu^k_crit, min_reltol_crit)
             tol_feas = max(eta0 / mu^k_feas, min_tol_feas)
         end
+
+
+        # Evaluate termination status
+        g .= J'*rx + C'*y # Lagrangian gradient
+
+        norm_proj_gradlag = lincons_present ?
+            criticality_measure(x, g, gproj, proj_op) :
+            criticality_measure(x, g, gproj, xlow, xupp)
+
+        solved = feas_measure <= min_tol_feas &&
+            norm_proj_gradlag <= tol_crit
+
 
         verbose && print_outer_iteration(iter, fx, feas_measure, mu, pix, Val(update_multipliers); io=output_io)
 
@@ -283,8 +276,8 @@ function solve(
         infeasible_non_critical
     end
 
-    elapsed_time = time() - start_time # Save execution time
-    model.counters.niter_outer = iter  # Save number of outer iterations
+    elapsed_time = time() - start_time     # Save execution time
+    model.counters.niter_outer = iter - 1  # Save number of outer iterations
 
     results = TraullsResults(x, y, fx, feas_measure, pix, solving_status, model.counters,
                              elapsed_time)
@@ -440,9 +433,6 @@ function solve_subproblem!(
     verbose::Bool=false,
     io::IO=stdout) where T
 
-    global debug_io
-    global debug
-
     # Dimensions
     n, nslack, ncons = model.n, model.nslack, model.ncons
     lincons_present = model.nlincons > 0
@@ -508,8 +498,6 @@ function solve_subproblem!(
             reltol_crit,
             reltol_crit,
             workspace)
-
-        # debug && println(debug_io, "[solve_subproblem] max(|sᵢ|/|xᵢ|) = ", maximum(abs.(s ./ (x .+ 1))))
 
         if short_circuit continue end
 
@@ -657,9 +645,6 @@ function projected_gradient!(
     kappa_cg::T,
     workspace::Workspace{T}) where T
 
-    global debug
-    global debug_io
-
     # Buffers
     Hs = workspace.hess_vec
     slow, supp = workspace.step_low, workspace.step_upp
@@ -728,7 +713,7 @@ function projected_gradient!(
 
         # Stop if negative curvature encountered or if the step lies at the trust region
         # boundary
-        cg_stop = cg_status == negative_curvature || cg_status == on_trust_region
+        cg_stop = cg_status == negative_curvature # || cg_status == on_trust_region
 
         # Identify the newly active bounds
         update_active_set!(s, x, xlow, xupp, proj_op)

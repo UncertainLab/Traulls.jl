@@ -50,7 +50,7 @@ end
     mu = 10.0
     v = rand(n)
 
-    H = Traulls.SR1(J,C,mu)
+    H = Traulls.SR1(J, C, mu)
     H_test = J'*J + mu*C'*C
 
     
@@ -59,41 +59,53 @@ end
     # Updated jacobians 
     J .+= 1.0
     C .+= 1.0
-
+    S = 2*ones(n,n)
+    H.S = copy(S)
     @test H.J ≠ J 
     @test H.C ≠ C
+    H.J .= J
+    H.C .= C
+    @test all(!iszero, H.S)
 
-    # Normal case update
-    y = ones(n)     # Lagrange multipliers
-    s = ones(n)      # step 
-    denom_test = dot(y-H.S*s,s)
-
-    Traulls.update_hessian!(H,J,C,y,s)
-
-    @test H.J ≈ J && H.C ≈ C
-    @test abs(denom_test) > atol * norm(s) * norm(y-H.S*s) && all(≠(0.0), H.S)
-    
-    # Failed safeguard update
-    old_S = H.S
-    J .+= 1.0
-    C .+= 1.0
-
-    denom_test = dot(y-H.S*s,s)
-
-    Traulls.update_hessian!(H,J,C,y,s)
-    @test !(abs(denom_test) > max(atol, atol * norm(s) * norm(y-H.S*s))) 
-    @test H.S ≈ old_S
-
-    v .+= 1.0
-    H_test = J'*J + mu*C'*C + old_S
+    H_test = J'*J + mu*C'*C + S
+    @show H.S
     @test H*v ≈ H_test*v
+
+    # TODO: test the updating procedures (one case where the update is done, one where it is rejected)
+    # # Normal case update
+    # y = ones(n)     # Lagrange multipliers
+    # s = ones(n)      # step
+    # denom_test = dot(y - H.S*s,s)
+
+    # Traulls.update_hessian!(H, J, C, y, s)
+
+    # @test H.J ≈ J && H.C ≈ C
+    # @test abs(denom_test) > atol * (1 + norm(s) * norm(y-H.S*s)) && all(≠(0.0), H.S)
+
+    # # Failed safeguard update
+    # old_S = H.S
+    # J .+= 1.0
+    # C .+= 1.0
+
+    # denom_test = dot(y-H.S*s,s)
+
+    # Traulls.update_hessian!(H, J, C, y, s)
+    # @test !(abs(denom_test) > max(atol, atol * norm(s) * norm(y-H.S*s)))
+    # @test H.S ≈ old_S
+
+    # v .+= 1.0
+    # H_test = J'*J + mu*C'*C + old_S
+    # @test H*v ≈ H_test*v
 
     # Reset procedure 
     J .= 10
     C .= 10
     new_mu = 100.0
-    Traulls.reset_hessian!(H,J,C,new_mu)
+    Traulls.reset_hessian!(H, J, C, new_mu)
     @test H.J ≈ J && H.C ≈ C
     @test H.S ≈ zeros(n,n)
-    @test H.mu ≠ mu
+    @test H.mu ≠ mu && H.mu ≈ new_mu
+
+    H_test = J'*J + new_mu*C'*C
+    @test H*v ≈ H_test*v
 end

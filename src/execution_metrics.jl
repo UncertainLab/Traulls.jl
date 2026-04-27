@@ -106,7 +106,7 @@ function print(io::IO, results::TraullsResults)
     println(io, "\n")
 
     println(io, "Execution time......................................: ",
-            @sprintf("%.3f seconds", results.elapsed_time))
+            @sprintf("%.4f seconds", results.elapsed_time))
     println(io, "Number of residuals evaluations.....................:",
             @sprintf(" %d", results.counters.nres_eval))
     println(io, "Number of residuals Jacobian evaluations............:",

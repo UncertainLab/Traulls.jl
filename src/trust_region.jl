@@ -35,8 +35,8 @@ end
 # Pretty printing of a trust region parameters
 function print(io::IO, tr::TrustRegion)
     println(io, "Trust Region parameters")
-    println(io, "Step acceptance threshold.............................: ", @sprintf("%5f", tr.accept_threshold))
-    println(io, "Radius increase threshold.............................: ", @sprintf("%5f", tr.increase_threshold))
+    println(io, "Step acceptance threshold............................: ", @sprintf("%5f", tr.accept_threshold))
+    println(io, "Radius increase threshold............................: ", @sprintf("%5f", tr.increase_threshold))
     println(io, "Radius increase factor...............................: ", @sprintf("%5f", tr.increase_factor))
     println(io, "Radius decrease factor...............................: ", @sprintf("%5f", tr.decrease_factor))
     println(io, "Negative ratio decrease factor.......................: ", @sprintf("%5f", tr.neg_ratio_factor))

@@ -325,7 +325,7 @@ function reset_hessian!(
     H.J .= J0
     H.C .= C0
     H.mu = mu0
-    H.S .= 0
+    H.S .= T(0)
 
     return
 end
