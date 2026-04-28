@@ -292,16 +292,24 @@ function update_sr1_second_order!(sr1_op::SR1{T}) where T
     y = sr1_op.secant_rhs
     s = sr1_op.step
 
-    # Buffer to store y - Ss
-    ymSs = view(sr1_op.temp,1:size(s,1))
+    # Buffer vector to store intermediate results
+    # buffer = view(sr1_op.temp, 1:size(s,1))
+
+    # # Compute sizing factor
+    # buffer .= sr1_op.S * s # TODO: compute with mul! method
+    # sizing_factor = abs(dot(s, y)) * (1 / abs(dot(s, buffer)))
+    # tau = min(1, sizing_factor) # τ ← min(1, |sᵀy| / |sᵀSs|)
+
+    # Form y - Ss
+    ymSs = view(sr1_op.temp, 1:size(s,1))
     ymSs .= y
-    mul!(ymSs, sr1_op.S, s, -1, 1) # Form ymSs = y - Ss
+    mul!(ymSs, sr1_op.S, s, -1, 1) # Form y - τSs
+    denom = dot(s, ymSs)
 
-    # Add (y - Ss)(y - Ss)ᵀ / (y - Ss)ᵀs to second order terms approximation
-    # Update applied if denominator (y - Ss)ᵀs not too small
-    denom = dot(s,ymSs)
+    # Add (y - τSs)(y - Ss)ᵀ / (y - τSs)ᵀs to second order terms approximation
+    # Update applied if denominator (y - τSs)ᵀs not too small
 
-    if abs(denom) > eps_safeguard * (1 + norm(s)*norm(ymSs))
+    if abs(denom) > eps_safeguard * (1 + norm(s) * norm(ymSs))
         mul!(sr1_op.S, ymSs, ymSs', 1/denom, 1)
     end
 
