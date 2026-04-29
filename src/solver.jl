@@ -8,6 +8,8 @@ constraints of the form
 
 `s.t. c(x) = 0`
 
+`Ax = b`
+
 `ℓ ≤ x ≤ u,`
 
 with an iterative Augmented Lagrangian method.
@@ -19,10 +21,12 @@ each new iterate `xₖ₊₁` is an approximate solution, with respect to a tole
 
 `minₓ Lₐ(x,yₖ,μₖ) = 1/2 * r(xₖ)ᵀr(xₖ) + c(xₖ)ᵀ[yₖ + μₖ/2 * c(xₖ)]`
 
-`s.t. ℓ ≤ x ≤ u,`
+`s.t. Ax = b`
 
-for some penalty parameter `μₖ > 0`, a current estimate of the Lagrange
-    multipliers `yₖ` and using `xₖ` as a starting point.
+`ℓ ≤ x ≤ u,`
+
+using `xₖ` as a starting point with fixed penalty parameter `μₖ > 0` and current estimate of
+the Lagrange multipliers `yₖ`
 
 If the new iterate satisfies `||c(xₖ₊₁)||₂ ≤ ηₖ`, for some `ηₖ > 0`, then the
 Lagrange multipliers are updated by `yₖ₊₁ = yₖ + μₖc(xₖ)` and the tolerances `ωₖ` and `ηₖ` are tightened.
@@ -36,71 +40,62 @@ a higher penalty parameter `μₖ₊₁ = τμₖ`, with `τ > 1`. The tolerance
 Subproblems are solved by the gradient projection method
 see [`projected_gradient`](@ref)).
 
-This solver works in double relative precision.
-
 # Arguments
 
-- `model::BoxCnls`: Encodes the model of the problem to be solved (see [`BoxCnls`](@ref)).
+- `model::CnlsModel`: Encodes the model of the problem to be solved (see [`CnlsModel`](@ref)).
 
 # Keyword Arguments
 
 ## Augmented Lagrangian parameters
 
-- `mu0::Float64`: Initial penalty parameter (default: `10.0`)
-- `tau::Float64`: Increase factor for the penalty parameter (default: `100.0`)
-- `omega0::Float64`: Constant to set the initial criticality tolerance
-(default: `1.0`)
-- `eta0::Float64`: Constant to set the initial feasibility tolerance
-(default: `1.0`)
-- `feas_atol::Float64`: Absolute olerance for feasibility of equality
-constraints (default: `1e-6`)
-- `crit_tol::Float64`: Relative tolerance for criticality (default: `1e-7`)
-- `k_crit::Float64`: Positive constant used to initialize and update the
+- `mu`: Initial penalty parameter (default: `10`)
+- `tau`: Increase factor for the penalty parameter (default: `10`)
+- `omega0`: Constant to set the initial criticality tolerance
+(default: `1`)
+- `eta0`: Constant to set the initial feasibility tolerance
+(default: `1`)
+- `min_tol_feas`: Absolute tolerance for feasibility of nonlinear constraints
+(default: `1e-6`)
+- `crit_tol`: Relative tolerance for criticality (default: `1e-7`)
+- `k_crit`: Positive constant used to initialize and update the
 subproblem criticality tolerance in the case of poor improvement of the
 feasibility (default: `1.0`)
-- `k_feas::Float64`: Positive constant used to initialize and update the
-subproblem feasibility tolerance in the case of poor improvement of the
-feasibility (default: `0.1`)
-- `beta_crit::Float64`: Positive constant used to reduce the subproblem
-criticality tolerance in the case of good improvement of the feasibility
-(default: `1.0`)
-- `beta_feas::Float64`: Positive constant used to reduce the subproblem
-feasibility tolerance in the case of good improvement of the feasibility (default: `0.9`)
+- `k_feas`: Positive constant used to initialize and update the subproblem feasibility
+tolerance in the case of poor improvement of the feasibility (default: `0.1`)
+- `beta_crit`: Positive constant used to reduce the subproblem criticality tolerance in the
+case of good improvement of the primal feasibility (default: `1.0`)
+- `beta_feas`: Positive constant used to reduce the subproblem feasibility tolerance in the
+case of good improvement of the feasibility (default: `0.9`)
+- `hessian_approx`: Symbol encoding the Hessian approximation used during the inner minimization (default: `:gn` for Gauss-Newton)
 
 ## Trust region parameters
 
-- `accept_treshold::Float64`: Threshold for accepting a step (default: `0.25`)
-- `increase_treshold::Float64`: Threshold for very successful steps in order
-to extend the trust region (default: `0.75`)
-- `decrease_factor::Float64`: Reducing factor of the trust region
-(default: `0.5`)
-- `increase_factor::Float64`: Extension factor of the trust region
-(default: `2.5`)
+- `accept_treshold`: Threshold for accepting a step (default: `0.05`)
+- `increase_treshold`: Threshold for very successful steps to extend the trust region
+(default: `0.9`)
+- `decrease_factor`: Reducing factor of the trust region (default: `0.25`)
+- `increase_factor`: Extension factor of the trust region (default: `2.5`)
+- `neg_ratio_factor`: Reduction factor of the trust region radius for steps with negative
+ratio (default: `0.0625`)
 
 ## Solver related constants
 
-- `kappa_step::Float64`: Constant to define the tolerance for the projection
-gradient method  (default: `0.1`)
-- `kappa_cg::Float64`: Constant to define the tolerance for the projected
-conjugate gradient method (default: `0.1`)
-- `mu_max::Float64`: maximum value of the penalty parameter (default: `1e6`)
-- `max_outer_iter`: Maximum number of outer iterations, i.e. number of
-minimization of the Augmented Lagrangian (default: `200`)
-- `max_inner_iter`: Maximum number of iterations when solving each subproblem
-with the gradient projection method (default: `100`)
-- `max_cg_iter`: Maximum number of conjugate gradient iterations (default: `50`)
+- `mu_max`: maximum value of the penalty parameter (default: `1/ϵ` with `ϵ` is the relative machine precision)
+- `max_outer_iter`: Maximum number of outer iterations (default: `200`)
+- `max_inner_iter`: Maximum number of iterations for the inner minimization phase (default: `1000`)
+- `max_cg_iter`: Maximum number of minor iterates for the gradient projection loop (default: `50`)
 
 ## Miscellaneous
 
-- `output_file_name`: Name of the output file for logging (default: `""` which
-makes `stdout` the default output stream)
-- `verbose`: Boolean. If set to `true`, execution and iterations detail are
-printed into the output file (default: false)
+- `output_io`: Input-Output stream where the iteration detail is printed (default: `stdout`)
+- `verbose`: Boolean. If set to `true`, print information about the outer iterations into
+`output_io` (default: `false`)
+- `inner_verbose`: Boolean. If set to `true`, print information about the iterations of the
+inner minimization phase into `output_io` (default: `false`)
 
 # On return
 
-Returns the solution vector and additional information encoded in a
-[`PrimalDualSolution`](@ref).
+Returns the important execution informations into a [`TraullsResults`](@ref).
 """
 function solve(
     model::CnlsModel{T};
@@ -122,14 +117,11 @@ function solve(
     hessian_approx::HessianApprox = gn,
     mu_max::T = 1/eps(T),
     max_iter::Int = 200,
-    max_inner_iter::Int = 200,
+    max_inner_iter::Int = 1000,
     max_cg_iter::Int = 50,
-    output_file_name::String="",
+    output_io::IO=stdout,
     verbose::Bool=false,
     inner_verbose::Bool=false) where T
-
-    # Prepare output stream to log iteration detail
-    output_io = (output_file_name == "" ? stdout : open(output_file_name,"w"))
 
     # Dimensions of the problem
     n, nres, ncons = model.n, model.nres, model.ncons
@@ -283,8 +275,6 @@ function solve(
                              elapsed_time)
 
     verbose && print(output_io, results)
-    # Close output stream
-    output_file_name != "" && close(output_io)
 
     return results
 
@@ -297,7 +287,9 @@ Solves the outer iteration subproblem
 
 `minₓ Lₐ(x,y,μ) = 1/2 * r(x)ᵀr(x) + c(x)ᵀ[y + μ/2 * c(x)]`
 
-`s.t. ℓ ≤ x ≤ u,`
+`s.t. Ax = b`
+
+`ℓ ≤ x ≤ u,`
 
 using the gradient projection method with trust region.
 
@@ -315,9 +307,11 @@ The step computation consists into approximately solving the quadratic program
 
 `minₛ qₖ(s)`
 
-`s.t. ℓ ≤ xₖ + s ≤ u`
+`s.t. A(x + s) = b`
 
-` ||s|| ≤ Δₖ,`
+`ℓ ≤ xₖ + s ≤ u`
+
+`||s|| ≤ Δₖ,`
 
 where `Δₖ` is the trust region radius and `||.||` denotes the `∞`-norm
 `||x|| = maxᵢ |xᵢ|`. Because `||x|| ≤ Δₖ ⟺ -Δₖ ≤ xᵢ ≤ Δₖ` for all `i`,
@@ -334,7 +328,7 @@ gradient path
 
 `s(t) = Pₖ[xₖ - tgₖ] - xₖ` for  `t ≥ 0,`
 
-`Pₖ` denoting the projection over the feasible domain `Bₖ`.
+`Pₖ` denoting the projection over the feasible domain.
 The corresponding scalar defines a Cauchy step that ensures a sufficient
 reduction of the objective function. This means that taking the Cauchy step at
 every iteration is enough to solve the subproblem.
@@ -370,44 +364,48 @@ The radius is updated as follows:
 - if `0 < ρ < η₁` (bad step), `Δₖ₊₁ = α₁*||sₖ||`
 - if `ρ ≤ 0` (very bad step), `Δₖ₊₁ = min(α₂*||sₖ||, γᵦ*Δₖ)`
 
-Here, `||.||` denotes the euclidean norm.
+Here, `||.||` denotes the ∞-norm.
 
 ## Stopping criteria
 
 The minimization process is stopped once there is an iterate `xₖ` such that
 
-`|| P[xₖ - gₖ] - xₖ || ≤ ω`,
+`|| P[xₖ - gₖ] - xₖ || ≤ ω * || P[x₀ - g₀] - x₀ ||`,
 
-where `P` here denotes the projection operator onto the initial feasible box
-`[ℓ,u]`.
-This quantity measures how close a point is from first-order criticality.
+where `P` here denotes the projection operator onto the tangent space of feasible directions
+ at `x`, i.e. the norm of the reduced gradient.
 
+The algorithm also stops if there are consecutive iterations provide a relatively small
+change in both the objective and the iterate or if the trust region radius is too small.
 # Arguments
 
-- `model::BoxCnls{T}`: Structure encoding the original constrained nonlinear
-least-squares problem to be solved
-- `x::AbstractVector{T}`: Starting point the the outer iteration
-- `xlow::AbstractVector{T}`: Lower bounds on the variables
-- `xupp::AbstractVector{T}`: Upper bounds on the variables
-- `y::AbstractVector{T}`: Current estimation of the Lagrange multipliers
-- `mu::T`: Penalty parameter
-- `rx::AbstractVector{T}`: Residuals evaluated at `x`
-- `cx::AbstractVector{T}`: Equality constraints evaluated at `x`
-- `J::AbstractMatrix{T}`: Jacobian of the residuals evaluated at `x`
-- `C::AbstractMatrix{T}`: Jacobian of the equality constraints evaluated at `x`
-- `g::AbstractVector{T}`: Gradient of the Augmented Lagrangian at `x`
-- `tr::TrustRegion`: Encodes the trust region constraint and associated
-- `omega_crit::T`: Optimality tolerance
-constants
-- `kappa_step::T`: Constant used to define the stopping criteria of the
- gradient projection method
-- `kappa_cg::T`: Constant used to define the stopping criteria of the
-conjugate gradient iterations
-- `max_iter::Int`: maximum number of iterations to solve the outer iteration
-subproblem
-- `max_cg_iter::Int`: maximum number of uses of the conjugate gradient method
-- `verbose::Bool=false`: Boolean to log details into a input/output stream
-- `io::IO=stdout`: input/output stream (default is `stdout`)
+- `model`: `CnlsModel` encoding the original problem to be solved
+- `x`: Starting point the the outer iteration
+- `xlow`: Lower bounds on the variables
+- `xupp`: Upper bounds on the variables
+- `y`: Current estimation of the Lagrange multipliers
+- `mu`: Penalty parameter
+- `rx`: Residuals evaluated at `x`
+- `cx`: Nonlinear constraints evaluated at `x`
+- `J`: Jacobian of the residuals evaluated at `x`
+- `C`: Jacobian of the nonlinear constraints evaluated at `x`
+- `g`: Gradient of the augmented Lagrangian at `x`
+- `hess_op`: `ALHessian` operator to compute Hessian-vector products
+- `proj_op`: `Projector` operator to compute projections onto tangent spaces
+- `tr`: `TrustRegion` encoding the trust region constraint and the constants involved in the
+radius update mechanism (see [`TrustRegion`](@ref))
+- `rel_tol_crit`: Relative optimality tolerance
+- `hessian_approx`: Instance of `HessianApprox` enum type encoding how the approximated
+Hessian is updated
+- `max_iter::Int`: maximum number of inner iterations
+- `max_cg_iter::Int`: maximum number of uses of the conjugate gradient method, i.e. minor
+iterates
+- `workspace`: `Workspace` whose fields contain pre-allocated memory for vectors involed in
+linear algebra computations
+- `patience_counter`: Maximum number of consecutive stalling iterations before exiting the
+algorithm (default: `3`)
+- `verbose`:Boolean. If set to `true`, print iteration detail into `io` (default: false)
+- `io`: input/output stream to log iteration detail (default: `stdout`)
 """
 function solve_subproblem!(
     model::CnlsModel{T},
@@ -595,13 +593,15 @@ function solve_subproblem!(
 end
 
 """
-    projected_gradient!(x,g,H,xₗ,xᵤ,Δ,max_cg_iter,κₛ,κᵪ)
+    projected_gradient!(x,g,z,xₗ,xᵤ,Δ,max_cg_iter,κₛ,κᵪ)
 
 Approximately solves the quadratic program
 
 `minₛ 1/2 sᵀHs + sᵀg`
 
-`s.t. xₗ ≤ x + s ≤ xᵤ`
+`s.t. As = 0`
+
+`xₗ ≤ x + s ≤ xᵤ`
 
 `||s|| ≤ Δ`
 
@@ -611,12 +611,14 @@ In the QP model, `||.||` denotes the `∞`-norm `||s|| = maxᵢ |sᵢ|`.
 
 # Arguments
 
-- `x::AbstractVector{T}`: Current iterate
-- `g::AbstractVector{T}`: Gradient of the Augmented Lagrangian at `x`
-- `H::ALHessian{T}`: Approximation of the Hessian of the Augmented Lagrangian at
-`x`
-- `xₗ::AbstractVector{T}`: Lower bounds on `x`
-- `xᵤ::AbstractVector{T}`: Upper bounds on `x`
+- `x`: Current iterate
+- `s`: Buffer vector for the step
+- `g`: Gradient of the Augmented Lagrangian at `x`
+- `z`: Buffer vector for the projected gradient
+- `H`: `ALHessian` operator to compute Hessian-vector products
+- `P`: `Projector` operator to compute projections onto tangent spaces
+- `xₗ`: Lower bounds on `x`
+- `xᵤ`: Upper bounds on `x`
 - `Δ::T`: Trust region radius
 - `max_cg_iter::Int`: Number of maximum uses of the conjugate gradient method
 - `κₛ::T`: Positive constant used to define the convergence criteria
@@ -626,9 +628,8 @@ the conjugate gradient method
 
 # On return
 
-- `s::AbstractVector{T}`: This argument is modified in place and contains the trial step
-- `pred::T`: Reduction of the quadratic model after taking step `s`
-
+- `s`: This argument is modified in place and contains the trial step
+- `pred`: Reduction of the quadratic model after taking step `s`
 """
 function projected_gradient!(
     x::AbstractVector{T},
@@ -711,11 +712,10 @@ function projected_gradient!(
         # Stop if the step provides sufficient decrease in the reduced gradient
         quasi_optimal = norm_reduced_gnext <= kappa_pg * norm_reduced_g
 
-        # Stop if negative curvature encountered or if the step lies at the trust region
-        # boundary
+        # Stop if negative curvature encountered
         cg_stop = cg_status == negative_curvature # || cg_status == on_trust_region
 
-        # Identify the newly active bounds
+        # Identify the newly active bounds and update accordingly the projection operator
         update_active_set!(s, x, xlow, xupp, proj_op)
 
         iter += 1
@@ -739,7 +739,8 @@ function initial_point_and_projector!(
 end
 
 # Modifies the initial guess for the solution to make it linear feasible
-# Forms and returns the operator computing projections on reduced subspaces
+# Identifies the bounds active at the initial point found and forms the associate `Projector
+# operator computing projections on reduced subspaces
 function initial_point_and_projector!(
     model::CnlsModel{T},
     x::AbstractVector{T},
@@ -768,6 +769,7 @@ end
 # Solves w.r.t. x and auxiliary variables r the linear feasibility problem
 # `min ||r||₁ s.t. Ax + r = b, ℓ ≤ x ≤ u`
 # Modifies in place argument x0 with the value at optimal solution
+# Triggers a warning if the solution found is not feasible
 function solve_linfeas_pb!(
     A::AbstractMatrix{T},
     x0::AbstractVector{T},
@@ -805,24 +807,21 @@ end
 """
     criticality_measure(x,g,xₗ,xᵤ)
 
-Computes the criticality measure used to measure if a primal-dual solution
-`(x,y)` is a first-order critical point or not.
+Computes the criticality measure for problems where linear constraints are bounds.
 
 # Arguments
 
-- `x::AbstractVector{T}`: Current iterate
-- `g::AbstractVector{T}`: Gradient of the Augmented Lagrangian at current primal-dual
-iterate `(x,y)`
-- `xₗ::AbstractVector{T}`: Lower bounds on `x`
-- `xᵤ::AbstractVector{T}`: Upper bounds on `x`
-- `p::T`: Nature of the norm computed (default is `Inf`).
+- `x`: Current iterate
+- `g`: Gradient of the Augmented Lagrangian at current primal-dual
+iterate
+- `gproj`: Buffer vector to store the projected gradient
+- `xₗ`: Lower bounds on `x`
+- `xᵤ`: Upper bounds on `x`
 
 # Return
 
 - `πₓ = ||P[x-g] - x||` where `P` denotes the projection onto the box
-`[xₗ, xᵤ]` and `||.||` is the `p`-norm for some `p > 1`.
-
-In practice, either the `ℓ₂` or `∞` norms are used.
+`[xₗ, xᵤ]` and `||.||` is the `∞`-norm.
 """
 function criticality_measure(
     x::AbstractVector{T},
@@ -836,13 +835,28 @@ function criticality_measure(
     norm(gproj, Inf)
 end
 
-# The measure computed is the norm of the projection of the steepest direction
-# on the tangent space at a given point. That information is encoded inside the
-# `proj_op` argument.
+"""
+    criticality_measure(x, g, gproj, xₗ, xᵤ)
+
+Computes the criticality measure for problems where linear constraints are polyhedral, which
+is the norm of the reduced gradient.
+
+# Arguments
+
+- `x`: Current iterate
+- `g`: Gradient of the Augmented Lagrangian at current primal-dual iterate
+- `gproj`: Buffer vector to store the projected gradient
+- `proj_op`: `Projector` operator to form the projected gradient
+
+# On return
+
+- `πₓ = ||P[x-g] - x||` where `P` denotes the projection onto tangent space of linear
+feasible directions at `x` and `||.||` is the `∞`-norm.
+"""
 function criticality_measure(
     x::AbstractVector{T},
     g::AbstractVector{T},
-    projg::AbstractVector{T},
+    gproj::AbstractVector{T},
     proj_op::SubspaceProjector{T}) where T
 
     mul!(projg, proj_op, g)
