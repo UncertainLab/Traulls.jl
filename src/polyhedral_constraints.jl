@@ -77,53 +77,11 @@ transpose(M::SubspaceMatrix{T}) where T =
     TransposeSubspaceMatrix(transpose(M.eqmat),
                             M.fixvars)
 
-# Overloads matrix vector product
-Base.:*(M::SubspaceMatrix{T},x::Vector{T}) where T = vcat(M.eqmat*x,x[M.fixvars])
-
-# overloads matrix vector product with transposition
-function Base.:*(A::TransposeSubspaceMatrix{T,S},x::Vector{T}) where {T,S}
-    
-    (n,m) = size(A.eqmat)
-    res = Vector{T}(undef,n)
-    
-    mul!(res,A.eqmat,x[1:m])
-    
-    if any(A.fixvars)
-        res[A.fixvars] .+= x[m+1:end]
-    end
-
-    return res
-end
-"""
-    update_subspace!(M, newly_active)
-
-Add the constraints `vᵢ = 0`, for `i ∈ newly_active` to the subspace represented by matrix
-`M`. Corresponds to adding rows to the latter.
-"""
-function add_subspace!(M::SubspaceMatrix, newly_active::Vector{Int})
-
-    M.fixvars[newly_active] .= true
-    return
-end
-
-"""
-    remove_subspace!(M, removed)
-
-Remove the constraints `vᵢ = 0`, for `i ∈ removed` from the subspace represented by matrix
-`M`. Corresponds to removing rows from the latter.
-"""
-function remove_subspace!(M::SubspaceMatrix, removed::Vector{Int})
-    M.fixvars[removed] .= false
-    return
-end
-# Returns the number of fixed variables in the subsspace represented by the `SubspaceMatrix` `A`
-nb_fixed(submat::SubspaceMatrix) = count(submat.fixvars)
-
 
 """
     SubspaceProjector{T}
 
-This structure encodes the projector operator onto a subspace of the form 
+This structure encodes the projector operator onto a subspace of the form
 `{v | Av = 0, vᵢ = 0 for i ∈ fixvars}`
 where `A` is a full row rank `m × n` ('m < n') matrix and
 `fixvars = [i₁,...iₚ]`, (`p ≤ n - m`) is a subset of `[1,2,...,n]`.
@@ -132,8 +90,8 @@ The subspace is the null space of the matrix `A₊` defined as the concatenation
 `A` with `Z`, a `p × n` matrix whose row `k` is the row `iₖ` of the `n × n`
 identity matrix.
 
-The projection is computed by solving the normal equations associated to the 
-projection quadratic program, which involves the Cholesky decomposition of 
+The projection is computed by solving the normal equations associated to the
+projection quadratic program, which involves the Cholesky decomposition of
 the augmented Gram matrix `A₊A₊ᵀ`.
 
 ** Attributes
@@ -170,7 +128,6 @@ function SubspaceProjector(
     SubspaceProjector(SubspaceMatrix(A),chol_aat,chol_aat)
 end
 
-# Constructor for polyhedra with initial active bounds
 """
     SubspaceProjector
 
@@ -197,6 +154,124 @@ function SubspaceProjector(
 
     SubspaceProjector(subA,chol,chol_aat)
 end
+
+
+# Structure encoding a coordinate subspace where components of vectors
+# corresponding to active bounds are set to 0
+mutable struct CoordinateSubspaceProjector{T<:Real} <: Projector{T}
+    fixvars::BitVector
+end
+
+# Constructor for `CoordinateSubspaceProjector` structure.
+# Returns a structure with `fixvars` attribute initalized to `falses(n)` where
+# `n` is an integer given as input.
+# This corresponds to define the underlying subspace to `ℝⁿ`.
+
+CoordinateSubspaceProjector(n::Int;T::DataType=Float64) = CoordinateSubspaceProjector{T}(falses(n))
+
+# Overloads matrix vector product
+Base.:*(M::SubspaceMatrix{T},x::Vector{T}) where T = vcat(M.eqmat*x,x[M.fixvars])
+
+# overloads matrix vector product with transposition
+function Base.:*(A::TransposeSubspaceMatrix{T,S},x::Vector{T}) where {T,S}
+    
+    (n,m) = size(A.eqmat)
+    res = Vector{T}(undef,n)
+    
+    mul!(res,A.eqmat,x[1:m])
+    
+    if any(A.fixvars)
+        res[A.fixvars] .+= x[m+1:end]
+    end
+
+    return res
+end
+
+
+"""
+    mul!(r, P, x)
+
+Computes the matrix-vector product `Px` and stores the result in `r`, where `P`
+ is the projection operator onto the subspace
+`{v | Av = 0, vᵢ = 0 for i ∈ fixvars}` where `A` is a full row rank `m × n` ('m < n') matrix
+and `fixvars = [i₁,...iₚ]` (`p ≤ n - m`) is a subset of `[1,2,...,n]`.
+
+Overloads the `LinearAlgebra.mul!` method.
+
+**Arguments**
+
+* `r`: Buffer vector to store the result of the projection operation
+
+* `P`: Projection operator encoded as a `SubspaceProjector`
+
+* `x`: input vector
+
+** On return
+
+Nothing is returned, the result is stored in vector `r`.
+"""
+function mul!(r::Vector{T}, P::SubspaceProjector{T}, x::Vector{T}) where T
+
+    temp = P.workspace_mat * x # form A₊x
+    ldiv!(P.chol_gram_augmat,temp) # solve for y (A₊A₊ᵀ)y = A₊x
+    r .= x .- transpose(P.workspace_mat)*temp # form r = x - A₊ᵀy
+
+    return r
+end
+
+"""
+    Base.:*(P,x)
+
+Computes the matrix-vector product `Px`, where `P` is the projection operator onto
+the subspace `{v | Av = 0, vᵢ = 0 for i ∈ fixvars}`
+where `A` is a full row rank `m × n` ('m < n') matrix
+and `fixvars = [i₁,...iₚ]`, (`p ≤ n - m`) is a subset of `[1,2,...,n]`.
+
+Overloads the base multiplication `*` method.
+
+**Arguments**
+
+* `P`: Projection operator encoded as a `SubspaceProjector`
+
+* `x`: input vector
+
+** On return
+
+* `res`: `Vector` containing the result of the projection operation
+"""
+function Base.:*(P::SubspaceProjector{T}, x::Vector{T}) where T
+
+    res = Vector{T}(undef, size(x,1))
+    mul!(res, P, x)
+    return res
+end
+
+# Overload the `LinearAlgebra.mul!` method to compute projection of a vector `v`
+# onto a coordinate subspace represented by `P` as a matrix-vector product.
+# The result is stored in vector `r`.
+
+function mul!(r::Vector, P::CoordinateSubspaceProjector, v::Vector)
+
+    freevars = .!(P.fixvars)
+
+    r[P.fixvars] .= 0          # set rᵢ = 0 for fixed components
+    r[freevars] .= v[freevars] # set rᵢ = vᵢ for free components
+
+    return
+end
+
+# Overload the `Base.*` method to compute projection of a vector `v`
+# onto a coordinate subspace represented by `P` as a matrix-vector product.
+# The result is stored in vector `r`.
+
+function Base.:*(P::CoordinateSubspaceProjector, v::Vector)
+
+    res = Vector{eltype(v)}(undef,size(v,1))
+    mul!(res,P,v)
+
+    return res
+end
+
 
 # Update the Cholesky decomposition of the Gram matrix when adding one bound constraint 
 # to the active set 
@@ -278,6 +353,42 @@ function update_projector!(proj_op::SubspaceProjector, newly_active::Vector{Int}
     return
 end
 
+# Set active the components of indices in `newly_active` into the projector
+# `P`
+
+@inline function update_projector!(P::CoordinateSubspaceProjector, newly_active::Vector{Int})
+
+    P.fixvars[newly_active] .= true
+    return
+end
+
+"""
+    update_subspace!(M, newly_active)
+
+Add the constraints `vᵢ = 0`, for `i ∈ newly_active` to the subspace represented by matrix
+`M`. Corresponds to adding rows to the latter.
+"""
+function add_subspace!(M::SubspaceMatrix, newly_active::Vector{Int})
+
+    M.fixvars[newly_active] .= true
+    return
+end
+
+"""
+    remove_subspace!(M, removed)
+
+Remove the constraints `vᵢ = 0`, for `i ∈ removed` from the subspace represented by matrix
+`M`. Corresponds to removing rows from the latter.
+"""
+function remove_subspace!(M::SubspaceMatrix, removed::Vector{Int})
+    M.fixvars[removed] .= false
+    return
+end
+
+# Returns the number of fixed variables in the subsspace represented by the `SubspaceMatrix` `A`
+nb_fixed(submat::SubspaceMatrix) = count(submat.fixvars)
+
+
 """
     set_active!(proj_op, newly_active)
 
@@ -305,6 +416,17 @@ function set_active!(proj_op::SubspaceProjector, newly_active::Vector{Int})
     return
 end
 
+# Set component at index `i` active
+@inline function set_active!(P::CoordinateSubspaceProjector, i::Int)
+    P.fixvars[i] = true
+end
+
+# Set active components of indices in `newly_fixed`
+@inline function set_active!(P::CoordinateSubspaceProjector, newly_fixed::Vector{Int})
+    P.fixvars[newly_fixed] .= true
+end
+
+
 """
     set_free!(proj_op, freevars)
 
@@ -330,97 +452,15 @@ function set_free!(proj_op::SubspaceProjector, freevars::Vector{Int})
     return
 end
 
-
-"""
-    mul!(r,P,x)
-
-Computes the matrix-vector product `Px` and stores the result in `r`, where `P`
- is the projection operator onto the subspace
-`{v | Av = 0, vᵢ = 0 for i ∈ fixvars}` where `A` is a full row rank `m × n` ('m < n') matrix
-and `fixvars = [i₁,...iₚ]` (`p ≤ n - m`) is a subset of `[1,2,...,n]`.
-
-Overloads the `LinearAlgebra.mul!` method.
-
-**Arguments**
-
-* `r`: Buffer vector to store the result of the projection operation
-
-* `P`: Projection operator encoded as a `SubspaceProjector`
-
-* `x`: input vector
-
-** On return
-
-Nothing is returned, the result is stored in vector `r`.
-"""
-function mul!(r::Vector{T}, P::SubspaceProjector{T}, x::Vector{T}) where T
-
-    temp = P.workspace_mat * x # form A₊x
-    ldiv!(P.chol_gram_augmat,temp) # solve for y (A₊A₊ᵀ)y = A₊x
-    r .= x .- transpose(P.workspace_mat)*temp # form r = x - A₊ᵀy
-
-    return r
+# Set free component at index `i`
+@inline function set_free!(P::CoordinateSubspaceProjector, i::Int)
+    P.fixvars[i] = false
 end
 
-"""
-    Base.:*(P,x)
-
-Computes the matrix-vector product `Px`, where `P` is the projection operator onto
-the subspace `{v | Av = 0, vᵢ = 0 for i ∈ fixvars}`
-where `A` is a full row rank `m × n` ('m < n') matrix
-and `fixvars = [i₁,...iₚ]`, (`p ≤ n - m`) is a subset of `[1,2,...,n]`.
-
-Overloads the base multiplication `*` method.
-
-**Arguments**
-
-* `P`: Projection operator encoded as a `SubspaceProjector`
-
-* `x`: input vector
-
-** On return
-
-* `res`: `Vector` containing the result of the projection operation
-"""
-function Base.:*(P::SubspaceProjector{T}, x::Vector{T}) where T
-
-    res = Vector{T}(undef, size(x,1))
-    mul!(res, P, x)
-    return res
+# Set free components at indices in `freed`
+@inline function set_free!(P::CoordinateSubspaceProjector, freed::Vector{Int})
+    P.fixvars[freed] .= false
 end
-
-"""
-    factor_to_boundary(p,w,wₗ,wᵤ,P;atol)
-
-Computes the largest scalar `γ` such that `w + γp` stays in the box `[wₗ,wᵤ]`.
-The components considered are among free variables in a coordinate subspace
-encoded in `Projector` `P`.
-"""
-function factor_to_boundary(
-    p::Vector{T},
-    w::Vector{T},
-    w_l::Vector{T},
-    w_u::Vector{T},
-    P::SubspaceProjector{T};
-    atol::T = sqrt(eps(T))) where T
-
-    gamma = Inf
-    fixvars = P.workspace_mat.fixvars
-
-    for i in axes(w,1)
-        if !fixvars[i]
-            gamma = if p[i] < -atol
-                min(gamma, (w_l[i] - w[i]) / p[i])
-            elseif p[i] > atol
-                min(gamma, (w_u[i] - w[i]) / p[i])
-            end
-        end
-    end
-
-    return gamma
-end
-
-
 
 
 # Returns the number of degrees of freedom remaining into the restricted
@@ -433,19 +473,38 @@ function nb_degrees_of_freedom(proj_op::SubspaceProjector)
     return n - m - count(proj_op.workspace_mat.fixvars)
 end
 
-# Asserts whether or not a coordinate subspace is saturated or not
-# Returns `true` if they are no remaining degrees of freedom, `false` instead.
+# Returns the number of degrees of freedoms remaining in the coordinate subspace
+# represented by operator `P`.
 
-saturated_subspace(P::SubspaceProjector) = nb_degrees_of_freedom(P) == 0
+function nb_degrees_of_freedom(P::CoordinateSubspaceProjector)
+    fixed = P.fixvars
+    return size(fixed,1) - count(fixed)
+end
+
+# Returns `true` if they are no remaining free variables in the subspace represente by the
+# projector operator 'P', `false` instead.
+saturated_subspace(P::Projector) = nb_degrees_of_freedom(P) == 0
 
 # Returns `true` if the variable at index `i` is fixed in the subspace represented by `proj_op`
 is_fixed(proj_op::SubspaceProjector, i::Int) = proj_op.workspace_mat.fixvars[i]
+
+# Returns `true` if variable at index `i` is fixed, false if not
+is_fixed(P::CoordinateSubspaceProjector, i::Int) = P.fixvars[i]
+
 
 # Reset the projector operator by setting all bounds as inactive
 function reset_projector!(P::SubspaceProjector)
 
     P.workspace_mat.fixvars .= false
     P.chol_gram_augmat = P.chol_gram_eqmat
+    return
+end
+
+# Reset a coordinate subspace projector `P` by setting all components free.
+# Elements of `fixvars` attribute are all set to false
+function reset_projector!(P::CoordinateSubspaceProjector)
+
+    P.fixvars .= false
     return
 end
 
@@ -478,60 +537,9 @@ function update_active_set!(
     return
 end
 
-# Structure encoding a coordinate subspace where components of vectors
-# corresponding to active bounds are set to 0
-mutable struct CoordinateSubspaceProjector{T<:Real} <: Projector{T}
-    fixvars::BitVector
-end
-
-# Constructor for `CoordinateSubspaceProjector` structure.
-# Returns a structure with `fixvars` attribute initalized to `falses(n)` where
-# `n` is an integer given as input.
-# This corresponds to define the underlying subspace to `ℝⁿ`.
-
-CoordinateSubspaceProjector(n::Int;T::DataType=Float64) = CoordinateSubspaceProjector{T}(falses(n))
-
-# Overload the `LinearAlgebra.mul!` method to compute projection of a vector `v`
-# onto a coordinate subspace represented by `P` as a matrix-vector product.
-# The result is stored in vector `r`.
-
-function mul!(r::Vector, P::CoordinateSubspaceProjector, v::Vector)
-
-    freevars = .!(P.fixvars)
-
-    r[P.fixvars] .= 0          # set rᵢ = 0 for fixed components
-    r[freevars] .= v[freevars] # set rᵢ = vᵢ for free components
-
-    return
-end
-
-# Overload the `Base.*` method to compute projection of a vector `v`
-# onto a coordinate subspace represented by `P` as a matrix-vector product.
-# The result is stored in vector `r`.
-
-function Base.:*(P::CoordinateSubspaceProjector, v::Vector)
-
-    res = Vector{eltype(v)}(undef,size(v,1))
-    mul!(res,P,v)
-
-    return res
-end
-
-# Returns the number of degrees of freedoms remaining in the coordinate subspace
-# represented by operator `P`.
-
-function nb_degrees_of_freedom(P::CoordinateSubspaceProjector)
-    fixed = P.fixvars
-    return size(fixed,1) - count(fixed)
-end
-
-# Asserts whether or not a coordinate subspace is saturated or not
-# Returns `true` if they are no remaining degrees of freedom, `false` instead.
-
-saturated_subspace(P::CoordinateSubspaceProjector) = nb_degrees_of_freedom(P) == 0
 
 """
-    factor_to_boundary(p,w,wₗ,wᵤ,P;atol)
+    factor_to_boundary(p,w,wₗ,wᵤ,P)
 
 Computes the largest scalar `γ` such that `w + γp` stays in the box `[wₗ,wᵤ]`.
 The components considered are among free variables in a coordinate subspace
@@ -557,50 +565,6 @@ function factor_to_boundary(
     return gamma
 end
 
-# Reset a coordinate subspace projector `P` by setting all components free.
-# Elements of `fixvars` attribute are all set to false
-
-function reset_projector!(P::CoordinateSubspaceProjector)
-
-    P.fixvars .= false
-
-    return
-end
-
-# Assert if variable `i` is active or not
-is_active(P::CoordinateSubspaceProjector, i::Int) = P.fixvars[i]
-# Set component at index `i` active
-@inline function set_active!(P::CoordinateSubspaceProjector, i::Int)
-    P.fixvars[i] = true
-end
-
-# Set active components of indices in `newly_fixed`
-@inline function set_active!(P::CoordinateSubspaceProjector, newly_fixed::Vector{Int})
-    P.fixvars[newly_fixed] .= true
-end
-
-# Set free component at index `i`
-@inline function set_free!(P::CoordinateSubspaceProjector, i::Int)
-    P.fixvars[i] = false
-end
-
-# Set free components at indices in `freed`
-@inline function set_free!(P::CoordinateSubspaceProjector, freed::Vector{Int})
-    P.fixvars[freed] .= false
-end
-
-# Returns `true` if variable at index `i` is fixed, false if not
-is_fixed(P::CoordinateSubspaceProjector, i::Int) = P.fixvars[i]
-
-# Set active the components of indices in `newly_active` into the projector
-# `P`
-
-@inline function update_projector!(P::CoordinateSubspaceProjector, newly_active::Vector{Int})
-
-    P.fixvars[newly_active] .= true
-
-    return
-end
 
 # Identify which bounds from the box `[max(-Δ,ℓ), min(Δ,u)]` become active at
 # trial point `x + s` and set accordingly the coordinate subspace projector `P`.
@@ -630,48 +594,4 @@ Computes the projection of `x` onto the box `[ℓ,u]` and stores the results in 
 function project!(v::Vector, x::Vector, x_low::Vector, x_upp::Vector) 
     v[:] .= max.(x_low, min.(x, x_upp))
     return
-end
-
-# Finds the next breakpoint on the projected gradient path with a given set of variables
-# already fixed
-# Variables with breakpoint differing from a small quantity are associated to the same
-# breakpoint.
-#
-# Returns the breakpoint value and the indices at which a bound is encountered
-
-function next_breakpoint(
-    d::AbstractVector{T},
-    s::AbstractVector{T},
-    slow::AbstractVector{T},
-    supp::AbstractVector{T},
-    proj_op::CoordinateSubspaceProjector{T}) where T
-
-    epsbp = 10*eps(T) # Tolerance to gather similar breakpoint
-
-    bp_value = Inf # current breakpoint value
-    bp_idx = []    # indices of variables becoming active at breakpoint
-
-    # TODO: filter the axes with free variables to get the iterator with the right indices
-    for i in axes(d,1)
-        if !is_fixed(proj_op, i)
-            bp_try = if d[i] < 0
-                (slow[i] - s[i]) / d[i]
-            elseif d[i] > 0
-                (supp[i] - s[i]) / d[i]
-            else
-                Inf
-            end
-
-            also_bp = abs(bp_value - bp_try) < epsbp
-
-            if also_bp
-                push!(bp_idx, i)
-            elseif !also_bp && bp_try < bp_value
-                bp_value = bp_try
-                bp_idx = [i]
-            end
-        end
-    end
-
-    return bp_value, bp_idx
 end

@@ -11,6 +11,8 @@
     sr1
 end
 
+const dict_hessians = Dict(:gn => gn,
+                                    :sr1 => sr1)
 """
     GN <: ALHessian 
 
@@ -61,79 +63,6 @@ function GN(
     m = size(J,1)
     p = size(C,1)
     return GN(copy(J),copy(C),mu,zeros(max(m,p)))
-end
-
-"""
-    mul!(Hv, H::GN, v)
-
-Overload the 3-argument `mul!` method to the type [`GN`](@ref) to compute
-Hessian-vector without doing matrix-matrix multiplications.
-"""
-
-function mul!(Hv::Vector{T}, gn_op::GN{T}, v::Vector{T}) where T
-
-    m = size(gn_op.J,1)
-    p = size(gn_op.C,1)
-    
-    # Reset result values to make sure it is zero
-    # Hv .= 0.0
-    # JᵀJv term
-    temp_Jv = view(gn_op.temp,1:m)
-    mul!(temp_Jv, gn_op.J, v) # form Jv
-    mul!(Hv, gn_op.J', temp_Jv, 1, 0) # Hv ← JᵀJv
-
-    # μCᵀCv term
-    temp_Cv = view(gn_op.temp,1:p)
-    mul!(temp_Cv, gn_op.C, v) # form Cv
-    mul!(Hv, gn_op.C', temp_Cv, gn_op.mu, 1) # Hv ← Hv + μCᵀCv
-
-    return
-end
-
-""" Base.:*(H::GN, v)
-
-Overload the `*` operator to the type [`GN`](@ref) in order to avoid
-matrix-matrix multiplication
-"""
-function Base.:*(H::GN{T}, v::Vector{T}) where T
-    Hv = Vector{T}(undef,size(v,1))
-    mul!(Hv,H,v)
-
-    return Hv
-end
-
-"""
-    update_hessian!(H,J₊,C₊)
-
-Updates the Gauss-Newton Hessian approximation `H` by modifiying the `J` and `C`
-attributes with, respectively `J₊` and `C₊`.
-"""
-function update_hessian!(
-    H::GN{T},
-    J_new::AbstractMatrix{T},
-    C_new::AbstractMatrix{T}) where T
-    
-    H.J .= J_new
-    H.C .= C_new
-    return
-end
-
-"""
-    reset_hessian!(H,J₀,C₀,μ₀)
-
-Reset the Gauss-Newton approximation `H` by setting the `J`, `C` and `mu`
-attributes to, respectively, `J₀`, `C₀` and μ₀.
-"""
-function reset_hessian!(
-    H::GN{T},
-    J0::AbstractMatrix{T},
-    C0::AbstractMatrix{T},
-    mu0::T) where T
-    
-    H.J .= J0
-    H.C .= C0
-    H.mu = mu0
-    return
 end
 
 """
@@ -210,6 +139,45 @@ function SR1(
                zeros(T,max(n,m,p)))
 end
 
+"""
+    mul!(Hv, H::GN, v)
+
+Overload the 3-argument `mul!` method to the type [`GN`](@ref) to compute
+Hessian-vector without doing matrix-matrix multiplications.
+"""
+
+function mul!(Hv::Vector{T}, gn_op::GN{T}, v::Vector{T}) where T
+
+    m = size(gn_op.J,1)
+    p = size(gn_op.C,1)
+    
+    # Reset result values to make sure it is zero
+    # Hv .= 0.0
+    # JᵀJv term
+    temp_Jv = view(gn_op.temp,1:m)
+    mul!(temp_Jv, gn_op.J, v) # form Jv
+    mul!(Hv, gn_op.J', temp_Jv, 1, 0) # Hv ← JᵀJv
+
+    # μCᵀCv term
+    temp_Cv = view(gn_op.temp,1:p)
+    mul!(temp_Cv, gn_op.C, v) # form Cv
+    mul!(Hv, gn_op.C', temp_Cv, gn_op.mu, 1) # Hv ← Hv + μCᵀCv
+
+    return
+end
+
+""" Base.:*(H::GN, v)
+
+Overload the `*` operator to the type [`GN`](@ref) in order to avoid
+matrix-matrix multiplication
+"""
+function Base.:*(H::GN{T}, v::Vector{T}) where T
+    Hv = Vector{T}(undef,size(v,1))
+    mul!(Hv,H,v)
+
+    return Hv
+end
+
 """ Base.:*(H::SR1, v)
 
 Overload the `*` operator to the type [`GN`](@ref) in order to avoid
@@ -249,6 +217,32 @@ function mul!(Hv::Vector{T}, sr1_op::SR1{T}, v::Vector{T}) where T
     return
 end
 
+
+"""
+    update_hessian!(H, J₊, C₊)
+
+Updates the Gauss-Newton Hessian approximation `H` by modifiying the `J` and `C`
+attributes with, respectively `J₊` and `C₊`.
+"""
+function update_hessian!(
+    H::GN{T},
+    J_new::AbstractMatrix{T},
+    C_new::AbstractMatrix{T}) where T
+    
+    H.J .= J_new
+    H.C .= C_new
+    return
+end
+
+"""
+    update_hessian!(H, J₊, C₊, r₊, c₊, g, y, s)
+
+Updates the Hessian approxmation `H` by first modifying the `J` and `C` attributes with,
+respectively `J₊` and `C₊`. Second order terms approximation is updated by a structured
+formula based on the secant equation
+
+`S₊s = [J₊ - J]ᵀr₊ + [C₊ - C]ᵀ[y + μc₊]`
+"""
 function update_hessian!(
     sr1_op::SR1{T}, 
     J_new::Matrix{T},
@@ -313,6 +307,24 @@ function update_sr1_second_order!(sr1_op::SR1{T}) where T
         mul!(sr1_op.S, ymSs, ymSs', 1/denom, 1)
     end
 
+    return
+end
+
+"""
+    reset_hessian!(H,J₀,C₀,μ₀)
+
+Reset the Gauss-Newton approximation `H` by setting the `J`, `C` and `mu`
+attributes to, respectively, `J₀`, `C₀` and μ₀.
+"""
+function reset_hessian!(
+    H::GN{T},
+    J0::AbstractMatrix{T},
+    C0::AbstractMatrix{T},
+    mu0::T) where T
+
+    H.J .= J0
+    H.C .= C0
+    H.mu = mu0
     return
 end
 

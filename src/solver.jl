@@ -1,3 +1,5 @@
+export traulls
+
 """
     solve(model; kwargs...)
 
@@ -66,7 +68,8 @@ tolerance in the case of poor improvement of the feasibility (default: `0.1`)
 case of good improvement of the primal feasibility (default: `1.0`)
 - `beta_feas`: Positive constant used to reduce the subproblem feasibility tolerance in the
 case of good improvement of the feasibility (default: `0.9`)
-- `hessian_approx`: Symbol encoding the Hessian approximation used during the inner minimization (default: `:gn` for Gauss-Newton)
+- `hessian_approx`: Symbol encoding the Hessian approximation used during the inner
+minimization (default: `:gn` for Gauss-Newton)
 
 ## Trust region parameters
 
@@ -80,10 +83,13 @@ ratio (default: `0.0625`)
 
 ## Solver related constants
 
-- `mu_max`: maximum value of the penalty parameter (default: `1/ϵ` with `ϵ` is the relative machine precision)
+- `mu_max`: maximum value of the penalty parameter (default: `1/ϵ` with `ϵ` is the relative
+machine precision)
 - `max_outer_iter`: Maximum number of outer iterations (default: `200`)
-- `max_inner_iter`: Maximum number of iterations for the inner minimization phase (default: `1000`)
-- `max_cg_iter`: Maximum number of minor iterates for the gradient projection loop (default: `50`)
+- `max_inner_iter`: Maximum number of iterations for the inner minimization phase
+(default: `1000`)
+- `max_cg_iter`: Maximum number of minor iterates for the gradient projection loop
+(default: `50`)
 
 ## Miscellaneous
 
@@ -97,7 +103,7 @@ inner minimization phase into `output_io` (default: `false`)
 
 Returns the important execution informations into a [`TraullsResults`](@ref).
 """
-function solve(
+function traulls(
     model::CnlsModel{T};
     mu::T = T(10),
     tau::T = T(10),
@@ -114,7 +120,7 @@ function solve(
     decrease_factor::T = T(0.25),
     increase_factor::T = T(2.5),
     neg_ratio_factor::T = T(0.0625),
-    hessian_approx::HessianApprox = gn,
+    hessian_approx::Symbol = :gn,
     mu_max::T = 1/eps(T),
     max_iter::Int = 200,
     max_inner_iter::Int = 1000,
@@ -122,6 +128,11 @@ function solve(
     output_io::IO=stdout,
     verbose::Bool=false,
     inner_verbose::Bool=false) where T
+
+    # Arguments sanity checks
+    !(hessian_approx in keys(dict_hessians)) &&
+        throw(ArgumentError("Wrong hessian argument has been passed. Supported keywords are " *
+        string(keys(dict_hessians))))
 
     # Dimensions of the problem
     n, nres, ncons = model.n, model.nres, model.ncons
@@ -147,14 +158,18 @@ function solve(
     model.counters.nalgrad_eval += 1
 
     # Ininitialize Hessian approximation
-    hess_op = @match hessian_approx begin
-        $gn     => GN(J,C,mu)
-        $sr1    => SR1(J,C,mu)
+    hessian_type = dict_hessians[hessian_approx]
+    hess_op = @match hessian_type begin
+        $gn     => GN(J, C, mu)
+        $sr1    => SR1(J, C, mu)
     end
 
     # Set up trust region
-    tr = TrustRegion(accept_threshold, increase_threshold, decrease_factor,
-    increase_factor, neg_ratio_factor)
+    tr = TrustRegion(accept_threshold,
+                     increase_threshold,
+                     decrease_factor,
+                     increase_factor,
+                     neg_ratio_factor)
 
     # Set up tolerances
     reltol_crit, tol_feas = initial_tolerances(mu, omega0, eta0, k_crit, k_feas)
@@ -205,7 +220,7 @@ function solve(
             proj_op,
             tr,
             reltol_crit,
-            hessian_approx,
+            hessian_type,
             max_inner_iter,
             max_cg_iter,
             inner_workspace;
@@ -250,7 +265,14 @@ function solve(
             norm_proj_gradlag <= tol_crit
 
 
-        verbose && print_outer_iteration(iter, fx, feas_measure, mu, pix, Val(update_multipliers); io=output_io)
+        verbose && print_outer_iteration(
+            iter,
+            fx,
+            feas_measure,
+            mu,
+            pix,
+            Val(update_multipliers);
+            io=output_io)
 
         max_penalty_reached = mu >= mu_max
 
