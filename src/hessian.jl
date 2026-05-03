@@ -9,10 +9,12 @@
 @enum HessianApprox begin
     gn
     sr1
+    hybrid_bfgs
 end
 
 const dict_hessians = Dict(:gn => gn,
-                                    :sr1 => sr1)
+                           :sr1 => sr1,
+                           :hybrid_bfgs => hybrid_bfgs)
 """
     GN <: ALHessian 
 
@@ -166,6 +168,49 @@ function mul!(Hv::Vector{T}, gn_op::GN{T}, v::Vector{T}) where T
     return
 end
 
+# Hybrid structured BFGS formula
+# Adapted from Zhou and Chen (2010) hybrid quasi-Newton method for nonlinear least-squares
+# Based on the reformulation of the outer minimization problem  as a "primal-dual"
+# least-squares objective
+mutable struct HybridBFGS{T<:Real} <:ALHessian{T}
+    J::AbstractMatrix{T}
+    C::AbstractMatrix{T}
+    S::AbstractMatrix{T}
+    mu::T
+    step::AbstractVector{T}
+    secant_rhs::AbstractVector{T}
+    reg_factor::T
+    small_res::Bool
+end
+
+# Constructor method for `HybridBFGS` struct
+# Initializes the J,C attributes with jacobians evaluated at starting point
+# Second order terms are initialized with identity scaled by the norm of the "augmented"
+# residuals. The `small_res` parameter is set to `false`
+# TODO: optimize the operations to make the computations less greedy and avoid redonduncy
+function HybridBFGS(
+    J::AbstractMatrix{T},
+    C::AbstractMatrix{T},
+    mu::T,
+    rx::AbstractVector{T},
+    cx::AbstractVector{T},
+    y::AbstractVector{T}) where T
+
+    n = size(J, 2)
+    norm_aug_res = norm(vcat(rx, sqrt(mu) * (cx + y * (1/mu))))
+    initial_second_order = norm_aug_res .* Matrix{T}(I, n, n)
+
+    return HybridBFGS(copy(J),
+                      copy(C),
+                      initial_second_order,
+                      mu,
+                      zeros(T,n),
+                      zeros(T,n),
+                      norm_aug_res,
+                      false)
+end
+
+
 """ Base.:*(H::GN, v)
 
 Overload the `*` operator to the type [`GN`](@ref) in order to avoid
@@ -217,6 +262,21 @@ function mul!(Hv::Vector{T}, sr1_op::SR1{T}, v::Vector{T}) where T
     return
 end
 
+# Overload the 3-argument `mul!` method to the `HybridBFGS` scheme
+# TODO: use more memory efficient computations
+function mul!(Hv::AbstractVector{T}, hbfgs_op::HybridBFGS{T}, v::Vector{T}) where T
+    # JᵀJv term
+    Hv .= hbfgs_op.J' * (hbfgs_op.J * v)
+
+    # μCᵀCv term
+    Hv .+= hbfgs_op.mu * hbfgs_op.C' * (hbfgs_op.C * v)
+
+    if !hbfgs_op.small_res
+        Hv .+= hbfgs_op.S * v
+    end
+
+    return
+end
 
 """
     update_hessian!(H, J₊, C₊)
@@ -286,14 +346,6 @@ function update_sr1_second_order!(sr1_op::SR1{T}) where T
     y = sr1_op.secant_rhs
     s = sr1_op.step
 
-    # Buffer vector to store intermediate results
-    # buffer = view(sr1_op.temp, 1:size(s,1))
-
-    # # Compute sizing factor
-    # buffer .= sr1_op.S * s # TODO: compute with mul! method
-    # sizing_factor = abs(dot(s, y)) * (1 / abs(dot(s, buffer)))
-    # tau = min(1, sizing_factor) # τ ← min(1, |sᵀy| / |sᵀSs|)
-
     # Form y - Ss
     ymSs = view(sr1_op.temp, 1:size(s,1))
     ymSs .= y
@@ -309,6 +361,56 @@ function update_sr1_second_order!(sr1_op::SR1{T}) where T
 
     return
 end
+
+# Update the Hybrid-BFGS approximation
+# Forms the secant equation right handside, new regularizatin factor and evaluate the small
+# residuals heuristic
+# Second order terms update is skipped if the residuals are considered zero
+# TODO: Perform more memory efficient computations
+function update_hessian!(
+    hbfgs_op::HybridBFGS{T},
+    J_new::AbstractMatrix{T},
+    C_new::AbstractMatrix{T},
+    rx_new::AbstractVector{T},
+    cx_new::AbstractVector{T},
+    g::AbstractVector{T},
+    y::AbstractVector{T},
+    s::AbstractVector{T}) where T
+
+
+    eps_small_res = T(1e-6) # value used in Zhou, Chen paper
+    mu = hbfgs_op.mu
+
+    # Scaling factor : quotient between the norm of consecutive augmented residuals
+    norm_new_aug_res = norm(vcat(rx_new, sqrt(mu) .* (cx_new + y .* (1/mu))))
+    scaling_factor = norm_new_aug_res * (1 / hbfgs_op.reg_factor)
+
+    # Secant equation right handside
+    z = g - hbfgs_op.J' * rx_new .- hbfgs_op.C' * (y .+ hbfgs_op.mu.*cx_new)
+    z *= scaling_factor
+
+    # Evaluate small residuals heuristic
+    zts = dot(z, s)
+    small_res = zts < eps_small_res * (1 + dot(s, s))
+
+    # Update second order terms if non zero residuals
+    if !small_res
+        Ss = hbfgs_op.S * s
+        bfgs_update = z*z' .* (1 / zts) - Ss*Ss' .* (1 / dot(s, Ss))
+        hbfgs_op.S .+= bfgs_update
+    end
+
+    # Update remaining structure fields
+    hbfgs_op.J .= J_new
+    hbfgs_op.C .= C_new
+    hbfgs_op.step .= s
+    hbfgs_op.secant_rhs .= z
+    hbfgs_op.small_res = small_res
+    hbfgs_op.reg_factor = norm_new_aug_res
+
+    return
+end
+
 
 """
     reset_hessian!(H,J₀,C₀,μ₀)
@@ -342,10 +444,41 @@ function reset_hessian!(
     C0::AbstractMatrix{T},
     mu0::T) where T
 
+    zero_T = zero(T)
+
     H.J .= J0
     H.C .= C0
     H.mu = mu0
     H.S .= T(0)
+    H.step .= zero_T
+    H.secant_rhs .= zero_T
+
+    return
+end
+
+# Reset fields of the HybridBFGS structure at the start of a new outer iteration
+function reset_hessian!(
+    H::HybridBFGS{T},
+    J0::AbstractMatrix{T},
+    C0::AbstractMatrix{T},
+    mu::T,
+    rx0::AbstractVector{T},
+    cx0::AbstractVector{T},
+    y::AbstractVector{T}) where T
+
+    n = size(J0, 2)
+    zero_T = zero(T)
+    norm_aug_res = norm(vcat(rx0, sqrt(mu) * (cx0 + y * (1/mu))))
+    initial_second_order = norm_aug_res .* Matrix{T}(I, n, n)
+
+    H.J .= J0
+    H.C .= C0
+    H.mu = mu
+    H.S .= initial_second_order
+    H.reg_factor = norm_aug_res
+    H.small_res = false
+    H.step .= zero_T
+    H.secant_rhs .= zero_T
 
     return
 end

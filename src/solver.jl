@@ -162,6 +162,7 @@ function traulls(
     hess_op = @match hessian_type begin
         $gn     => GN(J, C, mu)
         $sr1    => SR1(J, C, mu)
+        $hybrid_bfgs => HybridBFGS(J, C, mu, rx, cx, y)
     end
 
     # Set up trust region
@@ -471,8 +472,9 @@ function solve_subproblem!(
     model.counters.nalobj_eval += 1
     # Reset Hessian approximation and projector operator
     @match hessian_approx begin
-        $gn     => reset_hessian!(hess_op, J, C,mu)
-        $sr1    => reset_hessian!(hess_op, J, C,mu)
+        $gn     => reset_hessian!(hess_op, J, C, mu)
+        $sr1    => reset_hessian!(hess_op, J, C, mu)
+        $hybrid_bfgs => reset_hessian!(hess_op, J, C, mu, rx, cx, y)
     end
 
     reset_projector!(proj_op)
@@ -571,8 +573,12 @@ function solve_subproblem!(
                 # Gauss-Newton case
                 update_hessian!(hess_op, J, C)
 
-            else
-                # Quasi Newton update
+            elseif hessian_approx == sr1
+                # SR1 update
+                update_hessian!(hess_op, J, C, rx, cx, g, y, s)
+
+            elseif hessian_approx == hybrid_bfgs
+                # HybridBFGS update
                 update_hessian!(hess_op, J, C, rx, cx, g, y, s)
             end
 
