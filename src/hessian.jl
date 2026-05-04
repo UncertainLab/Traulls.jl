@@ -10,11 +10,13 @@
     gn
     sr1
     hybrid_bfgs
+    hybrid_sr1
 end
 
 const dict_hessians = Dict(:gn => gn,
                            :sr1 => sr1,
-                           :hybrid_bfgs => hybrid_bfgs)
+                           :hybrid_bfgs => hybrid_bfgs,
+                           :hybrid_sr1 => hybrid_sr1)
 """
     GN <: ALHessian 
 
@@ -141,34 +143,7 @@ function SR1(
                zeros(T,max(n,m,p)))
 end
 
-"""
-    mul!(Hv, H::GN, v)
-
-Overload the 3-argument `mul!` method to the type [`GN`](@ref) to compute
-Hessian-vector without doing matrix-matrix multiplications.
-"""
-
-function mul!(Hv::Vector{T}, gn_op::GN{T}, v::Vector{T}) where T
-
-    m = size(gn_op.J,1)
-    p = size(gn_op.C,1)
-    
-    # Reset result values to make sure it is zero
-    # Hv .= 0.0
-    # JᵀJv term
-    temp_Jv = view(gn_op.temp,1:m)
-    mul!(temp_Jv, gn_op.J, v) # form Jv
-    mul!(Hv, gn_op.J', temp_Jv, 1, 0) # Hv ← JᵀJv
-
-    # μCᵀCv term
-    temp_Cv = view(gn_op.temp,1:p)
-    mul!(temp_Cv, gn_op.C, v) # form Cv
-    mul!(Hv, gn_op.C', temp_Cv, gn_op.mu, 1) # Hv ← Hv + μCᵀCv
-
-    return
-end
-
-# Hybrid structured BFGS formula
+# Hybrid structured scaled BFGS formula
 # Adapted from Zhou and Chen (2010) hybrid quasi-Newton method for nonlinear least-squares
 # Based on the reformulation of the outer minimization problem  as a "primal-dual"
 # least-squares objective
@@ -196,7 +171,8 @@ function HybridBFGS(
     cx::AbstractVector{T},
     y::AbstractVector{T}) where T
 
-    n = size(J, 2)
+    (m,n) = size(J)
+    p = size(C, 1)
     norm_aug_res = norm(vcat(rx, sqrt(mu) * (cx + y * (1/mu))))
     initial_second_order = norm_aug_res .* Matrix{T}(I, n, n)
 
@@ -209,6 +185,73 @@ function HybridBFGS(
                       norm_aug_res,
                       false)
 end
+
+# Hybrid structured and scaled SR1 formula
+# Uses the secant equation from Zhou and Chen and the same heuristic to detect small
+# residuals problems and applies the SR1 update
+
+mutable struct HybridSR1{T<:Real} <: ALHessian{T}
+    J::AbstractMatrix{T}
+    C::AbstractMatrix{T}
+    S::AbstractMatrix{T}
+    mu::T
+    step::AbstractVector{T}
+    secant_rhs::AbstractVector{T}
+    reg_factor::T
+    small_res::Bool
+    temp::AbstractVector{T}
+end
+
+function HybridSR1(
+    J::AbstractMatrix{T},
+    C::AbstractMatrix{T},
+    mu::T,
+    rx::AbstractVector{T},
+    cx::AbstractVector{T},
+    y::AbstractVector{T}) where T
+
+    (m,n) = size(J)
+    p = size(C, 1)
+    norm_aug_res = norm(vcat(rx, sqrt(mu) .* (cx .+ y .* (1/mu))))
+
+    return HybridBFGS(copy(J),
+                      copy(C),
+                      zeros(T, n, n),
+                      mu,
+                      zeros(T,n),
+                      zeros(T,n),
+                      norm_aug_res,
+                      false,
+                      zeros(T,max(n,m,p)))
+end
+
+"""
+    mul!(Hv, H::GN, v)
+
+Overload the 3-argument `mul!` method to the type [`GN`](@ref) to compute
+Hessian-vector without doing matrix-matrix multiplications.
+"""
+
+function mul!(Hv::Vector{T}, gn_op::GN{T}, v::Vector{T}) where T
+
+    m = size(gn_op.J,1)
+    p = size(gn_op.C,1)
+    
+    # Reset result values to make sure it is zero
+    # Hv .= 0.0
+    # JᵀJv term
+    temp_Jv = view(gn_op.temp,1:m)
+    mul!(temp_Jv, gn_op.J, v) # form Jv
+    mul!(Hv, gn_op.J', temp_Jv, 1, 0) # Hv ← JᵀJv
+
+    # μCᵀCv term
+    temp_Cv = view(gn_op.temp,1:p)
+    mul!(temp_Cv, gn_op.C, v) # form Cv
+    mul!(Hv, gn_op.C', temp_Cv, gn_op.mu, 1) # Hv ← Hv + μCᵀCv
+
+    return
+end
+
 
 
 """ Base.:*(H::GN, v)
@@ -264,7 +307,7 @@ end
 
 # Overload the 3-argument `mul!` method to the `HybridBFGS` scheme
 # TODO: use more memory efficient computations
-function mul!(Hv::AbstractVector{T}, hbfgs_op::HybridBFGS{T}, v::Vector{T}) where T
+function mul!(Hv::AbstractVector{T}, hbfgs_op::HybridBFGS{T}, v::AbstractVector{T}) where T
     # JᵀJv term
     Hv .= hbfgs_op.J' * (hbfgs_op.J * v)
 
@@ -274,6 +317,27 @@ function mul!(Hv::AbstractVector{T}, hbfgs_op::HybridBFGS{T}, v::Vector{T}) wher
     if !hbfgs_op.small_res
         Hv .+= hbfgs_op.S * v
     end
+
+    return
+end
+
+# Overload the 3-argument `mul!` method to the `HybridSR1` scheme
+function mul!(Hv::AbstractVector{T}, hsr1_op::HybridSR1{T}, v::AbstractVector{T}) where T
+    m = size(hsr1_op.J, 1)
+    p = size(hsr1_op.C, 1)
+
+    # JᵀJv term
+    temp_Jv = view(hsr1_op.temp,1:m)
+    mul!(temp_Jv, hsr1_op.J, v) # form Jv
+    mul!(Hv, hsr1_op.J', temp_Jv, 1, 0) # Hv ← JᵀJv
+
+    # μCᵀCv term
+    temp_Cv = view(hsr1_op.temp,1:p)
+    mul!(temp_Cv, hsr1_op.C, v) # form Cv
+    mul!(Hv, hsr1_op.C', temp_Cv, hsr1_op.mu, 1) # Hv ← Hv + μCᵀCv
+
+    # Sv term
+    !hsr1_op.small_res && mul!(Hv, hsr1_op.S, v, 1, 1) # Hv ← Hv + Sv if non zero residuals
 
     return
 end
@@ -410,6 +474,7 @@ function update_hessian!(
 
     return
 end
+
 
 
 """
