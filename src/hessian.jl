@@ -437,6 +437,8 @@ Reset the SR1 approximation `H` by setting the `J`, `C` and `mu`
 attributes to, respectively, `J₀`, `C₀` and μ₀.
 
 The second order terms in attribute `S` are set to `0`.
+
+Test to see what happens when they are maintained
 """
 function reset_hessian!(
     H::SR1{T},
@@ -449,7 +451,7 @@ function reset_hessian!(
     H.J .= J0
     H.C .= C0
     H.mu = mu0
-    H.S .= T(0)
+    # H.S .= T(0)
     H.step .= zero_T
     H.secant_rhs .= zero_T
 
@@ -457,6 +459,7 @@ function reset_hessian!(
 end
 
 # Reset fields of the HybridBFGS structure at the start of a new outer iteration
+# Test to leave the second order terms unchanged but adapts the scaling factor
 function reset_hessian!(
     H::HybridBFGS{T},
     J0::AbstractMatrix{T},
@@ -474,9 +477,8 @@ function reset_hessian!(
     H.J .= J0
     H.C .= C0
     H.mu = mu
-    H.S .= initial_second_order
+    # H.S .= initial_second_order
     H.reg_factor = norm_aug_res
-    H.small_res = false
     H.step .= zero_T
     H.secant_rhs .= zero_T
 

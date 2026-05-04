@@ -203,7 +203,7 @@ function traulls(
     reset!(model.counters)
     start_time = time()
 
-    while !solved && iter <= max_iter && !stopped
+    while !solved && iter <= max_iter && !max_penalty_reached
 
         pix = solve_subproblem!(
             model,
