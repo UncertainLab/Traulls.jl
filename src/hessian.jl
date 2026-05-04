@@ -202,6 +202,7 @@ mutable struct HybridSR1{T<:Real} <: ALHessian{T}
     temp::AbstractVector{T}
 end
 
+# Constructor for the HybridSR1 struct
 function HybridSR1(
     J::AbstractMatrix{T},
     C::AbstractMatrix{T},
@@ -214,7 +215,7 @@ function HybridSR1(
     p = size(C, 1)
     norm_aug_res = norm(vcat(rx, sqrt(mu) .* (cx .+ y .* (1/mu))))
 
-    return HybridBFGS(copy(J),
+    return HybridSR1(copy(J),
                       copy(C),
                       zeros(T, n, n),
                       mu,
@@ -475,7 +476,71 @@ function update_hessian!(
     return
 end
 
+# Update the Hybrid SR1 Hessian approximation using the scaled secant approximation
+# Small residuals are evaliuated using the curvature condition
+# Second order terms are updated following the standard SR1 safeguard
+function update_hessian!(
+    hsr1_op::HybridSR1{T},
+    J_new::AbstractMatrix{T},
+    C_new::AbstractMatrix{T},
+    rx_new::AbstractVector{T},
+    cx_new::AbstractVector{T},
+    g::AbstractVector{T},
+    y::AbstractVector{T},
+    s::AbstractVector{T}) where T
 
+
+    eps_small_res = T(1e-6) # value used in Zhou, Chen paper
+    mu = hsr1_op.mu
+
+    # Scaling factor : quotient between the norm of consecutive augmented residuals
+    norm_new_aug_res = norm(vcat(rx_new, sqrt(mu) .* (cx_new + y .* (1/mu))))
+    scaling_factor = norm_new_aug_res * (1 / hsr1_op.reg_factor)
+    hsr1_op.reg_factor = norm_new_aug_res
+
+    # Secant equation right handside
+    hsr1_op.secant_rhs .= g .- hsr1_op.J' * rx_new .- hsr1_op.C' * (y .+ hsr1_op.mu.*cx_new)
+    hsr1_op.secant_rhs .*= scaling_factor
+    hsr1_op.step .= s
+
+    # Evaluate small residuals heuristic
+    hsr1_op.small_res = dot(hsr1_op.secant_rhs, s) < eps_small_res * (1 + dot(s, s))
+
+    # Update second order terms
+    update_sr1_second_order!(hsr1_op)
+
+    # Update first order terms
+    hsr1_op.J .= J_new
+    hsr1_op.C .= C_new
+
+    return
+end
+
+# TODO: merge the the update_sr1_second_order into one method
+function update_sr1_second_order!(hsr1_op::HybridSR1{T}) where T
+
+    # Tolerance for the skipping update safeguard
+    eps_safeguard = T(1e-8)
+
+    # Vectors of the secant Equation Ss = y
+    y = hsr1_op.secant_rhs
+    s = hsr1_op.step
+
+    # Form y - Ss
+    ymSs = view(hsr1_op.temp, 1:size(s,1))
+    ymSs .= y
+    mul!(ymSs, hsr1_op.S, s, -1, 1) # Form y - τSs
+    denom = dot(s, ymSs)
+
+    # Add (y - τSs)(y - Ss)ᵀ / (y - τSs)ᵀs to second order terms approximation
+    # Update applied if denominator (y - τSs)ᵀs not too small
+
+    if abs(denom) > eps_safeguard * (1 + norm(s) * norm(ymSs))
+        mul!(hsr1_op.S, ymSs, ymSs', 1/denom, 1)
+    end
+
+    return
+end
 
 """
     reset_hessian!(H,J₀,C₀,μ₀)
@@ -516,7 +581,7 @@ function reset_hessian!(
     H.J .= J0
     H.C .= C0
     H.mu = mu0
-    # H.S .= T(0)
+    H.S .= T(0)
     H.step .= zero_T
     H.secant_rhs .= zero_T
 
@@ -543,6 +608,32 @@ function reset_hessian!(
     H.C .= C0
     H.mu = mu
     # H.S .= initial_second_order
+    H.reg_factor = norm_aug_res
+    H.step .= zero_T
+    H.secant_rhs .= zero_T
+
+    return
+end
+
+# Reset fields of the HybridSR1 structure at the start of a new outer iteration
+# Current version: second order terms are are not reset
+function reset_hessian!(
+    H::HybridSR1{T},
+    J0::AbstractMatrix{T},
+    C0::AbstractMatrix{T},
+    mu::T,
+    rx0::AbstractVector{T},
+    cx0::AbstractVector{T},
+    y::AbstractVector{T}) where T
+
+    n = size(J0, 2)
+    zero_T = zero(T)
+    norm_aug_res = norm(vcat(rx0, sqrt(mu) * (cx0 + y * (1/mu))))
+
+    H.J .= J0
+    H.C .= C0
+    H.mu = mu
+    # H.S .= zero_T
     H.reg_factor = norm_aug_res
     H.step .= zero_T
     H.secant_rhs .= zero_T

@@ -163,6 +163,7 @@ function traulls(
         $gn     => GN(J, C, mu)
         $sr1    => SR1(J, C, mu)
         $hybrid_bfgs => HybridBFGS(J, C, mu, rx, cx, y)
+        $hybrid_sr1 => HybridSR1(J, C, mu, rx, cx, y)
     end
 
     # Set up trust region
@@ -231,7 +232,6 @@ function traulls(
 
         # Evaluate feasibility and objective
         feas_measure = norm(cx, Inf)
-        g .= J'*rx + C'*y
         fx  = dot(rx,rx)
 
         update_multipliers = feas_measure <= tol_feas
@@ -294,7 +294,13 @@ function traulls(
     elapsed_time = time() - start_time     # Save execution time
     model.counters.niter_outer = iter - 1  # Save number of outer iterations
 
-    results = TraullsResults(x, y, fx, feas_measure, pix, solving_status, model.counters,
+    results = TraullsResults(x,
+                             y,
+                             fx,
+                             feas_measure,
+                             pix,
+                             solving_status,
+                             model.counters,
                              elapsed_time)
 
     verbose && print(output_io, results)
@@ -475,6 +481,7 @@ function solve_subproblem!(
         $gn     => reset_hessian!(hess_op, J, C, mu)
         $sr1    => reset_hessian!(hess_op, J, C, mu)
         $hybrid_bfgs => reset_hessian!(hess_op, J, C, mu, rx, cx, y)
+        $hybrid_sr1 => reset_hessian!(hess_op, J, C, mu, rx, cx, y)
     end
 
     reset_projector!(proj_op)
@@ -580,6 +587,10 @@ function solve_subproblem!(
             elseif hessian_approx == hybrid_bfgs
                 # HybridBFGS update
                 update_hessian!(hess_op, J, C, rx, cx, g, y, s)
+
+            elseif hessian_approx == hybrid_sr1
+                # HybridSR1 update
+                update_hessian!(hess_op, J, C, rx, cx, g, y, s)
             end
 
             pix = lincons_present ?
@@ -680,9 +691,9 @@ function projected_gradient!(
     w = workspace.search_dir
     r, v, p = workspace.r, workspace.v, workspace.p
 
-    # Bounds the step  on the search direction
-    slow .= (t -> max(-radius, t)).(xlow-x)
-    supp .= (t -> min(radius, t)).(xupp-x)
+    # Bounds the step on the search direction
+    slow .= (t -> max(-radius, t)).(xlow - x)
+    supp .= (t -> min(radius, t)).(xupp - x)
     # Reset active constraints
     reset_projector!(proj_op)
 

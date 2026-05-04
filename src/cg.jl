@@ -118,8 +118,6 @@ function pcg!(
             neg_curvature = true
 
             if abs(pHp) > eps_curv # nonzero curvature to sill take a step
-                # Compute direction that stops at the feasible box and stop cg
-                # iterations
                 gamma = factor_to_boundary(p, s, s_l, s_u, P)
                 s .+= gamma .* p
                 pred += -gamma * rtv + 0.5 * gamma^2 * pHp

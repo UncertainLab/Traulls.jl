@@ -539,30 +539,32 @@ end
 
 
 """
-    factor_to_boundary(p,w,wₗ,wᵤ,P)
+    factor_to_boundary(p, s, sₗ, sᵤ, P)
 
-Computes the largest scalar `γ` such that `w + γp` stays in the box `[wₗ,wᵤ]`.
+Computes the largest scalar `γ` such that `s + γp` stays in the box `[sₗ,sᵤ]`.
 The components considered are among free variables in a coordinate subspace
 encoded in `Projector` `P`.
 """
 function factor_to_boundary(
     p::Vector{T},
-    w::Vector{T},
-    w_l::Vector{T},
-    w_u::Vector{T},
+    s::Vector{T},
+    s_l::Vector{T},
+    s_u::Vector{T},
     proj_op::Projector{T}) where T
 
-    gamma = Inf
-    for i in axes(w,1)
+    stepmax = Inf
+    eps_dir = T(1e-10)
+
+    for i in axes(p, 1)
         if !is_fixed(proj_op, i)
-            if p[i] < 0
-                gamma = min(gamma, (w_l[i] - w[i]) / p[i])
-            elseif p[i] > 0
-                gamma = min(gamma, (w_u[i] - w[i]) / p[i])
+            if p[i] < -eps_dir
+                stepmax = min(stepmax, (s_l[i] - s[i]) / p[i])
+            elseif p[i] > eps_dir
+                stepmax = min(stepmax, (s_u[i] - s[i]) / p[i])
             end
         end
     end
-    return gamma
+    return stepmax
 end
 
 
