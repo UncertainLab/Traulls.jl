@@ -198,7 +198,7 @@ mutable struct HybridSR1{T<:Real} <: ALHessian{T}
     mu::T
     step::AbstractVector{T}
     secant_rhs::AbstractVector{T}
-    reg_factor::T
+    scaling_factor::T
     small_res::Bool
     temp::AbstractVector{T}
 end
@@ -214,18 +214,16 @@ function HybridSR1(
 
     (m,n) = size(J)
     p = size(C, 1)
-    norm_aug_res = norm(vcat(rx, sqrt(mu) .* (cx .+ y .* (1/mu))))
-    fx = 0.5*dot(rx,rx) + 0.5 * mu * dot(cx,cx) + dot(y,cx)
 
-    return HybridSR1(copy(J),
-                     copy(C),
-                     zeros(T, n, n),
-                     mu,
-                     zeros(T,n),
-                     zeros(T,n),
-                     fx,
-                     false,
-                     zeros(T,max(n,m,p)))
+    HybridSR1(copy(J),
+              copy(C),
+              Matrix{T}(I, n, n),
+              mu,
+              zeros(T,n),
+              zeros(T,n),
+              one(T),
+              false,
+              zeros(T,max(n, m, p)))
 end
 
 """
@@ -339,8 +337,8 @@ function mul!(Hv::AbstractVector{T}, hsr1_op::HybridSR1{T}, v::AbstractVector{T}
     mul!(temp_Cv, hsr1_op.C, v) # form Cv
     mul!(Hv, hsr1_op.C', temp_Cv, hsr1_op.mu, 1) # Hv ← Hv + μCᵀCv
 
-    # Sv term
-    !hsr1_op.small_res && mul!(Hv, hsr1_op.S, v, 1, 1) # Hv ← Hv + Sv if non zero residuals
+    # If non zero residuals, Hv ← Hv + Sv
+    !hsr1_op.small_res && mul!(Hv, hsr1_op.S, v, 1, 1)
 
     return
 end
@@ -404,7 +402,7 @@ Applies a structured SR1 update, with a safeguard check to prevent
 the approximation to break down.
 """
 
-function update_sr1_second_order!(sr1_op::SR1{T}) where T
+function second_order_secant_update!(sr1_op::SR1{T}) where T
 
     # Tolerance for the skipping update safeguard
     eps_safeguard = T(1e-8)
@@ -487,31 +485,35 @@ function update_hessian!(
     C_new::AbstractMatrix{T},
     rx_new::AbstractVector{T},
     cx_new::AbstractVector{T},
+    rx::AbstractVector{T},
+    cx::AbstractVector{T},
     g::AbstractVector{T},
     y::AbstractVector{T},
     s::AbstractVector{T}) where T
 
 
-    eps_small_res = T(1/10) # T(1e-6) # value used in Zhou, Chen paper
+    eps_small_res = T(1/10)
     mu = hsr1_op.mu
 
-    # Scaling factor : quotient between the norm of consecutive augmented residuals
+    # Scaling factor
+    fx = (1/2) * dot(rx, rx) + (mu/2) * dot(cx, cx) + mu * dot(cx, y)
+    norm2_augres = 2 * fx + (1/mu) * dot(y, y)
+    dot_rrp = dot(rx_new, rx) + mu * dot(cx_new, cx) + dot(y, cx) + dot(y, cx_new) + (1/mu)*dot(y, y)
+    hsr1_op.scaling_factor = dot_rrp / norm2_augres
+
     norm_new_aug_res = norm(vcat(rx_new, sqrt(mu) .* (cx_new + y .* (1/mu))))
     scaling_factor = norm_new_aug_res * (1 / hsr1_op.reg_factor)
-    fx = hsr1_op.reg_factor
-    fx_new = 0.5*dot(rx_new,rx_new) + 0.5*mu*dot(cx_new,cx_new) + dot(y, cx_new)
-
+    fx_new = 0.5*dot(rx_new, rx_new) + 0.5*mu*dot(cx_new,cx_new) + dot(y, cx_new)
 
     # Secant equation right handside
     hsr1_op.secant_rhs .= g .- hsr1_op.J' * rx_new .- hsr1_op.C' * (y .+ hsr1_op.mu.*cx_new)
-    # hsr1_op.secant_rhs .*= scaling_factor # commented to try the nonscaled hybrid
     hsr1_op.step .= s
 
     # Evaluate small residuals heuristic
     hsr1_op.small_res = fx - fx_new < eps_small_res * fx
 
     # Update second order terms
-    update_sr1_second_order!(hsr1_op)
+    second_order_secant_update!(hsr1_op)
 
     # Update first order terms
     hsr1_op.J .= J_new
@@ -522,11 +524,12 @@ function update_hessian!(
 end
 
 # TODO: merge the the update_sr1_second_order into one method
-function update_sr1_second_order!(hsr1_op::HybridSR1{T}) where T
+function second_order_secant_update!(hsr1_op::HybridSR1{T}) where T
 
     # Tolerance for the skipping update safeguard
     eps_safeguard = T(1e-8)
 
+    sigma = hsr1_op.scaling_factor
     # Vectors of the secant Equation Ss = y
     y = hsr1_op.secant_rhs
     s = hsr1_op.step
@@ -534,14 +537,14 @@ function update_sr1_second_order!(hsr1_op::HybridSR1{T}) where T
     # Form y - Ss
     ymSs = view(hsr1_op.temp, 1:size(s,1))
     ymSs .= y
-    mul!(ymSs, hsr1_op.S, s, -1, 1) # Form y - τSs
+    mul!(ymSs, hsr1_op.S, s, -sigma, 1) # Form y - τSs
     denom = dot(s, ymSs)
 
     # Add (y - τSs)(y - Ss)ᵀ / (y - τSs)ᵀs to second order terms approximation
     # Update applied if denominator (y - τSs)ᵀs not too small
 
     if abs(denom) > eps_safeguard * (1 + norm(s) * norm(ymSs))
-        mul!(hsr1_op.S, ymSs, ymSs', 1/denom, 1)
+        mul!(hsr1_op.S, ymSs, ymSs', 1/denom, sigma)
     end
 
     return
