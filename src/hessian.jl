@@ -173,6 +173,7 @@ function HybridBFGS(
 
     (m,n) = size(J)
     p = size(C, 1)
+
     norm_aug_res = norm(vcat(rx, sqrt(mu) * (cx + y * (1/mu))))
     initial_second_order = norm_aug_res .* Matrix{T}(I, n, n)
 
@@ -214,16 +215,17 @@ function HybridSR1(
     (m,n) = size(J)
     p = size(C, 1)
     norm_aug_res = norm(vcat(rx, sqrt(mu) .* (cx .+ y .* (1/mu))))
+    fx = 0.5*dot(rx,rx) + 0.5 * mu * dot(cx,cx) + dot(y,cx)
 
     return HybridSR1(copy(J),
-                      copy(C),
-                      zeros(T, n, n),
-                      mu,
-                      zeros(T,n),
-                      zeros(T,n),
-                      norm_aug_res,
-                      false,
-                      zeros(T,max(n,m,p)))
+                     copy(C),
+                     zeros(T, n, n),
+                     mu,
+                     zeros(T,n),
+                     zeros(T,n),
+                     fx,
+                     false,
+                     zeros(T,max(n,m,p)))
 end
 
 """
@@ -490,21 +492,23 @@ function update_hessian!(
     s::AbstractVector{T}) where T
 
 
-    eps_small_res = T(1e-6) # value used in Zhou, Chen paper
+    eps_small_res = T(1/10) # T(1e-6) # value used in Zhou, Chen paper
     mu = hsr1_op.mu
 
     # Scaling factor : quotient between the norm of consecutive augmented residuals
     norm_new_aug_res = norm(vcat(rx_new, sqrt(mu) .* (cx_new + y .* (1/mu))))
     scaling_factor = norm_new_aug_res * (1 / hsr1_op.reg_factor)
-    hsr1_op.reg_factor = norm_new_aug_res
+    fx = hsr1_op.reg_factor
+    fx_new = 0.5*dot(rx_new,rx_new) + 0.5*mu*dot(cx_new,cx_new) + dot(y, cx_new)
+
 
     # Secant equation right handside
     hsr1_op.secant_rhs .= g .- hsr1_op.J' * rx_new .- hsr1_op.C' * (y .+ hsr1_op.mu.*cx_new)
-    hsr1_op.secant_rhs .*= scaling_factor
+    # hsr1_op.secant_rhs .*= scaling_factor # commented to try the nonscaled hybrid
     hsr1_op.step .= s
 
     # Evaluate small residuals heuristic
-    hsr1_op.small_res = dot(hsr1_op.secant_rhs, s) < eps_small_res * (1 + dot(s, s))
+    hsr1_op.small_res = fx - fx_new < eps_small_res * fx
 
     # Update second order terms
     update_sr1_second_order!(hsr1_op)
@@ -512,6 +516,7 @@ function update_hessian!(
     # Update first order terms
     hsr1_op.J .= J_new
     hsr1_op.C .= C_new
+    hsr1_op.reg_factor = fx_new
 
     return
 end
@@ -628,13 +633,14 @@ function reset_hessian!(
 
     n = size(J0, 2)
     zero_T = zero(T)
+    fx0 = 0.5*dot(rx0,rx0) + 0.5*mu*dot(cx0,cx0) + dot(y, cx0)
     norm_aug_res = norm(vcat(rx0, sqrt(mu) * (cx0 + y * (1/mu))))
 
     H.J .= J0
     H.C .= C0
     H.mu = mu
-    # H.S .= zero_T
-    H.reg_factor = norm_aug_res
+    H.S .= zero_T
+    H.reg_factor = fx0
     H.step .= zero_T
     H.secant_rhs .= zero_T
 
