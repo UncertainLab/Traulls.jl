@@ -438,6 +438,8 @@ function update_hessian!(
     C_new::AbstractMatrix{T},
     rx_new::AbstractVector{T},
     cx_new::AbstractVector{T},
+    rx::AbstractVector{T},
+    cx::AbstractVector{T},
     g::AbstractVector{T},
     y::AbstractVector{T},
     s::AbstractVector{T}) where T
@@ -510,7 +512,7 @@ function update_hessian!(
     hsr1_op.step .= s
 
     # Evaluate small residuals heuristic
-    hsr1_op.small_res = fx - fx_new < eps_small_res * fx
+    hsr1_op.small_res = fx - fx_new > eps_small_res * fx
 
     # Update second order terms
     second_order_secant_update!(hsr1_op)
@@ -518,7 +520,6 @@ function update_hessian!(
     # Update first order terms
     hsr1_op.J .= J_new
     hsr1_op.C .= C_new
-    hsr1_op.reg_factor = fx_new
 
     return
 end
@@ -534,14 +535,14 @@ function second_order_secant_update!(hsr1_op::HybridSR1{T}) where T
     y = hsr1_op.secant_rhs
     s = hsr1_op.step
 
-    # Form y - Ss
+    # Form y - σSs
     ymSs = view(hsr1_op.temp, 1:size(s,1))
     ymSs .= y
-    mul!(ymSs, hsr1_op.S, s, -sigma, 1) # Form y - τSs
+    mul!(ymSs, hsr1_op.S, s, -sigma, 1) # Form y - σSs
     denom = dot(s, ymSs)
 
-    # Add (y - τSs)(y - Ss)ᵀ / (y - τSs)ᵀs to second order terms approximation
-    # Update applied if denominator (y - τSs)ᵀs not too small
+    # Add (y - σSs)(y - σSs)ᵀ / (y - σSs)ᵀs to second order terms approximation
+    # Update applied if denominator (y - σSs)ᵀs not too small
 
     if abs(denom) > eps_safeguard * (1 + norm(s) * norm(ymSs))
         mul!(hsr1_op.S, ymSs, ymSs', 1/denom, sigma)
@@ -636,16 +637,14 @@ function reset_hessian!(
 
     n = size(J0, 2)
     zero_T = zero(T)
-    fx0 = 0.5*dot(rx0,rx0) + 0.5*mu*dot(cx0,cx0) + dot(y, cx0)
-    norm_aug_res = norm(vcat(rx0, sqrt(mu) * (cx0 + y * (1/mu))))
 
     H.J .= J0
     H.C .= C0
+    H.S .= Matrix{T}(I, n, n)
     H.mu = mu
-    H.S .= zero_T
-    H.reg_factor = fx0
+    H.scaling_factor = T(1)
     H.step .= zero_T
     H.secant_rhs .= zero_T
-
+    H.small_res = false
     return
 end
