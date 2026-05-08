@@ -173,8 +173,8 @@ function HybridBFGS(
     (m,n) = size(J)
     p = size(C, 1)
 
-    norm_aug_residuals = norm(vcat(rx, sqrt(mu) .* (cx .+ y .* (1 / mu))))
-    initial_second_order = norm_aug_residuals .* Matrix{T}(I, n, n)
+    scaling_factor = norm(rx) + norm(y .+ mu .* cx)
+    initial_second_order = scaling_factor .* Matrix{T}(I, n, n)
 
     return HybridBFGS(copy(J),
                       copy(C),
@@ -196,7 +196,6 @@ mutable struct HybridSR1{T<:Real} <: ALHessian{T}
     mu::T
     step::AbstractVector{T}
     secant_rhs::AbstractVector{T}
-    scaling_factor::T
     small_res::Bool
     temp::AbstractVector{T}
 end
@@ -205,14 +204,10 @@ end
 function HybridSR1(
     J::AbstractMatrix{T},
     C::AbstractMatrix{T},
-    mu::T,
-    rx::AbstractVector{T},
-    cx::AbstractVector{T},
-    y::AbstractVector{T}) where T
+    mu::T) where T
 
     (m,n) = size(J)
     p = size(C, 1)
-    norm_aug_residuals = norm(vcat(rx, sqrt(mu) .* (cx .+ y .* (1 / mu))))
 
     HybridSR1(copy(J),
               copy(C),
@@ -220,7 +215,6 @@ function HybridSR1(
               mu,
               zeros(T,n),
               zeros(T,n),
-              one(T),
               false,
               zeros(T,max(n, m, p)))
 end
@@ -437,8 +431,8 @@ function update_hessian!(
     C_new::AbstractMatrix{T},
     rx_new::AbstractVector{T},
     cx_new::AbstractVector{T},
-    rx::AbstractVector{T},
-    cx::AbstractVector{T},
+    fx_new::T,
+    fx_prev::T,
     g::AbstractVector{T},
     y::AbstractVector{T},
     s::AbstractVector{T}) where T
@@ -446,41 +440,23 @@ function update_hessian!(
 
     # Constants
     eps_small_res = T(1//10) # Tjoa Biegler recommended value
-    damping_param = T(2//10)
+    eps_red = 10 * eps(T)
     eps_skip = T(1e-2)
-    one_T = one(T)
     mu = hbfgs_op.mu
 
-    # Small residuals heuristic
-    fx = (1/2) * dot(rx, rx) + (mu/2) * dot(cx, cx) + mu * dot(cx, y)
-    fx_new = 0.5*dot(rx_new, rx_new) + 0.5*mu*dot(cx_new,cx_new) + dot(y, cx_new)
-    hbfgs_op.small_res = fx - fx_new > eps_small_res * fx
+    # Evaluate small residuals heuristic
+    delta_red = eps_ratio * max(1, abs(fx_prev))
+    hbfgs_op.small_res = (fx_prev - fx_new + delta_red) > eps_small_res * fx_prev
 
-    # Scaling factor
-    norm2_augres = 2 * fx + (1/mu) * dot(y, y)
-    dot_rrp = dot(rx_new, rx) + mu * dot(cx_new, cx) + dot(y, cx) + dot(y, cx_new) + (1/mu)*dot(y, y)
-    # sigma  = dot_rrp / norm2_augres
-    sigma = one_T
-
-    # Secant equation right handside
+    # Form secant equation right handside
     z = g - hbfgs_op.J' * rx_new .- hbfgs_op.C' * (y .+ mu .* cx_new)
-    Ss = sigma * hbfgs_op.S * s
-    normS_s = dot(s, Ss)
     stz = dot(s, z)
 
-
-    # # Apply Powell damping to satisfy curvature condition
-    # damped = stz < damping_param * normS_s
-    # if damped
-    #     damping_scalar = (one_T - damping_param) * (1 / normS_s - stz)
-    #     z .= damping_scalar .* z .+ (one_T - damping_scalar) .* Ss
-    #     stz = dot(s, z)
-    # end
-
     # Apply structured BFGS update if sufficient curvature
-    if stz >= eps_skip * normS_s
-        bfgs_update = z*z' .* (1 / stz) - Ss*Ss' .* (1 / normS_s)
-        hbfgs_op.S .= sigma * hbfgs_op.S + bfgs_update
+    if stz >= eps_skip * (1 + norm(s) * norm(z))
+        Ss = hbfgs_op.S * s
+        bfgs_update = z*z' .* (1 / stz) - Ss*Ss' .* (1 / dot(s, Ss))
+        hbfgs_op.S .= hbfgs_op.S .+ bfgs_update
     end
 
     # Update remaining structure fields
@@ -501,32 +477,25 @@ function update_hessian!(
     C_new::AbstractMatrix{T},
     rx_new::AbstractVector{T},
     cx_new::AbstractVector{T},
-    rx::AbstractVector{T},
-    cx::AbstractVector{T},
+    fx_new::T,
+    fx_prev::T,
     g::AbstractVector{T},
     y::AbstractVector{T},
     s::AbstractVector{T}) where T
 
 
-    eps_small_res = T(1/10)
+    # Constants
+    eps_small_res = T(1//10) # Tjoa Biegler recommended value
+    eps_red = 10 * eps(T)
     mu = hsr1_op.mu
 
-    # Scaling factor
-    fx = (1/2) * dot(rx, rx) + (mu/2) * dot(cx, cx) + mu * dot(cx, y)
-    norm2_augres = 2 * fx + (1/mu) * dot(y, y)
-    dot_rrp = dot(rx_new, rx) + mu * dot(cx_new, cx) + dot(y, cx) + dot(y, cx_new) + (1/mu)*dot(y, y)
-    hsr1_op.scaling_factor = dot_rrp / norm2_augres
-
-    # norm_new_aug_res = norm(vcat(rx_new, sqrt(mu) .* (cx_new + y .* (1/mu))))
-    # scaling_factor = norm_new_aug_res * (1 / hsr1_op.reg_factor)
-    fx_new = 0.5*dot(rx_new, rx_new) + 0.5*mu*dot(cx_new,cx_new) + dot(y, cx_new)
+    # Evaluate small residuals heuristic
+    delta_red = eps_ratio * max(1, abs(fx_prev))
+    hbfgs_op.small_res = (fx_prev - fx_new + delta_red) > eps_small_res * fx_prev
 
     # Secant equation right handside
     hsr1_op.secant_rhs .= g .- hsr1_op.J' * rx_new .- hsr1_op.C' * (y .+ hsr1_op.mu.*cx_new)
     hsr1_op.step .= s
-
-    # Evaluate small residuals heuristic
-    hsr1_op.small_res = fx - fx_new > eps_small_res * fx
 
     # Update second order terms
     second_order_secant_update!(hsr1_op)
@@ -544,20 +513,18 @@ function second_order_secant_update!(hsr1_op::HybridSR1{T}) where T
     # Tolerance for the skipping update safeguard
     eps_safeguard = T(1e-8)
 
-    # sigma = hsr1_op.scaling_factor
-    sigma = one(T)
     # Vectors of the secant Equation Ss = y
     y = hsr1_op.secant_rhs
     s = hsr1_op.step
 
-    # Form y - σSs
+    # Form y - Ss
     ymSs = view(hsr1_op.temp, 1:size(s,1))
     ymSs .= y
-    mul!(ymSs, hsr1_op.S, s, -sigma, 1) # Form y - σSs
+    mul!(ymSs, hsr1_op.S, s, -1, 1) # Form y - Ss
     denom = dot(s, ymSs)
 
-    # Add (y - σSs)(y - σSs)ᵀ / (y - σSs)ᵀs to second order terms approximation
-    # Update applied if denominator (y - σSs)ᵀs not too small
+    # Add (y - Ss)(y - σSs)ᵀ / (y - Ss)ᵀs to second order terms approximation
+    # Update applied if denominator (y - Ss)ᵀs not too small
 
     if abs(denom) > eps_safeguard * (1 + norm(s) * norm(ymSs))
         mul!(hsr1_op.S, ymSs, ymSs', 1/denom, sigma)
@@ -626,12 +593,13 @@ function reset_hessian!(
 
     n = size(J0, 2)
     zero_T = zero(T)
-    norm_aug_residuals = norm(vcat(rx, sqrt(mu) .* (cx .+ y .* (1 / mu))))
+    scaling_factor = norm(rx) + norm(y .+ mu .* cx)
+    initial_second_order = scaling_factor .* Matrix{T}(I, n, n)
 
     H.J .= J0
     H.C .= C0
     H.mu = mu
-    H.S .=  Matrix{T}(I, n, n)
+    H.S .= initial_second_order
     H.step .= zero_T
     H.secant_rhs .= zero_T
     H.small_res = false
@@ -644,20 +612,15 @@ function reset_hessian!(
     H::HybridSR1{T},
     J0::AbstractMatrix{T},
     C0::AbstractMatrix{T},
-    mu::T,
-    rx::AbstractVector{T},
-    cx::AbstractVector{T},
-    y::AbstractVector{T}) where T
+    mu::T) where T
 
     n = size(J0, 2)
     zero_T = zero(T)
-    norm_aug_residuals = norm(vcat(rx, sqrt(mu) .* (cx .+ y .* (1 / mu))))
 
     H.J .= J0
     H.C .= C0
     H.S .= zero_T
     H.mu = mu
-    H.scaling_factor = T(1)
     H.step .= zero_T
     H.secant_rhs .= zero_T
     H.small_res = false

@@ -112,9 +112,15 @@ function step_ratio(
     # Value of the model at trial point
     mx_next = pred + fx
 
-    # Set ratio to 1 if numerical roundoff errors are likely when computing the ratio
-    ratio = abs(delta_ared) < eps_ratio * abs_fx || abs(delta_pred) < eps_ratio ? 1.0 :
-        delta_ared / delta_pred
+    if pred < 0
+        # Set negative ratio if the step increases the model value
+        ratio = T(-1)
+    else
+
+        # Set ratio to 1 if numerical roundoff errors are likely when computing the ratio
+        ratio = abs(delta_ared) < eps_ratio * abs_fx || abs(delta_pred) < eps_ratio ? 1.0 :
+            delta_ared / delta_pred
+    end
 
     return ratio
 end
