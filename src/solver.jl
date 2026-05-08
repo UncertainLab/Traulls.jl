@@ -586,11 +586,11 @@ function solve_subproblem!(
 
             elseif hessian_approx == hybrid_bfgs
                 # HybridBFGS update
-                update_hessian!(hess_op, J, C, rx, cx, g, y, s)
+                update_hessian!(hess_op, J, C, rx, cx, rx_prev, cx_prev, g, y, s)
 
             elseif hessian_approx == hybrid_sr1
                 # HybridSR1 update
-                update_hessian!(hess_op, J, C, rx, cx, g, y, s)
+                update_hessian!(hess_op, J, C, rx, cx, rx_prev, cx_prev, g, y, s)
             end
 
             pix = lincons_present ?
@@ -691,7 +691,7 @@ function projected_gradient!(
     w = workspace.search_dir
     r, v, p = workspace.r, workspace.v, workspace.p
 
-    # Bounds the step on the search direction
+    # Bounds the step  on the search direction
     slow .= (t -> max(-radius, t)).(xlow - x)
     supp .= (t -> min(radius, t)).(xupp - x)
     # Reset active constraints
