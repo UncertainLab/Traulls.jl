@@ -308,6 +308,7 @@ function cholesky_augmented_gram_mat(
     (m,n) = size(A)
     p = count(fix_bounds)
     mpp = m+p
+    @show mpp, n
     @assert mpp <= n
 
     # Auxiliary buffer arrays
@@ -528,12 +529,34 @@ function update_active_set!(
             (x[i] + s[i] <= xlow[i] + eps_bound*abs(xlow[i]) || # at lower bound
             x[i] + s[i] + eps_bound*abs(xupp[i]) >= xupp[i])    # at upper bound
 
-            push!(newly_active,i)
+            push!(newly_active, i)
         end
     end
 
+    @show newly_active
     set_active!(P, newly_active)
 
+    return
+end
+
+
+# Identify which bounds from the box `[max(-Δ,ℓ), min(Δ,u)]` become active at
+# trial point `x + s` and set accordingly the coordinate subspace projector `P`.
+# Activity of bounds is measured up to positive tolerance `eps_active`.
+
+function update_active_set!(
+    s::Vector{T},
+    x::Vector{T},
+    xlow::Vector{T},
+    xupp::Vector{T},
+    P::CoordinateSubspaceProjector{T};
+    eps_bound::T=sqrt(eps(T))) where T
+
+    for i in axes(x,1)
+        P.fixvars[i] =  P.fixvars[i] ||
+            x[i] + s[i] <= xlow[i] + eps_bound*abs(xlow[i]) ||
+            x[i] + s[i] + eps_bound*abs(xupp[i]) >= xupp[i]
+    end
     return
 end
 
@@ -567,26 +590,6 @@ function factor_to_boundary(
     return stepmax
 end
 
-
-# Identify which bounds from the box `[max(-Δ,ℓ), min(Δ,u)]` become active at
-# trial point `x + s` and set accordingly the coordinate subspace projector `P`.
-# Activity of bounds is measured up to positive tolerance `eps_active`.
-
-function update_active_set!(
-    s::Vector{T},
-    x::Vector{T},
-    xlow::Vector{T},
-    xupp::Vector{T},
-    P::CoordinateSubspaceProjector{T};
-    eps_bound::T=sqrt(eps(T))) where T
-
-    for i in axes(x,1)
-        P.fixvars[i] =  P.fixvars[i] ||
-            x[i] + s[i] <= xlow[i] + eps_bound*abs(xlow[i]) ||
-            x[i] + s[i] + eps_bound*abs(xupp[i]) >= xupp[i]
-    end
-    return
-end
 
 """
     project!(v,x,ℓ,u)

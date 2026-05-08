@@ -165,16 +165,12 @@ end
 function HybridBFGS(
     J::AbstractMatrix{T},
     C::AbstractMatrix{T},
-    mu::T,
-    rx::AbstractVector{T},
-    cx::AbstractVector{T},
-    y::AbstractVector{T}) where T
+    mu::T) where T
 
     (m,n) = size(J)
     p = size(C, 1)
 
-    scaling_factor = norm(rx) + norm(y .+ mu .* cx)
-    initial_second_order = scaling_factor .* Matrix{T}(I, n, n)
+    initial_second_order = Matrix{T}(I, n, n)
 
     return HybridBFGS(copy(J),
                       copy(C),
@@ -435,17 +431,18 @@ function update_hessian!(
     fx_prev::T,
     g::AbstractVector{T},
     y::AbstractVector{T},
-    s::AbstractVector{T}) where T
+    s::AbstractVector{T},
+    first_iter::Bool) where T
 
 
     # Constants
     eps_small_res = T(1//10) # Tjoa Biegler recommended value
     eps_red = 10 * eps(T)
-    eps_skip = T(1e-2)
+    eps_skip = T(1e-7)
     mu = hbfgs_op.mu
 
     # Evaluate small residuals heuristic
-    delta_red = eps_ratio * max(1, abs(fx_prev))
+    delta_red = eps_red * max(1, abs(fx_prev))
     hbfgs_op.small_res = (fx_prev - fx_new + delta_red) > eps_small_res * fx_prev
 
     # Form secant equation right handside
@@ -454,6 +451,16 @@ function update_hessian!(
 
     # Apply structured BFGS update if sufficient curvature
     if stz >= eps_skip * (1 + norm(s) * norm(z))
+
+        # Rescale for the first the first update
+        # Assumes the initial approximation is diagonal
+        if first_iter
+            scaling_factor = stz * (1 / dot(s, s))
+            for i in axes(hbfgs_op.S, 1)
+                hbfgs_op.S[i, i] = scaling_factor
+            end
+        end
+
         Ss = hbfgs_op.S * s
         bfgs_update = z*z' .* (1 / stz) - Ss*Ss' .* (1 / dot(s, Ss))
         hbfgs_op.S .= hbfgs_op.S .+ bfgs_update
@@ -466,6 +473,23 @@ function update_hessian!(
     hbfgs_op.secant_rhs .= z
 
     return
+end
+
+# Retroactively set the second order approximation to a scaled identity
+# such that the secant equation is satisfied
+function rescale_second_order!(hsr1_op::HybridBFGS{T}) where T
+    y = hsr1_op.secant_rhs
+    s = hsr1_op.step
+
+    sty = dot(s, y)
+
+    # Rescale if curvature condition satisfied
+    if sty > 0
+        scaling_factor = sty * (1 / dot(s, s))
+        for i in axes(hsr1_op.S, 1)
+            hsr1_op.S[i, i] = scaling_factor
+        end
+    end
 end
 
 # Update the Hybrid SR1 Hessian approximation using the scaled secant approximation
@@ -490,8 +514,8 @@ function update_hessian!(
     mu = hsr1_op.mu
 
     # Evaluate small residuals heuristic
-    delta_red = eps_ratio * max(1, abs(fx_prev))
-    hbfgs_op.small_res = (fx_prev - fx_new + delta_red) > eps_small_res * fx_prev
+    delta_red = eps_red * max(1, abs(fx_prev))
+    hsr1_op.small_res = (fx_prev - fx_new + delta_red) > eps_small_res * fx_prev
 
     # Secant equation right handside
     hsr1_op.secant_rhs .= g .- hsr1_op.J' * rx_new .- hsr1_op.C' * (y .+ hsr1_op.mu.*cx_new)
@@ -527,11 +551,12 @@ function second_order_secant_update!(hsr1_op::HybridSR1{T}) where T
     # Update applied if denominator (y - Ss)ᵀs not too small
 
     if abs(denom) > eps_safeguard * (1 + norm(s) * norm(ymSs))
-        mul!(hsr1_op.S, ymSs, ymSs', 1/denom, sigma)
+        mul!(hsr1_op.S, ymSs, ymSs', 1/denom, 1)
     end
 
     return
 end
+
 
 """
     reset_hessian!(H,J₀,C₀,μ₀)
@@ -587,14 +612,14 @@ function reset_hessian!(
     J0::AbstractMatrix{T},
     C0::AbstractMatrix{T},
     mu::T,
-    rx::AbstractVector{T},
-    cx::AbstractVector{T},
-    y::AbstractVector{T}) where T
+    rx,
+    cx,
+    y) where T
 
     n = size(J0, 2)
     zero_T = zero(T)
-    scaling_factor = norm(rx) + norm(y .+ mu .* cx)
-    initial_second_order = scaling_factor .* Matrix{T}(I, n, n)
+    scaling_factor = norm(vcat(rx, sqrt(mu) .* (cx .+ y .* (1/mu))))
+    initial_second_order = Matrix{T}(I, n, n)
 
     H.J .= J0
     H.C .= C0

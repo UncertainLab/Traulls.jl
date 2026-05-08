@@ -219,13 +219,13 @@ function CnlsModel!(
     # Adjust linear constraints
     xlow = vcat(low, zeros(nslack))
     xupp = vcat(upp, fill(Inf,nslack))
-    nlincons = size(A,1)
+    nlincons = size(A, 1)
     lincons = hcat(A, zeros(nlincons, nslack))
 
     # Set initial slack variables to g(x₀)
     u0 = similar(x0 ,nslack)
     c!(u0, x0)
-    x_start = vcat(x0,u0)
+    xstart = vcat(x0,u0)
 
     CnlsModel(r!, nothing, c!, jac_r!, nothing, jac_c!, lincons, b, xlow, xupp, n,
               nslack, nres, ncons, nlincons, xstart, TraullsCounters())

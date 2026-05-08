@@ -112,7 +112,7 @@ function step_ratio(
     # Value of the model at trial point
     mx_next = pred + fx
 
-    if pred < 0
+    if pred > 0
         # Set negative ratio if the step increases the model value
         ratio = T(-1)
     else

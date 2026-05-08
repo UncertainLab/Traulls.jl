@@ -162,8 +162,8 @@ function traulls(
     hess_op = @match hessian_type begin
         $gn     => GN(J, C, mu)
         $sr1    => SR1(J, C, mu)
-        $hybrid_bfgs => HybridBFGS(J, C, mu, rx, cx, y)
-        $hybrid_sr1 => HybridSR1(J, C, mu, rx, cx, y)
+        $hybrid_bfgs => HybridBFGS(J, C, mu)
+        $hybrid_sr1 => HybridSR1(J, C, mu)
     end
 
     # Set up trust region
@@ -481,7 +481,7 @@ function solve_subproblem!(
         $gn     => reset_hessian!(hess_op, J, C, mu)
         $sr1    => reset_hessian!(hess_op, J, C, mu)
         $hybrid_bfgs => reset_hessian!(hess_op, J, C, mu, rx, cx, y)
-        $hybrid_sr1 => reset_hessian!(hess_op, J, C, mu, rx, cx, y)
+        $hybrid_sr1 => reset_hessian!(hess_op, J, C, mu)
     end
 
     reset_projector!(proj_op)
@@ -586,11 +586,11 @@ function solve_subproblem!(
 
             elseif hessian_approx == hybrid_bfgs
                 # HybridBFGS update
-                update_hessian!(hess_op, J, C, rx, cx, rx_prev, cx_prev, g, y, s)
+                update_hessian!(hess_op, J, C, rx, cx, alx, alx_prev, g, y, s, iter == 1)
 
             elseif hessian_approx == hybrid_sr1
                 # HybridSR1 update
-                update_hessian!(hess_op, J, C, rx, cx, rx_prev, cx_prev, g, y, s)
+                update_hessian!(hess_op, J, C, rx, cx, alx, alx_prev, g, y, s)
             end
 
             pix = lincons_present ?
@@ -755,6 +755,9 @@ function projected_gradient!(
         cg_stop = cg_status == negative_curvature # || cg_status == on_trust_region
 
         # Identify the newly active bounds and update accordingly the projection operator
+        @show proj_op.workspace_mat.fixvars
+        @show radius
+        @show x + s
         update_active_set!(s, x, xlow, xupp, proj_op)
 
         iter += 1
@@ -799,7 +802,7 @@ function initial_point_and_projector!(
         initial_active[i] = x[i] <= xlow[i] + tol || xupp[i] <= x[i] + tol
     end
 
-    chol_aat = Cholesky(A*A')
+    chol_aat = cholesky(A*A')
 
     # Form projector operator
     SubspaceProjector(A, initial_active, chol_aat)
@@ -898,6 +901,6 @@ function criticality_measure(
     gproj::AbstractVector{T},
     proj_op::SubspaceProjector{T}) where T
 
-    mul!(projg, proj_op, g)
-    norm(projg, Inf)
+    mul!(gproj, proj_op, g)
+    norm(gproj, Inf)
 end
