@@ -308,8 +308,6 @@ function cholesky_augmented_gram_mat(
     (m,n) = size(A)
     p = count(fix_bounds)
     mpp = m+p
-    @show mpp, n
-    @assert mpp <= n
 
     # Auxiliary buffer arrays
     H = Matrix{Float64}(I,p,p)

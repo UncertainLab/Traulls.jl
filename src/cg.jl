@@ -93,7 +93,7 @@ function pcg!(
     p .= -v
 
 
-    eps_cg = kappa_cg * sqrt(rtv) # ϵ ← κ * ||v₀||
+    eps_cg = kappa_cg^2 * rtv  # √ϵ ← κ * ||v₀||
 
     # Prepare for CG iterations
     iter = 1
@@ -150,9 +150,8 @@ function pcg!(
                 rtv = rtv_next
 
                 # Evaluate termination criteria
-                nrm_v = sqrt(rtv)
-                optimal = nrm_v < eps_cg
-                too_small = nrm_v + T(1) <= T(1)
+                optimal = rtv < eps_cg
+                too_small = rtv + T(1) <= T(1)
                 solved = optimal || too_small
 
                 iter += 1
