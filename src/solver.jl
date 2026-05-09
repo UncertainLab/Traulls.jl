@@ -755,10 +755,7 @@ function projected_gradient!(
         cg_stop = cg_status == negative_curvature # || cg_status == on_trust_region
 
         # Identify the newly active bounds and update accordingly the projection operator
-        @show proj_op.workspace_mat.fixvars
-        @show radius
-        @show x + s
-        update_active_set!(s, x, xlow, xupp, proj_op)
+        update_active_set!(s, slow, supp, proj_op)
 
         iter += 1
     end
