@@ -19,6 +19,7 @@ const dict_hessians = Dict(:gn => gn,
                            :bfgs => bfgs,
                            :hybrid_bfgs => hybrid_bfgs,
                            :hybrid_sr1 => hybrid_sr1)
+
 """
     GN <: ALHessian 
 
@@ -685,7 +686,6 @@ function second_order_secant_update!(hsr1_op::HybridSR1{T}) where T
 
     return
 end
-
 
 """
     reset_hessian!(H,J₀,C₀,μ₀)

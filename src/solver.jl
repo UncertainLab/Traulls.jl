@@ -484,7 +484,6 @@ function solve_subproblem!(
         $hybrid_sr1  => reset_hessian!(hess_op, J, C, mu)
         $bfgs        => reset_hessian!(hess_op, J, C, mu)
         $hybrid_bfgs => reset_hessian!(hess_op, J, C, mu)
-
     end
 
     reset_projector!(proj_op)
