@@ -213,7 +213,7 @@ Nothing is returned, the result is stored in vector `r`.
 function mul!(r::Vector{T}, P::SubspaceProjector{T}, x::Vector{T}) where T
 
     temp = P.workspace_mat * x # form A₊x
-    ldiv!(P.chol_gram_augmat,temp) # solve for y (A₊A₊ᵀ)y = A₊x
+    ldiv!(P.chol_gram_augmat, temp) # solve for y (A₊A₊ᵀ)y = A₊x
     r .= x .- transpose(P.workspace_mat)*temp # form r = x - A₊ᵀy
 
     return r

@@ -632,7 +632,7 @@ function solve_subproblem!(
     # Indicate inner iteration finish
     verbose && println(io,'='^92)
     # Save number of inner iterations
-    model.counters.niter_inner += iter
+    model.counters.niter_inner += (iter - 1)
 
     return pix
 end

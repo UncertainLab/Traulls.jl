@@ -187,11 +187,17 @@ function least_squares_multipliers(
     J::AbstractMatrix{T},
     C::AbstractMatrix{T}) where T
 
+    # TODO: Replace this computation by an iterative solving
     gf = J'*rx
-    chol_cct = cholesky(C*C')
-    v = chol_cct.L \ (-C*gf)
-    y = chol_cct.U \ v
-    
+    cct = C*C'
+    y = zeros(size(C, 1))
+
+    if isposdef(cct)
+        chol_cct = cholesky(cct)
+        v = chol_cct.L \ (-C*gf)
+        y .= chol_cct.U \ v
+    end
+
     return y
 end
 
