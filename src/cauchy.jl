@@ -140,7 +140,7 @@ end
 # Uses square root of machine precision as relative tolerance to assert if bounds are active
 # or if search direction is zero
 #
-# Returns the indices of the active variables and zero direction in separate integer arrays
+# Returns the indices of the active variables and zero direction in separate arrays of integers
 function initial_fixed(
     x::AbstractVector{T},
     d::AbstractVector{T},

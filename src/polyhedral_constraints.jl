@@ -212,9 +212,9 @@ Nothing is returned, the result is stored in vector `r`.
 """
 function mul!(r::Vector{T}, P::SubspaceProjector{T}, x::Vector{T}) where T
 
-    temp = P.workspace_mat * x # form A₊x
-    ldiv!(P.chol_gram_augmat, temp) # solve for y (A₊A₊ᵀ)y = A₊x
-    r .= x .- transpose(P.workspace_mat)*temp # form r = x - A₊ᵀy
+    temp = P.workspace_mat * x                  # form A₊x
+    ldiv!(P.chol_gram_augmat, temp)             # solve for y (A₊A₊ᵀ)y = A₊x
+    r .= x .- transpose(P.workspace_mat) * temp # form r = x - A₊ᵀy
 
     return r
 end
@@ -311,7 +311,7 @@ function cholesky_augmented_gram_mat(
 
     # Auxiliary buffer arrays
     H = Matrix{Float64}(I,p,p)
-    L = LowerTriangular(Matrix{Float64}(undef, mpp, mpp))
+    L = LowerTriangular(zeros(mpp, mpp))
 
     A_act_cols = view(A,:,fix_bounds)
     G = chol_aat.L \ A_act_cols
@@ -325,42 +325,53 @@ function cholesky_augmented_gram_mat(
     return Cholesky(L)
 end
 
+# """
+#     update_subspace_projector!(proj_op, newly_active)
+
+# Add constraints `vᵢ = 0` for `i ∈ newly_active` to the subspace encoded in
+# `proj_op` and forms the corresponding projection operator by modifying the
+# Cholesky decomposition involved in the normal equations solving.
+
+# **Arguments**
+
+# * `proj_op`: `SubspaceProjector`
+
+# * `newly_active`: `Vector` containing the indices of the variables that are set
+# active
+# """
+# function update_projector!(proj_op::SubspaceProjector, newly_active::Vector{Int})
+
+#     # Set new constraints active
+#     update_subspace!(proj_op.workspace_mat, newly_active)
+
+#     # Update the Cholesky decomposition involved in the normal equations solving
+#     proj_op.chol_gram_augmat = cholesky_augmented_gram_mat(
+#         proj_op.workspace_mat.eqmat,
+#         proj_op.workspace_mat.fixvars,
+#         proj_op.chol_gram_eqmat)
+#     return
+# end
+
+# # Set active the components of indices in `newly_active` into the projector
+# # `P`
+
+# @inline function update_projector!(P::CoordinateSubspaceProjector, newly_active::Vector{Int})
+
+#     P.fixvars[newly_active] .= true
+#     return
+# end
+
 """
-    update_subspace_projector!(proj_op, newly_active)
+    set_subspace!(M, active)
 
-Add constraints `vᵢ = 0` for `i ∈ newly_active` to the subspace encoded in
-`proj_op` and forms the corresponding projection operator by modifying the
-Cholesky decomposition involved in the normal equations solving.
-
-**Arguments**
-
-* `proj_op`: `SubspaceProjector`
-
-* `newly_active`: `Vector` containing the indices of the variables that are set
-active
+Set the constraints `vᵢ = 0`, for `i ∈ newly_active` in the subspace represented by matrix
+`M`.
 """
-function update_projector!(proj_op::SubspaceProjector, newly_active::Vector{Int})
-
-    # Set new constraints active
-    update_subspace!(proj_op.workspace_mat, newly_active)
-
-    # Update the Cholesky decomposition involved in the normal equations solving
-    proj_op.chol_gram_augmat = cholesky_augmented_gram_mat(
-        proj_op.workspace_mat.eqmat,
-        proj_op.workspace_mat.fixvars,
-        proj_op.chol_gram_eqmat)
+function set_subspace!(M::SubspaceMatrix, active::Vector{Int})
+    M.fixvars .= false
+    M.fixvars[active] .= true
     return
 end
-
-# Set active the components of indices in `newly_active` into the projector
-# `P`
-
-@inline function update_projector!(P::CoordinateSubspaceProjector, newly_active::Vector{Int})
-
-    P.fixvars[newly_active] .= true
-    return
-end
-
 """
     update_subspace!(M, newly_active)
 
@@ -509,9 +520,10 @@ end
 
 # Identify which bounds from the box `[max(-Δ,ℓ), min(Δ,u)]` become active at
 # trial point `x + s` and set accordingly the coordinate subspace projector `P`.
-# Activity of bounds is measured up to positive tolerance `atol`.
-
-function update_active_set!(
+# The components of the bounds identified as active are fixed for the rest of the current
+# inner iteration
+# Activity of bounds is measured up to small positive tolerance `eps_bound`.
+function update_inner_active_set!(
     s::AbstractVector{T},
     slow::AbstractVector{T},
     supp::AbstractVector{T},
@@ -533,6 +545,45 @@ function update_active_set!(
 
     return
 end
+
+# Identify which bounds from the box `[ℓ, u]` are active at point `x` and set accordingly
+# the subspace projector `P`.
+# This is done to set up the projector for the computation of the criticality measure
+# in the case where the linear constraints are general.
+#
+# On return
+# `P` argument modified
+function identify_active_set!(
+    x::AbstractVector{T},
+    xlow::AbstractVector{T},
+    xupp::AbstractVector{T},
+    P::SubspaceProjector{T};
+    eps_bound::T = sqrt(eps(T))) where T
+
+    # TODO: allocate `active` array in `solve!` method and pass as argument modified in
+    # place within this function
+    active = Vector{Int}([])
+
+    # Identify active bounds
+    for i in axes(x, 1)
+        at_lower = isfinite(xlow[i]) && x[i] <= xlow[i] + abs(xlow[i]) * eps_bound
+        at_upper = isfinite(xupp[i]) && x[i] + abs(xupp[i]) * eps_bound >= xupp[i]
+        (at_lower || at_upper) && push!(active, i)
+    end
+
+    # Set constraints active
+    set_subspace!(P.workspace_mat, active)
+
+    # Update the Cholesky decomposition involved in the normal equations solving
+    P.chol_gram_augmat = isempty(active) ? P.chol_gram_eqmat :
+        cholesky_augmented_gram_mat(
+        P.workspace_mat.eqmat,
+        P.workspace_mat.fixvars,
+        P.chol_gram_eqmat)
+
+    return
+end
+
 
 
 # Identify which bounds from the box `[max(-Δ,ℓ), min(Δ,u)]` become active at

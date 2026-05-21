@@ -1,3 +1,4 @@
+debug_io = open("debug.out", "w")
 export traulls
 
 """
@@ -129,6 +130,11 @@ function traulls(
     verbose::Bool=false,
     inner_verbose::Bool=false) where T
 
+    global debug_io
+
+    print(debug_io, "A = ")
+    show(debug_io, model.linmat)
+    println(debug_io, "\n")
     # Arguments sanity checks
     !(hessian_approx in keys(dict_hessians)) &&
         throw(ArgumentError("Wrong hessian argument has been passed. Supported keywords are " *
@@ -206,6 +212,8 @@ function traulls(
     start_time = time()
 
     while !solved && iter <= max_iter && !max_penalty_reached
+        println(debug_io, "\n==== outer iter  $iter ====")
+        @printf(debug_io, "\n[traulls] πx = %.4e\n", pix)
 
         pix = solve_subproblem!(
             model,
@@ -305,6 +313,7 @@ function traulls(
                              elapsed_time)
 
     verbose && print(output_io, results)
+    close(debug_io)
 
     return results
 
@@ -461,6 +470,8 @@ function solve_subproblem!(
     verbose::Bool=false,
     io::IO=stdout) where T
 
+    global debug_io
+
     # Dimensions
     n, nslack, ncons = model.n, model.nslack, model.ncons
     lincons_present = model.nlincons > 0
@@ -508,6 +519,10 @@ function solve_subproblem!(
 
     while !solved && iter <= max_iter && !short_circuit
 
+        println(debug_io, "\n==== inner iter $iter ====")
+        println(debug_io, x)
+        println(debug_io, "[solve_subproblem!] Ax - b = ", model.linmat * x - model.linrhs)
+
         x_prev .= x
         rx_prev .= rx
         cx_prev .= cx
@@ -532,6 +547,8 @@ function solve_subproblem!(
 
         if short_circuit continue end
 
+        println(debug_io, "[solve_subproblem!] active bounds: ", findall(proj_op.workspace_mat.fixvars))
+        println(debug_io, "[solve_subproblem!] As = ", model.linmat*s)
         # Evaluate the objective at trial point
         x .+= s
         residuals!(model, rx, x)
@@ -599,9 +616,14 @@ function solve_subproblem!(
                 update_hessian!(hess_op, J, C, rx, cx, alx, alx_prev, g, y, s)
             end
 
-            pix = lincons_present ?
-                criticality_measure(x, g, gproj, proj_op) :
+            # Compute criticality measure
+            pix = if lincons_present
+                # Identify bounds active at `x` to form the appropriate tangent space
+                identify_active_set!(x, xlow, xupp, proj_op)
+                criticality_measure(x, g, gproj, proj_op)
+            else
                 criticality_measure(x, g, gproj, xlow, xupp)
+            end
 
 
         else
@@ -614,7 +636,7 @@ function solve_subproblem!(
         # norm_step = norm(s, Inf)
         update_radius!(tr, ratio, norm_step)
 
-        verbose && print_inner_iter(iter, alx_prev, norm(s, Inf), radius, ratio;io=io)
+        verbose && print_inner_iter(iter, alx_prev, norm(s), radius, ratio;io=io)
 
         # Evaluate termination criteria
         solved = pix <= tol_crit
@@ -687,10 +709,12 @@ function projected_gradient!(
     xupp::AbstractVector{T},
     radius::T,
     max_cg_iter::Int,
-    kappa_pg::T,
-    kappa_cg::T,
+    tol_pg::T,
+    mintol_cg::T,
     workspace::Workspace{T}) where T
 
+    global debug_io
+    A = proj_op.workspace_mat.eqmat
     # Buffers
     Hs = workspace.hess_vec
     slow, supp = workspace.step_low, workspace.step_upp
@@ -715,6 +739,8 @@ function projected_gradient!(
                  gproj,
                  Hs)
 
+    println(debug_io, "[projected_gradient!] Feasibility Cauchy step: As = ", A*s)
+
     # Set up for conjugate gradient iterations
     mul!(Hs, hess_op, s)
 
@@ -722,7 +748,7 @@ function projected_gradient!(
     b .= Hs .+ g
 
     # If Cauchy step provides sufficient decrease, exit
-    quasi_optimal = norm(proj_op * b) <= kappa_pg * norm(proj_op*g)
+    quasi_optimal = false # norm(proj_op * b) <= tol_pg * (1 + norm(proj_op*g))
     cg_stop = false
     iter = 1
 
@@ -740,9 +766,10 @@ function projected_gradient!(
             v,
             p,
             Hs,
-            kappa_cg)
+            mintol_cg)
 
         # Increment predicted reduction
+        println(debug_io, "[projected_gradient!] Feasibility after CG: As = ", A*s)
         pred += pred_cg
 
         # Prepare for next CG iterations
@@ -755,13 +782,13 @@ function projected_gradient!(
         norm_reduced_gnext = norm(proj_op * b)
 
         # Stop if the step provides sufficient decrease in the reduced gradient
-        quasi_optimal = norm_reduced_gnext <= kappa_pg * norm_reduced_g
+        quasi_optimal = norm_reduced_gnext <= tol_pg * (1 + norm_reduced_g)
 
         # Stop if negative curvature encountered
-        cg_stop = cg_status == negative_curvature # || cg_status == on_trust_region
+        cg_stop = cg_status == negative_curvature || cg_status == negative_dot
 
         # Identify the newly active bounds and update accordingly the projection operator
-        update_active_set!(s, slow, supp, proj_op)
+        update_inner_active_set!(s, slow, supp, proj_op)
 
         iter += 1
     end
@@ -796,8 +823,9 @@ function initial_point_and_projector!(
     n, m = model.n, model.nlincons
     xlow, xupp = model.xlow, model.xupp
 
-    solve_linfeas_pb!(A, x, b, xlow, xupp, m, n)
-
+    if norm(A*x-b) > tol
+        solve_linfeas_pb!(A, x, b, xlow, xupp, m, n)
+    end
     # Identity active bounds at starting point
     initial_active = falses(n)
 

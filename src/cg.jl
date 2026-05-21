@@ -15,6 +15,7 @@ Enum representing the termination status of the projected conjugate gradient met
     on_trust_region
     negative_curvature
     max_iter_reached
+    negative_dot
 end
 
 """ 
@@ -84,16 +85,25 @@ function pcg!(
     v::AbstractVector{T},
     p::AbstractVector{T},
     Hp::AbstractVector{T},
-    kappa_cg::T;
+    mintol_cg::T;
     eps_curv::T = T(1e-10)) where T
+
+    global debug_io
 
     r .= b
     mul!(v, P, r) # v ← Pr
-    rtv = dot(r,v)
+    rtv = dot(r, v)
     p .= -v
+    pred = zero(T)
 
+    if rtv < 0 return (negative_dot, pred) end
 
-    eps_cg = kappa_cg^2 * rtv  # √ϵ ← κ * ||v₀||
+    nrm_v = sqrt(rtv)
+    tol_cg = max(mintol_cg, min(T(0.1), sqrt(nrm_v)))
+    eps_cg = tol_cg * (1 + nrm_v)
+    @printf(debug_io, "\n[pcg!] eps_cg = %.4e\n", eps_cg)
+    # eps_cg = kappa_cg * sqrt(rtv)
+    # √ϵ ← κ * ||v₀||
 
     # Prepare for CG iterations
     iter = 1
@@ -103,7 +113,7 @@ function pcg!(
     neg_curvature = false
     outside_boundary = false
     trust_region_hit = false
-    pred = zero(T)
+
 
     while !solved && !neg_curvature && !outside_boundary && iter <= max_iter
 
@@ -123,7 +133,7 @@ function pcg!(
                 pred += -gamma * rtv + 0.5 * gamma^2 * pHp
             end
         else
-            rtv = dot(r,v)
+            rtv = dot(r, v)
             alpha = rtv / pHp
             gamma = factor_to_boundary(p, s, s_l, s_u, P)
             outside_boundary = alpha > gamma
@@ -132,7 +142,17 @@ function pcg!(
                 # Next direction goes beyond feasible box
                 # Compute direction that stops at the feasible box and stop cg
                 # iterations
+                println(debug_io, "[pcg!] outside boundary detected")
+                # println(debug_io, "[pcg!] before update As = ", P.workspace_mat.eqmat*s)
+                # println(debug_io, "[pcg!] Ap = ", P.workspace_mat.eqmat*p)
+                println(debug_io, "[pcg!] s =  ", s)
+                println(debug_io, "[pcg!] p = ", p)
+                println(debug_io, "[pcg!] slow = $(s_l); supp = $(s_u)")
+                @printf(debug_io, "[pcg!] γ = %.4e\n", gamma)
+                # println(debug_io, "[pcg!]γAp = ", P.workspace_mat.eqmat*gamma*p)
+
                 s .+= gamma .* p
+                println(debug_io, "[pcg!] after update As = ", P.workspace_mat.eqmat*s)
                 pred += -gamma * rtv + 0.5 * gamma^2 * pHp
                 # Check if the step lies at the trust region boundary
                 trust_region_hit = step_on_region(s, radius)
@@ -144,13 +164,18 @@ function pcg!(
                 # Form next conjugate directions
                 r .+= alpha .* Hp
                 mul!(v, P, r) # v ← Pr
-                rtv_next = dot(r,v)
-                beta = rtv_next / rtv
+                println(debug_io, "[pcg!] Av = ", P.workspace_mat.eqmat*v)
+                rtv_next = dot(r, v)
+                beta = rtv_next * (1 / rtv)
                 axpby!(-1, v, beta, p) # p ← -v + βp
-                rtv = rtv_next
 
+                rtv = rtv_next
+                if rtv < 0 return (negative_dot, pred) end
                 # Evaluate termination criteria
-                optimal = rtv < eps_cg
+                @printf(debug_io, "[pcg!] rᵀv = %.4e\n", rtv)
+                println(debug_io, "[pcg!] r =  ", r)
+                println(debug_io, "[pcg!] v = ", v)
+                optimal = sqrt(rtv) < eps_cg
                 too_small = rtv + T(1) <= T(1)
                 solved = optimal || too_small
 
@@ -171,5 +196,6 @@ function pcg!(
         max_iter_reached
     end
 
+    println(debug_io, "[pcg!] CG termination status: ", status)
     return status, pred
 end

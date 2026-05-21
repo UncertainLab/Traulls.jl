@@ -93,9 +93,16 @@ end
 # Pretting printing for `TraullsResults`
 function print(io::IO, results::TraullsResults)
 
+    xsol = results.solution
+
     println(io, "\n")
     println(io, "Finished in $(results.counters.niter_outer) outer iterations
 (with $(results.counters.niter_inner) total inner iterations)\n")
+
+    if size(xsol, 1) <= 10
+        println(io, "Solution: ", xsol)
+    end
+
     println(io, "Squared sum of residuals............................: ",
             @sprintf("%.6e", results.objective))
     println(io, "Criticality measure.................................: ",
