@@ -424,7 +424,7 @@ function CnlsModel(
     ncons::Int,
     eq_or_ineq::ConstraintsType) where T
 
-        # In-place versions of evaluation functions
+    # In-place versions of evaluation functions
     function r!(rx, x)
         rx[1:nres] .= r(x)
         return

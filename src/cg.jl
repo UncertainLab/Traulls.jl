@@ -88,8 +88,6 @@ function pcg!(
     mintol_cg::T;
     eps_curv::T = T(1e-10)) where T
 
-    global debug_io
-
     r .= b
     mul!(v, P, r) # v ← Pr
     rtv = dot(r, v)
@@ -98,18 +96,14 @@ function pcg!(
 
     if rtv < 0 return (negative_dot, pred) end
 
+    # Set tolerance
     nrm_v = sqrt(rtv)
-    tol_cg = max(mintol_cg, min(T(0.1), sqrt(nrm_v)))
-    eps_cg = tol_cg * (1 + nrm_v)
-    @printf(debug_io, "\n[pcg!] eps_cg = %.4e\n", eps_cg)
-    # eps_cg = kappa_cg * sqrt(rtv)
-    # √ϵ ← κ * ||v₀||
+    eps_cg = mintol_cg * (1 + nrm_v)
 
     # Prepare for CG iterations
     iter = 1
     max_iter = 2*(nb_degrees_of_freedom(P))
-    # approx_solved = abs(rtv) < tol_cg
-    solved = false
+    solved = nrm_v < eps_cg
     neg_curvature = false
     outside_boundary = false
     trust_region_hit = false
@@ -127,12 +121,14 @@ function pcg!(
             # Compute direction that stops at the feasible box and stop cg iterations
             neg_curvature = true
 
-            if abs(pHp) > eps_curv # nonzero curvature to sill take a step
+            if abs(pHp) > eps_curv
+                # nonzero curvature to sill take a step
                 gamma = factor_to_boundary(p, s, s_l, s_u, P)
                 s .+= gamma .* p
                 pred += -gamma * rtv + 0.5 * gamma^2 * pHp
             end
         else
+            # Compute model minimizer over current direction
             rtv = dot(r, v)
             alpha = rtv / pHp
             gamma = factor_to_boundary(p, s, s_l, s_u, P)
@@ -142,17 +138,7 @@ function pcg!(
                 # Next direction goes beyond feasible box
                 # Compute direction that stops at the feasible box and stop cg
                 # iterations
-                println(debug_io, "[pcg!] outside boundary detected")
-                # println(debug_io, "[pcg!] before update As = ", P.workspace_mat.eqmat*s)
-                # println(debug_io, "[pcg!] Ap = ", P.workspace_mat.eqmat*p)
-                println(debug_io, "[pcg!] s =  ", s)
-                println(debug_io, "[pcg!] p = ", p)
-                println(debug_io, "[pcg!] slow = $(s_l); supp = $(s_u)")
-                @printf(debug_io, "[pcg!] γ = %.4e\n", gamma)
-                # println(debug_io, "[pcg!]γAp = ", P.workspace_mat.eqmat*gamma*p)
-
                 s .+= gamma .* p
-                println(debug_io, "[pcg!] after update As = ", P.workspace_mat.eqmat*s)
                 pred += -gamma * rtv + 0.5 * gamma^2 * pHp
                 # Check if the step lies at the trust region boundary
                 trust_region_hit = step_on_region(s, radius)
@@ -161,20 +147,18 @@ function pcg!(
                 s .+= alpha .* p
                 pred -= 0.5 * alpha * rtv
 
-                # Form next conjugate directions
+                # Form next conjugate direction
                 r .+= alpha .* Hp
-                mul!(v, P, r) # v ← Pr
-                println(debug_io, "[pcg!] Av = ", P.workspace_mat.eqmat*v)
+                mul!(v, P, r)          # v ← Pr
                 rtv_next = dot(r, v)
-                beta = rtv_next * (1 / rtv)
+                beta = rtv_next / rtv
                 axpby!(-1, v, beta, p) # p ← -v + βp
 
-                rtv = rtv_next
-                if rtv < 0 return (negative_dot, pred) end
                 # Evaluate termination criteria
-                @printf(debug_io, "[pcg!] rᵀv = %.4e\n", rtv)
-                println(debug_io, "[pcg!] r =  ", r)
-                println(debug_io, "[pcg!] v = ", v)
+                rtv = rtv_next
+
+                if rtv < 0 return (negative_dot, pred) end
+
                 optimal = sqrt(rtv) < eps_cg
                 too_small = rtv + T(1) <= T(1)
                 solved = optimal || too_small
@@ -196,6 +180,5 @@ function pcg!(
         max_iter_reached
     end
 
-    println(debug_io, "[pcg!] CG termination status: ", status)
     return status, pred
 end
