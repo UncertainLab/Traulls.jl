@@ -1,4 +1,3 @@
-debug_io = open("debug.out", "w")
 export traulls
 
 """
@@ -130,11 +129,6 @@ function traulls(
     verbose::Bool=false,
     inner_verbose::Bool=false) where T
 
-    global debug_io
-
-    print(debug_io, "A = ")
-    show(debug_io, model.linmat)
-    println(debug_io, "\n")
     # Arguments sanity checks
     !(hessian_approx in keys(dict_hessians)) &&
         throw(ArgumentError("Wrong hessian argument has been passed. Supported keywords are " *
@@ -196,7 +190,9 @@ function traulls(
         criticality_measure(x, g, gproj, xlow, xupp)
 
     # tol_scale_factor = max(1, norm(g, Inf))
-    tol_crit = min_reltol_crit * (1 + pix)
+    tol_crit = lincons_present ?
+        min_reltol_crit :
+        min_reltol_crit * (1 + pix)
 
     solved = feas_measure <= min_tol_feas && pix <= tol_crit
 
@@ -212,8 +208,6 @@ function traulls(
     start_time = time()
 
     while !solved && iter <= max_iter && !max_penalty_reached
-        println(debug_io, "\n==== outer iter  $iter ====")
-        @printf(debug_io, "\n[traulls] πx = %.4e\n", pix)
 
         pix = solve_subproblem!(
             model,
@@ -263,13 +257,15 @@ function traulls(
             tol_feas = max(eta0 / mu^k_feas, min_tol_feas)
         end
 
-
         # Evaluate termination status
         g .= J'*rx + C'*y # Lagrangian gradient
 
-        norm_proj_gradlag = lincons_present ?
-            criticality_measure(x, g, gproj, proj_op) :
+        norm_proj_gradlag = if lincons_present
+            identify_active_set!(x, xlow, xupp, proj_op)
+            criticality_measure(x, g, gproj, proj_op)
+        else
             criticality_measure(x, g, gproj, xlow, xupp)
+        end
 
         solved = feas_measure <= min_tol_feas &&
             norm_proj_gradlag <= tol_crit
@@ -313,7 +309,6 @@ function traulls(
                              elapsed_time)
 
     verbose && print(output_io, results)
-    close(debug_io)
 
     return results
 
@@ -470,8 +465,6 @@ function solve_subproblem!(
     verbose::Bool=false,
     io::IO=stdout) where T
 
-    global debug_io
-
     # Dimensions
     n, nslack, ncons = model.n, model.nslack, model.ncons
     lincons_present = model.nlincons > 0
@@ -519,10 +512,6 @@ function solve_subproblem!(
 
     while !solved && iter <= max_iter && !short_circuit
 
-        println(debug_io, "\n==== inner iter $iter ====")
-        println(debug_io, x)
-        println(debug_io, "[solve_subproblem!] Ax - b = ", model.linmat * x - model.linrhs)
-
         x_prev .= x
         rx_prev .= rx
         cx_prev .= cx
@@ -545,10 +534,6 @@ function solve_subproblem!(
             reltol_crit,
             workspace)
 
-        if short_circuit continue end
-
-        println(debug_io, "[solve_subproblem!] active bounds: ", findall(proj_op.workspace_mat.fixvars))
-        println(debug_io, "[solve_subproblem!] As = ", model.linmat*s)
         # Evaluate the objective at trial point
         x .+= s
         residuals!(model, rx, x)
@@ -557,28 +542,29 @@ function solve_subproblem!(
         model.counters.nalobj_eval += 1
         norm_step = norm(s, Inf) # used for radius update
 
-        # Step taken on the slack variables, if any
-        if nslack > 0
+        # Feature currenlty not used
+        # Magical step taken on the slack variables, if any
+        # if nslack > 0
 
-            # Add "magical" step to current point x
-            step_slack!(x, y, cx, mu, nslack, ncons)
+        #     # Add "magical" step to current point x
+        #     step_slack!(x, y, cx, mu, nslack, ncons)
 
-            # Adjust the step vector
-            slack_idx = n - nslack + 1 : n
-            ineq_idx = ncons - nslack + 1 : ncons
-            s[slack_idx] .= x[slack_idx] .- x_prev[slack_idx] .- s[slack_idx]
+        #     # Adjust the step vector
+        #     slack_idx = n - nslack + 1 : n
+        #     ineq_idx = ncons - nslack + 1 : ncons
+        #     s[slack_idx] .= x[slack_idx] .- x_prev[slack_idx] .- s[slack_idx]
 
-            # Update the constraints involving slack variables without evaluating
-            cx[ineq_idx] .-= s[slack_idx]
+        #     # Update the constraints involving slack variables without evaluating
+        #     cx[ineq_idx] .-= s[slack_idx]
 
-            # Add reduction of the true objective function after taking second
-            # step to pred
-            pred -= alx
-            alx = al_obj(rx, cx, y, mu)
-            model.counters.nalobj_eval += 1
-            pred += alx
+        #     # Add reduction of the true objective function after taking second
+        #     # step to pred
+        #     pred -= alx
+        #     alx = al_obj(rx, cx, y, mu)
+        #     model.counters.nalobj_eval += 1
+        #     pred += alx
 
-        end
+        # end
 
         # Compute the ratio actual reduction / predicted reduction
         ratio = step_ratio(alx_prev, alx, pred)
@@ -713,8 +699,6 @@ function projected_gradient!(
     mintol_cg::T,
     workspace::Workspace{T}) where T
 
-    global debug_io
-    A = proj_op.workspace_mat.eqmat
     # Buffers
     Hs = workspace.hess_vec
     slow, supp = workspace.step_low, workspace.step_upp
@@ -739,8 +723,6 @@ function projected_gradient!(
                  gproj,
                  Hs)
 
-    println(debug_io, "[projected_gradient!] Feasibility Cauchy step: As = ", A*s)
-
     # Set up for conjugate gradient iterations
     mul!(Hs, hess_op, s)
 
@@ -748,7 +730,7 @@ function projected_gradient!(
     b .= Hs .+ g
 
     # If Cauchy step provides sufficient decrease, exit
-    quasi_optimal = false # norm(proj_op * b) <= tol_pg * (1 + norm(proj_op*g))
+    quasi_optimal = norm(proj_op * b) <= tol_pg * (1 + norm(proj_op*g))
     cg_stop = false
     iter = 1
 
@@ -769,7 +751,6 @@ function projected_gradient!(
             mintol_cg)
 
         # Increment predicted reduction
-        println(debug_io, "[projected_gradient!] Feasibility after CG: As = ", A*s)
         pred += pred_cg
 
         # Prepare for next CG iterations
@@ -830,7 +811,9 @@ function initial_point_and_projector!(
     initial_active = falses(n)
 
     for i in axes(x,1)
-        initial_active[i] = x[i] <= xlow[i] + tol || xupp[i] <= x[i] + tol
+        at_lower = isfinite(xlow[i]) && x[i] <= xlow[i] + abs(xlow[i]) * tol
+        at_upper = isfinite(xupp[i]) && x[i] + abs(xupp[i]) * tol >= xupp[i]
+        initial_active[i] = at_upper || at_lower
     end
 
     chol_aat = cholesky(A*A')
