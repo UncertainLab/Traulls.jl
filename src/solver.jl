@@ -568,7 +568,6 @@ function solve_subproblem!(
 
         # Compute the ratio actual reduction / predicted reduction
         ratio = step_ratio(alx_prev, alx, pred)
-
         accepted = accept_step(tr, ratio)
 
         if accepted
@@ -723,9 +722,10 @@ function projected_gradient!(
                  gproj,
                  Hs)
 
+
+
     # Set up for conjugate gradient iterations
     mul!(Hs, hess_op, s)
-
     b = workspace.cg_rhs
     b .= Hs .+ g
 

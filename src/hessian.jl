@@ -517,7 +517,7 @@ function second_order_secant_update!(bfgs_op::BFGS{T}, first_iter::Bool) where T
     sty = dot(s, y)
 
     # Update second order terms it sufficient curvature
-    if sty >= eps_skip * norm(s) * norm(y)
+    if sty >= eps_skip * (1 + norm(s) * norm(y))
 
         # Rescale initial approximation at first iter
         # Assumes initial approximation is identity
@@ -597,12 +597,13 @@ function second_order_secant_update!(hbfgs_op::HybridBFGS{T}, first_iter::Bool) 
     sty = dot(s, y)
 
     # Update second order terms it sufficient curvature
-    if sty >= eps_skip * norm(s) * norm(y)
+    if sty >= eps_skip * (1 + norm(s) * norm(y))
 
         # Rescale initial approximation at first iter
         # Assumes initial approximation is identity
         if first_iter
             scaling_factor = sty * (1 / dot(s, s))
+            hbfgs_op.S .= T(0)
             for i in axes(hbfgs_op.S, 1)
                 hbfgs_op.S[i, i] = scaling_factor
             end
