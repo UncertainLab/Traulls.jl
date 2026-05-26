@@ -1,7 +1,7 @@
 module Traulls
 
 # Packages
-using LinearAlgebra, Printf, Match, ForwardDiff, JuMP, HiGHS
+using LinearAlgebra, SparseArrays, Printf, Match, ForwardDiff, JuMP, HiGHS
 
 import LinearAlgebra.mul!, LinearAlgebra.transpose
 
@@ -9,11 +9,14 @@ import Base.print, Base.println
 
 # Abstract types
 
-abstract type ALHessian{T} end
-
 abstract type AbstractCnlsModel{T} end
 
+abstract type ALHessian{T} end
+
 abstract type Projector{T} end
+
+# Constants
+const ConstraintsType = Union{Val{:only_equalities}, Val{:only_inequalities}}
 
 # Include files
 
@@ -26,6 +29,7 @@ include("workspace.jl")
 include("cauchy.jl")
 include("execution_metrics.jl")
 include("model.jl")
+include("sparse_model.jl")
 include("print_info.jl")
 include("solver.jl")
 

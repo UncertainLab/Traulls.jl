@@ -1,7 +1,3 @@
-# Abstract type defined just for testing
-abstract type AbstractCnlsModel{T} end
-
-const ConstraintsType = Union{Val{:only_equalities}, Val{:only_inequalities}}
 """
     CnlsModel{T} <: AbstractCnlsModel{T}
 
@@ -51,7 +47,6 @@ signature `f!(fx, x)`, with input `x` and the result being stored in `fx`.
 For the out-of-place version, evaluation functions must return an output vector of
 appropriate dimension and have the signature `f(x)`.
 """
-
 mutable struct CnlsModel{T<:Real} <: AbstractCnlsModel{T}
     # In-place evaluation functions
     res!

@@ -1,4 +1,4 @@
-using Traulls, LinearAlgebra, ForwardDiff
+using Traulls, LinearAlgebra, ForwardDiff, SparseArrays
 using Test
 
 
@@ -8,4 +8,5 @@ include("hessian.jl")
 include("workspace.jl")
 include("metrics.jl")
 include("model.jl")
+include("sparse_model.jl")
 include("solve_hs65.jl")
