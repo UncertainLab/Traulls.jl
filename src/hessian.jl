@@ -395,6 +395,23 @@ function mul!(Hv::AbstractVector{T}, hsr1_op::HybridSR1{T}, v::AbstractVector{T}
 end
 
 """
+    update_jacobian(M, M₊)
+
+Replace the elements of matrix `M` by elements of matrix `M₊`.
+The methods are specified the distinguish the case where `M` and `M₊` are `SparseMatrix`
+with the same sparsity pattern.
+"""
+function update_jacobians!(hess_op::ALHessian, J_new::Matrix, C_new::Matrix)
+    hess_op.J .= J_new
+    hess_op.C .= C_new
+    return
+end
+
+function update_jacobians!(hess_op::ALHessian, J_new::SparseMatrixCSC, C_new::SparseMatrixCSC)
+    hess_op.J.nzval .= J_new.nzval
+    hess_op.C.nzval .= C_new.nzval
+end
+"""
     update_hessian!(H, J₊, C₊)
 
 Updates the Gauss-Newton Hessian approximation `H` by modifiying the `J` and `C`
@@ -405,8 +422,7 @@ function update_hessian!(
     J_new::AbstractMatrix{T},
     C_new::AbstractMatrix{T}) where T
     
-    H.J .= J_new
-    H.C .= C_new
+    update_jacobians!(H, J_new, C_new)
     return
 end
 
@@ -421,8 +437,8 @@ formula based on the secant equation
 """
 function update_hessian!(
     sr1_op::SR1{T}, 
-    J_new::Matrix{T},
-    C_new::Matrix{T},
+    J_new::AbstractMatrix{T},
+    C_new::AbstractMatrix{T},
     rx::Vector{T},
     cx::Vector{T},
     g::Vector{T},
@@ -435,8 +451,7 @@ function update_hessian!(
     sr1_op.step .= s
 
     # Update Jacobians 
-    sr1_op.J .= J_new
-    sr1_op.C .= C_new
+    update_jacobians(sr1_op, J_new, C_new)
 
     # Compute Second order terms
     second_order_secant_update!(sr1_op)
@@ -496,8 +511,7 @@ function update_hessian!(
     bfgs_op.step .= s
 
     # Update Jacobians
-    bfgs_op.J .= J_new
-    bfgs_op.C .= C_new
+    update_jacobians(bfgs_op, J_new, C_new)
 
     # Compute Second order terms
     second_order_secant_update!(bfgs_op, first_iter)
@@ -575,8 +589,7 @@ function update_hessian!(
     hbfgs_op.step .= s
 
     # Update first order terms
-    hbfgs_op.J .= J_new
-    hbfgs_op.C .= C_new
+    update_jacobians!(hbfgs_op, J_new, C_new)
 
     # Update second order terms
     second_order_secant_update!(hbfgs_op, first_iter)
@@ -656,8 +669,7 @@ function update_hessian!(
     second_order_secant_update!(hsr1_op)
 
     # Update first order terms
-    hsr1_op.J .= J_new
-    hsr1_op.C .= C_new
+    update_jacobians!(hsr1_op, J_new, C_new)
 
     return
 end
@@ -725,8 +737,7 @@ function reset_hessian!(
     n = size(J0, 2)
     zero_T = zero(T)
 
-    H.J .= J0
-    H.C .= C0
+    update_jacobians!(H, J0, C0)
     H.mu = mu0
     H.S .= zero_T
     H.step .= zero_T
@@ -747,8 +758,7 @@ function reset_hessian!(
 
     initial_second_order = Matrix{T}(I, n, n)
 
-    H.J .= J0
-    H.C .= C0
+    update_jacobians!(H, J0, C0)
     H.mu = mu0
     H.S .= initial_second_order
     H.step .= zero_T
@@ -768,8 +778,7 @@ function reset_hessian!(
     zero_T = zero(T)
     initial_second_order = Matrix{T}(I, n, n)
 
-    H.J .= J0
-    H.C .= C0
+    update_jacobians!(H, J0, C0)
     H.mu = mu
     H.S .= initial_second_order
     H.step .= zero_T
@@ -789,8 +798,7 @@ function reset_hessian!(
     n = size(J0, 2)
     zero_T = zero(T)
 
-    H.J .= J0
-    H.C .= C0
+    update_jacobians!(H, J0, C0)
     H.S .= zero_T
     H.mu = mu
     H.step .= zero_T
