@@ -66,7 +66,6 @@
         end
         return
     end
-
     # Dense version
     function jc(x)
         n = size(x, 1)
