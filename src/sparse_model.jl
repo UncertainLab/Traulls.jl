@@ -360,3 +360,26 @@ function jac_nlconstraints(model::SparseCnlsModel{T, Ti},
     jac_nlconstraints!(model, Cx, x)
     return Cx
 end
+
+function print(io::IO, model::SparseCnlsModel)
+
+    n, nslack, nres, ncons = model.n, model.nslack, model.nres, model.ncons
+    nvar = n - nslack
+    nz_jres = size(model.jr_nzrows, 1)
+    nz_jcons = size(model.jnleq_nzrows, 1) + size(model.jnlineq_nzrows, 1)
+
+    println(io, "Problem dimensions")
+    println(io, "Number of parameters.......................: ", @sprintf("%5i", nvar))
+    println(io, "Number of slack variables..................: ", @sprintf("%5i", nslack))
+    println(io, "Number of residuals........................: ", @sprintf("%5i", nres))
+    println(io, "Number of nonlinear constraints............: ", @sprintf("%5i", ncons))
+    println(io, "Number of non zeros in residuals jacobian..: ", @sprintf("%5i", nz_jres))
+    println(io, "Number of non zeros in constraints jacobian: ", @sprintf("%5i", nz_jcons))
+    println(io, "Number of linear constraints...............: ", @sprintf("%5i", model.nlincons))
+    println(io, "Number of lower bounds.....................: ", @sprintf("%5i",
+                                                                    count(isfinite, model.xlow)))
+    println(io, "Number of upper bounds.....................: ", @sprintf("%5i",
+                                                                    count(isfinite, model.xupp)))
+end
+
+println(io::IO, model::SparseCnlsModel) = print(io,"\n", model)

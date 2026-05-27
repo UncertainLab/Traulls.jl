@@ -104,7 +104,7 @@ inner minimization phase into `output_io` (default: `false`)
 Returns the important execution informations into a [`TraullsResults`](@ref).
 """
 function traulls(
-    model::CnlsModel{T};
+    model::AbstractCnlsModel{T};
     mu::T = T(10),
     tau::T = T(10),
     omega0::T = T(1),
@@ -126,6 +126,7 @@ function traulls(
     max_inner_iter::Int = 1000,
     max_cg_iter::Int = 50,
     output_io::IO=stdout,
+    init_mult::Bool=true,
     verbose::Bool=false,
     inner_verbose::Bool=false) where T
 
@@ -152,8 +153,10 @@ function traulls(
     J = jac_residuals(model, x)
     C = jac_nlconstraints(model, x)
 
-    y = least_squares_multipliers(rx, J, C) # Initial Lagrange mutipliers
-                                            # estimates
+    # Initial Lagrange mutipliers
+    y = init_mult ? least_squares_multipliers(rx, J, C) : zeros(T, ncons)
+
+    # Al gradient
     g = al_grad(rx, cx, y, mu, J, C)        # Gradient of the AL
     model.counters.nalgrad_eval += 1
 
@@ -442,7 +445,7 @@ algorithm (default: `3`)
 - `io`: input/output stream to log iteration detail (default: `stdout`)
 """
 function solve_subproblem!(
-    model::CnlsModel{T},
+    model::AbstractCnlsModel{T},
     x::AbstractVector{T},
     xlow::AbstractVector{T},
     xupp::AbstractVector{T},
@@ -781,7 +784,7 @@ end
 # Modifies the initial guess for the solution such that it is feasible to the bounds
 # Forms and returns the operator computing projections on coordinate subspaces
 function initial_point_and_projector!(
-    model::CnlsModel{T},
+    model::AbstractCnlsModel{T},
     x::AbstractVector{T},
     ::Val{false}) where T
 
@@ -795,7 +798,7 @@ end
 # Identifies the bounds active at the initial point found and forms the associate `Projector
 # operator computing projections on reduced subspaces
 function initial_point_and_projector!(
-    model::CnlsModel{T},
+    model::AbstractCnlsModel{T},
     x::AbstractVector{T},
     ::Val{true};
     tol::T=sqrt(eps(T))) where T

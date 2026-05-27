@@ -1,5 +1,5 @@
 function print_traulls_header(
-    model::CnlsModel{T},
+    model::AbstractCnlsModel{T},
     fx::T,
     feas_measure::T,
     pix::T,

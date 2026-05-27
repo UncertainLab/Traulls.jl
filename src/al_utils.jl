@@ -33,8 +33,8 @@ Compute the gradient of the augmented Lagrangian objective and store it in `g`.
 - `cx::AbstractVector{T}`: Constraint violation vector.
 - `y::AbstractVector{T}`: Lagrange multiplier vector.
 - `mu::T`: Penalty parameter.
-- `J::Matrix`: Jacobian matrix of the residuals.
-- `C::Matrix`: Jacobian matrix of the constraints.
+- `J::AbstractMatrix`: Jacobian matrix of the residuals.
+- `C::AbstractMatrix`: Jacobian matrix of the constraints.
 - `g::AbstractVector{T}`: Output vector to store the computed gradient (modified in-place).
 
 # Returns
@@ -45,8 +45,8 @@ function al_grad!(
     cx::AbstractVector{T},
     y::AbstractVector{T},
     mu::T,
-    J::Matrix,
-    C::Matrix,
+    J::AbstractMatrix{T},
+    C::AbstractMatrix{T},
     g::AbstractVector{T}) where T
 
     g .= J'*rx + C'*(y + cx .* mu)
@@ -63,8 +63,8 @@ Compute and return the gradient of the augmented Lagrangian objective.
 - `cx::AbstractVector{T}`: Constraint violation vector.
 - `y::AbstractVector{T}`: Lagrange multiplier vector.
 - `mu::T`: Penalty parameter.
-- `J::Matrix`: Jacobian matrix of the residuals.
-- `C::Matrix`: Jacobian matrix of the constraints.
+- `J::AbstractMatrix`: Jacobian matrix of the residuals.
+- `C::AbstractMatrix`: Jacobian matrix of the constraints.
 
 # Returns
 - `g`: gradient of the Augmented Lagrangian evaluated at `x`
@@ -74,8 +74,8 @@ function al_grad(
     cx::AbstractVector{T},
     y::AbstractVector{T},
     mu::T,
-    J::Matrix,
-    C::Matrix) where T
+    J::AbstractMatrix{T},
+    C::AbstractMatrix{T}) where T
     
     g = similar(rx, size(J, 2))
     al_grad!(rx, cx, y, mu, J, C, g)
@@ -93,8 +93,8 @@ Compute both the augmented Lagrangian objective value and its gradient, storing 
 - `cx::AbstractVector{T}`: Constraint violation vector.
 - `y::AbstractVector{T}`: Lagrange multiplier vector.
 - `mu::T`: Penalty parameter.
-- `J::Matrix`: Jacobian matrix of the residuals.
-- `C::Matrix`: Jacobian matrix of the constraints.
+- `J::AbstractMatrix`: Jacobian matrix of the residuals.
+- `C::AbstractMatrix`: Jacobian matrix of the constraints.
 - `g::AbstractVector{T}`: Output vector to store the computed gradient (modified in-place).
 
 # Returns
@@ -125,8 +125,8 @@ Compute and return both the augmented Lagrangian objective value and its gradien
 - `cx::AbstractVector{T}`: Constraint violation vector.
 - `y::AbstractVector{T}`: Lagrange multiplier vector.
 - `mu::T`: Penalty parameter.
-- `J::Matrix`: Jacobian matrix of the residuals.
-- `C::Matrix`: Jacobian matrix of the constraints.
+- `J::AbstractMatrix`: Jacobian matrix of the residuals.
+- `C::AbstractMatrix`: Jacobian matrix of the constraints.
 
 # Returns
 - Tuple containing the objective value and the gradient vector.
@@ -140,7 +140,7 @@ function al_objgrad(
     C::AbstractMatrix{T}) where T
 
     mx = al_obj(rx, cx, y, mu)
-    g = AbstractVector{T}{T}(undef,size(J,2))
+    g = AbstractVector{T}(undef,size(J,2))
     al_grad!(rx, cx, y, mu, J, C, g)
 
     return mx, g
@@ -178,8 +178,8 @@ This problem is solved by the normal equations approach, so matrix `C` must be f
 
 # Arguments 
 - `rx::AbstractVector{T}`: residuals evaluated at current point
-- `J::Matrix`: Jacobian of the residuals at current point
-- `C::Matrix`: Jacobian of the equality constraints at current
+- `J::AbstractMatrix`: Jacobian of the residuals at current point
+- `C::AbstractMatrix`: Jacobian of the equality constraints at current
 
 """
 function least_squares_multipliers(
@@ -190,7 +190,7 @@ function least_squares_multipliers(
     # TODO: Replace this computation by an iterative solving
     gf = J'*rx
     cct = C*C'
-    y = zeros(size(C, 1))
+    y = zeros(T, size(C, 1))
 
     if isposdef(cct)
         chol_cct = cholesky(cct)

@@ -68,7 +68,6 @@ end
     @test all(!iszero, H.S)
 
     H_test = J'*J + mu*C'*C + S
-    @show H.S
     @test H*v ≈ H_test*v
 
     # TODO: test the updating procedures (one case where the update is done, one where it is rejected)

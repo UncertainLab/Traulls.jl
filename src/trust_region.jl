@@ -2,7 +2,8 @@
 """
     TrustRegion{T}
 
-Mutable structure to represent a trust region constraint of the form `||s|| ≤ Δ` and its update parameters.
+Mutable structure to represent a trust region constraint of the form `||s|| ≤ Δ` and its
+update parameters.
 
 # Fields
 
@@ -11,7 +12,8 @@ Mutable structure to represent a trust region constraint of the form `||s|| ≤ 
 - `accept_treshold`: step acceptance threshold (scalar in `(0,1)`)
 - `increase_factor`: factor to increase the radius (scalar greater than `1`)
 - `decrease_factor`: factor to decrease the radius (scalar in `(0,1)`)
-- `neg_ratio_factor`: factor to decrease the radius in case of negative ratio (scalar in `(0,1)`)
+- `neg_ratio_factor`: factor to decrease the radius in case of negative ratio
+(scalar in `(0,1)`)
 """
 mutable struct TrustRegion{T<:Real}
     radius::T
@@ -69,7 +71,8 @@ end
 """
     accept_step(tr,ρ)
 
-Asserts if the ratio `ρ` associated to the step computed in the current trust region `tr` is accepted or not.
+Asserts if the ratio `ρ` associated to the step computed in the current trust region `tr` is
+accepted or not.
 """
 accept_step(tr::TrustRegion{T},rho::T) where T = rho >= tr.accept_threshold
 
@@ -77,13 +80,14 @@ accept_step(tr::TrustRegion{T},rho::T) where T = rho >= tr.accept_threshold
 """
     step_ratio(mx, mx_trial, pred)
 
-Computes and returns the ratio of the actual reduction `mx_trial-mx` in the objective function over the reduction predicted by the model.
+Computes and returns the ratio of the actual reduction `mx_trial-mx` in the objective
+function over the reduction predicted by the model.
 
-Note that for a quadratic model of the form `s ↦ 0.5*sᵀHs + gᵀs + mx`, the predicted reduction when taking step `s` is merely `0.5*sᵀHs + gᵀs`.
+The value is computed to avoid roundoff errors when both reductions are very small, up to a
+tolerance slightly larger than double relative precision.
 
-The value is computed to avoid roundoff errors when both reductions are very small, up to a tolerance slightly larger than double relative precision.
-
-This method follows the procedure described in Trust Region Methods (Conn et. al, SIAM, 2000), section 17.4.2.
+This method follows the procedure described in Trust Region Methods
+(Conn et. al, SIAM, 2000), section 17.4.2.
 
 # Arguments
 
@@ -129,7 +133,8 @@ end
 """
     update_radius!(tr,ρ,||s||)
 
-Update the trust region radius according to the value of the radius `ρ` and using `||s||` the `∞`-norm of the step.
+Update the trust region radius according to the value of the radius `ρ` and using `||s||`
+the `∞`-norm of the step.
 
 For clarity, we identify the fields of `tr` as 
 
@@ -170,7 +175,8 @@ end
 """
     factor_to_boundary(x,d,Δ)
 
-Computes and returns the largest `α > 0` such that `||x + αd|| = Δ` where `||.||` denotes the euclidean norm.
+Computes and returns the largest `α > 0` such that `||x + αd|| = Δ` where `||.||` denotes
+the euclidean norm.
 """
 function factor_to_boundary(
     x::AbstractVector{T},
