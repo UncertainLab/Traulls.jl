@@ -189,7 +189,7 @@ function least_squares_multipliers(
 
     # TODO: Replace this computation by an iterative solving
     gf = J'*rx
-    cct = C*C'
+    cct = Matrix(C*C') # converted to matrix because bad results when C is sparse
     y = zeros(T, size(C, 1))
 
     if isposdef(cct)

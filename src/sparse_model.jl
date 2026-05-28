@@ -243,7 +243,7 @@ function jac_residuals!(
 
     n, n_slack, m = model.n, model.nslack, model.nres
     n_var = n - n_slack
-    x_var = view(x,1:n_var)
+    x_var = view(x, 1:n_var)
 
     # Derivatives with respect to decision variables
     Jxvar = view(J, 1:m, 1:n_var)

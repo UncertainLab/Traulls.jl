@@ -168,6 +168,7 @@ function traulls(
         $bfgs        => BFGS(J, C, mu)
         $hybrid_bfgs => HybridBFGS(J, C, mu)
         $hybrid_sr1  => HybridSR1(J, C, mu)
+        $limited_sr1 => LSR1(J, C, mu)
     end
 
     # Set up trust region
@@ -491,6 +492,7 @@ function solve_subproblem!(
         $hybrid_sr1  => reset_hessian!(hess_op, J, C, mu)
         $bfgs        => reset_hessian!(hess_op, J, C, mu)
         $hybrid_bfgs => reset_hessian!(hess_op, J, C, mu)
+        $limited_sr1 => reset_hessian!(hess_op, J, C, mu)
     end
 
     reset_projector!(proj_op)
@@ -602,6 +604,10 @@ function solve_subproblem!(
             elseif hessian_approx == hybrid_sr1
                 # HybridSR1 update
                 update_hessian!(hess_op, J, C, rx, cx, alx, alx_prev, g, y, s)
+
+            elseif hessian_approx == limited_sr1
+                # L-SR1 update
+                update_hessian!(hess_op, J, C, rx, cx, g, y, s)
             end
 
             # Compute criticality measure
