@@ -37,6 +37,7 @@
 \usepackage[square,sort,comma,numbers]{natbib}
 \usepackage{algorithm}
 \usepackage{algpseudocode}
+\usepackage{subcaption}
 \usepackage{tikz-cd}
 \usetikzlibrary{positioning, fit, backgrounds, arrows.meta}
 \usepackage{enumitem}
@@ -77,7 +78,7 @@
 \begin{document}
 	
 	\title{An augmented Lagrangian algorithm for constrained nonlinear least-squares} %%%%%%%%%%%%
-	\author{Pierre Borie\footremember{udem}{University of Montreal, Department of Computer Science and Operations Research, Montreal, QC, Canada}, Fabian Bastin\footrecall{udem}}
+	\author{Pierre Borie\footremember{udem}{University of Montreal, Department of Computer Science and Operations Research, Montreal, QC, Canada}, Fabian Bastin\footrecall{udem}, Stéphane Dellacherie\footremember{hq}{Hydro-Québec, Montreal, QC, Canada}\footremember{uqam}{Université du Québec à Montréal, Montreal, QC, Canada}}
 	\date{}
 	
 	
@@ -88,19 +89,10 @@
 	\begin{abstract}
 		\noindent We present an algorithm for solving nonlinear least-squares problems subject to a mix of nonlinear and linear constraints. The nonlinear constraints are handled by reformulating the objective as the augmented Lagrangian function while linear constraints are handled directly. Each iteration consists in approximately solving a linearly constrained problem by means of a gradient projection technique. Our approach also involves a structured approximation of the augmented Lagrangian Hessian. We show global convergence of the method and provide numerical experiments.
 	\end{abstract} %%%%%%%%% 
-	
-	\tableofcontents
-	\fabian{Pas de table des matières dans un article}
-	
-	\fabian{Il faudrait au moins ajouter Stéphane dans les co-auteurs et peut-être aussi Alain. La table des matières devra être retirée dans la version soumise.}
-	
+
 	\section{Introduction}
 	
-	\mfabian{Il faudrait ajouter une revue de littérature.}
-	
-	The nonlinear least-squares (NLS) problem consists in minimizing an objective function of the form $\frac{1}{2}\|r(x)\|^2$, where $r\colon \RR^n \to \RR^{n_r}$ is a vector of residuals and $\|\cdot\|$ denotes the $\ell_2$ norm. This structure arises naturally in data fitting, parameter estimation, and scientific computing. A distinctive feature of NLS problems is that the Hessian of the objective can be decomposed into a first-order part $J(x)^TJ(x)$, where $J(x)$ is the Jacobian of $r$, and a second-order part involving the individual Hessians of the residuals weighted by their values. The Gauss--Newton (GN) method~\cite{nocedalwright:2006} exploits this decomposition by retaining only the first-order term, which is effective when the residuals are small at the solution but can lead to poor convergence otherwise. This limitation has motivated a rich literature on structured Hessian approximations. The NL2SOL package~\cite{dennisetal:1981,dennis-etal:1989} complements the GN term with a structured quasi-Newton (SQN) correction updated via a secant equation, while the Levenberg--Marquardt method~\cite{levenberg:1944,marquardt:1963} regularizes the GN matrix by a scalar multiple of the identity. Hybrid strategies that switch between GN and full approximations depending on the residual size have also been explored~\cite{albaalifletcher:1985,fletcherxu:1987}. Further structured approaches include factorized secant updates~\cite{yabetakahashi:1991,zhouchen:2010} and secant equations tailored to the least-squares structure~\cite{biggs:1977,huschens1994}; a comprehensive numerical comparison of these techniques can be found in~\cite{lucksan-etal:2019}.
-	
-	In many applications, the variables are subject to constraints, and in this paper we consider the constrained NLS problem
+	We consider the constrained nonlinear least-squares (NLS) problem
 	\begin{equation}
 		\label{pb:cnls}
 		\begin{aligned}
@@ -109,20 +101,15 @@
 			& x \in \Omega
 		\end{aligned}
 	\end{equation}
-	where $r$ and the constraint function $c\colon \RR^n \to \RR^{n_c}$ are assumed to be twice continuously differentiable. The set $\Omega$ consists of linear constraints and is defined as
+	where $\|\cdot\|$ denotes the $\ell_2$ normThe residuals $r\colon \RR^n \to \RR^{n_r}$ and constraints $c\colon \RR^n \to \RR^{n_c}$ functions are assumed to be twice continuously differentiable with respective Jacobian $J$ and $C$. The set $\Omega$ consists of linear constraints and is defined as
 	\begin{equation}\label{eq:linear_constraints}
 		\Omega = \left\{ x \in \RR^n \ | \ Ax=b,\ l \le x \le u\right\},
 	\end{equation}
-	with $A\in\RR^{m\times n}$, $m < n$, $b\in \RR^m$, and $l,u \in \RR^n$. Without loss of generality, some components of the latter two vectors can be set to $\pm \infty$ for unbounded parameters. The simultaneous presence of nonlinear constraints $c(x)=0$ and a polyhedral feasible set $\Omega$ makes problem~\eqref{pb:cnls} considerably more challenging than the unconstrained case.
-	
-	Extensions of structured NLS methods to the constrained setting are comparatively less developed. Most existing approaches rely on sequential quadratic programming (SQP) frameworks. In particular, \cite{li-etal:2002} propose an SQP method whose Hessian approximation is based on a secant equation derived from~\cite{biggs:1977}, \cite{tjoabiegler:1991} use a BFGS update of the projected Hessian of a merit function, and~\cite{amiribartels:1989} update the projected Hessian in the null space of the active constraints. For problems with equality constraints only, more recent work includes regularized approaches: \cite{bergou-etal:2021} combine a Levenberg--Marquardt approximation of the Lagrangian Hessian with a trust-region method, and~\cite{orbansiquiera:2020} derive a regularized KKT system by adding primal and dual regularization terms.
-	
-	An alternative to SQP methods is the augmented Lagrangian (AL) framework, also known as the method of multipliers, independently introduced by~\cite{hestenes:1969} and~\cite{powell:1969}, with further theoretical foundations provided by~\cite{rockafellar:1973}. Rather than solving a sequence of quadratic subproblems as in SQP, AL methods penalize the nonlinear constraints in the objective and solve a sequence of simpler subproblems where only the easy constraints remain. For problem~\eqref{pb:cnls}, this amounts to approximately minimizing, at each outer iteration, the AL function over the polyhedral set $\Omega$, reducing the problem to a linearly constrained one. A major implementation of this philosophy is the LANCELOT solver~\cite{conn-etal:1992}, which handles bound-constrained subproblems using a gradient projection technique~\cite{conn-etal:1988b}. The theoretical underpinnings of this approach, including global convergence results, are developed in~\cite{conn-etal:1988a,conn-etal:1991,conn-etal:1993,conn-etal:1996b} and summarized in~\cite[][Chapter 14]{conn-etal:2000}. More recent AL implementations include the work of~\cite{andreani-etal:2008}, who provide convergence results under weaker constraint qualifications, \cite{gillrobinson:2012}, who propose a primal-dual AL method that handles degenerate constraints, \cite{arreckx-etal:2016}, who implement a matrix-free AL approach with support for inequality constraints via slack variables, and~\cite{curtis-etal:2015}, who develop an adaptive AL algorithm with inexact subproblem solves.
-	
-	The inner minimization over $\Omega$ that arises at each outer AL iteration is a linearly constrained optimization problem. Gradient projection methods have a rich history for such problems: projected search techniques~\cite{moretoraldo:1991} and the TRON solver~\cite{linmore:1999a} have been particularly effective for bound-constrained problems. When linear equality constraints are present, the computation of projections onto the feasible set can be handled efficiently via normal equations or augmented systems~\cite{gould-etal:2001}. When both bounds and linear equalities are present, as in our case, direct projection onto $\Omega$ is less trivial, but the reduced gradient---the projection of the gradient onto the tangent space of the active constraints---provides a practical criticality measure, as used in solvers such as MINOS~\cite{murtaghsaunders:1978} and LSNNO~\cite{tointtuyttens:1992}\pierre{TODO: Trouver des exemples plus récents}.
-	
-	\pierre{TODO: Préciser notre positionnement par rapport à la littérature.}
-	The present work makes several contributions at the intersection of these lines of research. First, we develop an AL algorithm whose inner minimization phase is specifically designed for polyhedral feasible sets of the form~\eqref{eq:linear_constraints}, combining bound constraints with linear equalities. The inner solver relies on a gradient projection technique where the Cauchy point is computed along the projected gradient path, followed by minor iterations using a projected conjugate gradient method. Efficient projection onto the tangent space of the active constraints is achieved through a normal equations approach with an incrementally updated Cholesky factorization. Second, we approximate the Hessian of the AL function by a structured SR1 update that exploits the sum-of-squares structure of both the objective and the penalty term, following the secant equation philosophy of~\cite{biggs:1977,dennisetal:1981} adapted to the AL setting in the spirit of~\cite{li-etal:2002}. While the latter works employ structured quasi-Newton techniques within SQP frameworks, and the LANCELOT solver~\cite{conn-etal:1992} uses an AL framework for bound constrained problems without exploiting the least-squares structure, our approach combines both ingredients. Third, we establish global convergence of the method by adapting the trust region analysis of~\cite{conn-etal:1988a} to account for the polyhedral constraint structure and by relying on the AL convergence framework of~\cite{conn-etal:1996b}.
+	with $A\in\RR^{m\times n}$, $m < n$, $b\in \RR^m$, and $l,u \in \RR^n$. Without loss of generality, some components of the latter two vectors can be set to $\pm \infty$ for unbounded parameters. For convenience, we also assume that the linear equalities do not involve single-variable constraints. Formulation~\eqref{pb:cnls} is also suitable problems with nonlinear inequality constraints of the form $g(x) \ge 0$. The latter are transformed into equality constraints by adding non-negative slack variables, which gives the new constraints
+	\begin{equation}
+		g(x) - \nu = 0,\quad \nu \ge 0.
+	\end{equation}
+	The lower and upper bounds associated to these slack variables are thus $0$ and $\infty$ respectively. Linear inequality constraints can be converted into equalities similarly.
 	
 	The Lagrangian for problem~\eqref{pb:cnls}, with respect to the nonlinear constraints, is defined by 
 	\begin{equation}
@@ -131,7 +118,7 @@
 	\end{equation}
 	where $\lambda \in \RR^{n_c}$ is the vector of Lagrange multipliers and $\inner{\cdot}{\cdot}$ is the standard inner product.
 	
-	An algorithm for solving problem~\eqref{pb:cnls} aims to find a first-order critical point $(x^*,\lambda^*)$ such that
+	An algorithm for solving problem~\eqref{pb:cnls} aims to find a first-order critical point $(x^*,\lambda^*)$ that satisfy the necessary condition
 	\begin{equation}
 		\begin{aligned}
 			&x^* \in \Omega\ \text{and}\ c(x^*)=0 \\
@@ -142,6 +129,34 @@
 	\begin{equation}\label{eq:projector}
 		\proj{\Omega}{x}= \argmin_{v\in \Omega} \ \|x-v\|. 
 	\end{equation}
+	
+	The NLS structure arises naturally in data fitting, parameter estimation,and scientific computing, and its efficient resolution has attracted a sustained research effort.
+	A distinctive feature of NLS problems is that the Hessian of the objective decomposes into a first-order part $J(x)^TJ(x)$, where $J(x)$ is the Jacobian of $r$, and second-order part involving the individual Hessians of the residuals weighted by their values. Exploiting this decomposition is the central challenge in designing
+	efficient algorithms.
+	The Gauss--Newton (GN) method~\cite[][Chapter 9]{dennisschnabel:1996} retains only the first-order term, which is effective when residuals are small at the solution but can lead to poor convergence otherwise.
+	The Levenberg--Marquardt (LM) method, initiated in~\cite{levenberg:1944,	marquardt:1963} and further studied, for instance, in~\cite{bellavia-etal:2018,	bergou-etal:2021}, regularizes the GN matrix by a scalar multiple of the identity, providing robustness at the cost of potentially slower convergence on large-residual problems.
+	A richer class of approaches, known as structured quasi-Newton (SQN) methods, approximates the second-order part through secant equations tailored to the least-squares structure. The NL2SOL package~\cite{dennisetal:1981,dennis-etal:1989} is a popular implementation of this idea, complementing the GN term with a structured quasi-Newton correction updated via a dedicated secant equation. This algorithm also switches between the GN model or the full Hessian depending on the quality of the step. Other hybrid strategies with switching criterion based on the residual magnitude have also been explored in~\cite{albaalifletcher:1985, fletcherxu:1987, zhouchen:2010}. Further SQN formulations, including factorized updates and sizing strategies, have been proposed in~\cite{biggs:1977, betts:1976, huschens1994, yabetakahashi:1991, zhang-etal:2000}. A comprehensive numerical comparison of these techniques can be found in~\cite{lucksan-etal:2019}
+	
+	Extensions of structured NLS methods to the constrained setting are comparatively less developed but is also an active research topic. The convex case, especially the bound constrained case, is studied in~\cite{bellavia-etal:2004, bellavia-etal:2011, porcelli:2013, goncalvesmenezes:2020}
+	For more general nonlinear constraints, most methods operate within a sequential quadratic programming (SQP) framework. In that paradigm, each iteration solves a quadratic subproblem obtained by linearizing the constraints and approximating the Hessian of the Lagrangian. \cite{li-etal:2002} propose an SQP method whose Hessian approximation
+	is based on a secant equation derived from~\cite{biggs:1977}; \cite{tjoabiegler:1991} use a BFGS update of the projected Hessian of a merit function; and~\cite{amiribartels:1989} update a the structured  approximation projected Hessian in the null space of the active constraints.
+	For problems with equality constraints only, more recent work includes regularized approaches: \cite{bergou-etal:2021} combine a Levenberg--Marquardt approximation of the Lagrangian Hessian with a trust-region method, and~\cite{orbansiquiera:2020} derive aregularized KKT system by adding primal and dual regularization terms.
+	Structured approximations of the Hessian within general constrained	formulations have also been studied from a theoretical perspective in~\cite{tapia:1988}.
+	
+	When the constraints can be split into two categories, as in formulation~\eqref{pb:cnls}, an alternative to SQP methods is the augmented Lagrangian (AL) framework, also known as the method of multipliers, independently introduced by~\cite{hestenes:1969} and~\cite{powell:1969}, with further theoretical foundations provided by~\cite{rockafellar:1973}.
+	Rather than solving a sequence of quadratic subproblems, AL methods incorporate the nonlinear constraints into the objective as a penalty term and solve a sequence of subproblems in which only the easier constraints remain.
+	For problem~\eqref{pb:cnls}, this amounts to approximately minimizing, at each outer iteration, the AL function over the polyhedral set $\Omega$, thereby reducing the problem to a linearly constrained one. This strategy is particularly attractive as the linear part can be handled directly and efficiently by gradient projection techniques, without sacrificing the ability to enforce nonlinear constraints.
+	The theoretical underpinnings of this approach, including global convergence results, are developed in~\cite{conn-etal:1988a,conn-etal:1991, conn-etal:1993, conn-etal:1996b} and summarized	in~\cite[][Chapter~14]{conn-etal:2000}.
+	A major implementation of this philosophy is the LANCELOT solver~\cite{conn-etal:1992}, which handles bound-constrained
+	subproblems using a gradient projection technique~\cite{conn-etal:1988b}.
+	More recent AL implementations have broadened this framework in several	directions: \cite{andreani-etal:2008} establish convergence under
+	weaker constraint qualifications; \cite{gillrobinson:2012} propose a primal-dual AL method that behaves like a stabilized SQP method in the local regime; \cite{arreckx-etal:2016} implement a matrix-free AL approach and \cite{curtis-etal:2015} develop an adaptive AL algorithm with inexact subproblem solves.
+	For the inner minimization that arises at each outer AL iteration, gradient projection methods~\cite{moretoraldo:1991, linmore:1999a} are particularly effective for bound-constrained problems as they allow for rapid changes in the active set throughout the iterations, The linear equality case can be handled efficiently by solving as the projections can computed by solving a system of normal equations~\cite{gould-etal:2001}.
+	When both bounds and linear equalities are present, as in our setting, direct projection onto $\Omega$ is less straightforward. Nevertheless, we will see in the next section that
+	the norm of the reduced gradient provides a practical criticality measure, as used in solvers such as MINOS~\cite{murtaghsaunders:1978} and LSNNO~\cite{tointtuyttens:1992}.
+	
+	The present work combines two well-established lines of research: the augmented Lagrangian framework of Conn, Gould, and Toint~\cite{conn-etal:1988a, conn-etal:1991, conn-etal:1993, conn-etal:1996b, conn-etal:2000}, with its mature convergence theory and gradient projection inner minimization, and the quasi-Newton approximations that exploit the sum-of-squares structure of both the objective and the penalty term, following the secant equation philosophy of~\cite{biggs:1977,dennisetal:1981} adapted to the AL setting in the spirit of~\cite{li-etal:2002}. Bringing these together yields a solver specifically designed for NLS problems while handling constraints of general form, including nonlinear equalities and inequalities alongside linear equalities and bounds. Our algorithm is implemented in the Julia programming language~\cite{bezanson-etal:2017} and is open-source.
+
 	We end this section by introducing some notations. Jacobian matrices of $r$ and $c$ evaluated at $x$ are respectively noted $J(x)$ and $C(x)$. Components of a vector $x\in\RR^n$ are noted $x_i$ for $i=1,\ldots,n$. When describing iterative processes to solve problem~\eqref{pb:cnls}, we index vectors and matrices by the iteration number. For instance, at iteration $k$, $(x_k,\lambda_k)$ is the current primal-dual iterate. For functions evaluated at $x_k$, we use the shorthand notation $r_k = r(x_k)$, $c_k =c(x_k)$, $J_k=J(x_k)$ etc. To not interfere with previous notation for components, we will add parentheses to make the distinction clear. For instance, $(x_k)_i$ denotes the $i$-th component of vector $x_k$.	
 	
 	The rest of the paper is organized as follows. In Section~\ref{sec:algorithm}, we present our algorithmic framework and discuss implementation details. We study global convergence in Section~\ref{sec:convergence_analysis}. Numerical experiments are shown in Section~\ref{sec:numerical_experiments} and we conclude with perspectives.
@@ -190,15 +205,15 @@
 			\text{s.t.}  \quad & x \in \Omega.
 		\end{aligned}	
 	\end{equation}
-	Moving the nonlinear constraints into the objective simplifies the problem because only linear constraints are left, which enables one to use iterative methods for linearly constrained optimization while still improving feasibility of the nonlinear constraints. A local minimum of~\eqref{pb:cnls_al_reformulation} can be characterized by the condition
+	Moving the nonlinear constraints into the objective simplifies the problem because only linear constraints are left, which enables one to use iterative methods for linearly constrained optimization while still improving feasibility of the nonlinear constraints. Since $\Omega$ is a convex set, a first-order critical point of~\eqref{pb:cnls_al_reformulation} can also be characterized by the condition
 	\begin{equation}\label{eq:al_sp_criticality_cond}
-		x^* \in \argmin_{x \in \Omega} \Phi(x,\lambda,\mu) \iff \proj{\Omega}{x^*-\nabla_x \Phi(x^*,\lambda,\mu)} = x^*.
+	 \proj{\Omega}{x^*-\nabla_x \Phi(x^*,\lambda,\mu)} = x^*.
 	\end{equation}
-	Another advantage of AL methods is that they come naturally with the update formula for the multipliers:
+	We follow the standard scheme of AL methods, which consist in approximately solving a sequence of linearly constrained problems of the form~\eqref{pb:cnls_al_reformulation} until convergence towards a first-order critical point. If an iterate $x_k$ improves the feasibility violation of the nonlinear constraints, we take a dual ascent step on the Lagrange multipliers by setting
 	\begin{equation}\label{eq:al_multipliers_update}
-		\lambda_{k+1} = \bar{\lambda}(x_k,\lambda_k,\mu_k).
+		\lambda_{k+1} = \lambda_k + \mu_k c_k = \bar{\lambda}(x_k,\lambda_k,\mu_k).
 	\end{equation}
-	We follow the standard scheme of AL methods, which consist in approximately solving a sequence of linearly constrained problems of the form~\eqref{pb:cnls_al_reformulation} until convergence towards a first-order critical point. The Lagrange multipliers and penalty parameters are adjusted depending on the progress in the feasibility of the nonlinear constraints. Our method is outlined in Algorithm~\ref{algo:traulls}. For references on general AL methods, we refer the reader to the implementation of the software for nonlinear programming named LANCELOT~\cite{conn-etal:1992} with contents based on~\cite{conn-etal:1988a,conn-etal:1991, conn-etal:1993, conn-etal:1996b} and summarized in~\cite[][Chapter 14]{conn-etal:2000}. See also~\cite{hestenes:1969,powell:1969,rockafellar:1973} for early theoretical considerations of the method of multipliers and~\cite{andreani-etal:2008,gillrobinson:2012,curtis-etal:2015, arreckx-etal:2016} for more recent implementations of AL algorithms.
+	If on the contrary, feasibility has not been improved, the minimization~\eqref{pb:cnls_al_reformulation} is restarted using an increased penalty parameter $\mu_{k+1} > \mu_k$. Our method is outlined in Algorithm~\ref{algo:traulls}. 
 	\begin{algorithm}
 		\caption{Augmented Lagrangian algorithm}\label{algo:traulls}
 		\begin{algorithmic}[1]
@@ -230,7 +245,7 @@
 	
 	Tolerances in Algorithm~\ref{algo:traulls} are updated in such a way that both sequences $\omega_k$ and $\eta_k$ tend to $0$ when $k \to \infty$. The update scheme that we outline follows the rules described in~\cite[][Chapter 14]{conn-etal:2000}. The parameters values used in our implementation are given in Section~\ref{subsec:implementation_details}.
 	
-	We describe the convergence in terms of the norm of the projected gradient but this quantity is not easily computable in practice. Indeed, contrary to the case where there is only bounds or linear equality constraints, there is no direct formula for the projection on a polyhedral set of the form $\Omega$. For our implementation, we will use the norm of the ``reduced" gradient, which we define now. 
+	We describe the convergence in terms of the norm of the projected gradient but this quantity is not easily computable in practice. Indeed, contrary to the case where there is only bounds or linear equality constraints, there is no direct formula for the projection on a polyhedral set of the form $\Omega$. For our implementation, we will use the norm of the reduced gradient, which we define now. 
 	
 	For $x \in \Omega$, $I(x)$ denotes the set of all bound constraints satisfied as equalities (active) at $x$, i.e.:
 	\begin{equation}
@@ -244,13 +259,13 @@
 	\begin{equation}
 		\proj{T(x)}{\nabla_x \Phi(x,\lambda,\mu)}.
 	\end{equation}
-	Provided that the multipliers associated to the active bounds are of appropriate sign, the quantity $\|\proj{T(x)}{\nabla_x \Phi(x,\lambda,\mu)}\|$ is an appropriate criticality measure used in optimization algorithms for linearly constrained optimization such as MINOS~\cite{murtaghsaunders:1978} and LSNNO~\cite{tointtuyttens:1992}\pierre{TODO: Trouver des exemples plus récents}.
+	Provided that the multipliers associated to the active bounds are of appropriate sign, the quantity $\|\proj{T(x)}{\nabla_x \Phi(x,\lambda,\mu)}\|$ is an appropriate criticality measure used in optimization algorithms for linearly constrained optimization such as MINOS~\cite{murtaghsaunders:1978} and LSNNO~\cite{tointtuyttens:1992}.
 	Projections on $T(x)$ can be computed in an efficient manner. Indeed, assuming that $I(x) =  \left\{i_1,\ldots, i_p\right\}$ with $p < n-m$ and denoting by $Z \in \RR^{p\times n}$ the matrix whose row $k$ is the row $i_k$ of the $n\times n$ identity matrix, $T(x)$ is nothing but the null space of the block matrix 
 	\[ \tilde{A} = \begin{pmatrix}
 		A \\Z
 	\end{pmatrix}.\] 
 	Let $\tilde{N}$ be a matrix whose columns form an orthonormal basis of the null space of $\tilde{A}$. By construction and our full rank Assumption~\ref{assumption:full_rank_A}, $\tilde{A}$ is also full rank. Then, the projection of a vector $v$ onto the null space of $\tilde{A}$ is given by $\tilde{P}v$ where
-	\[\tilde{P} = \tilde{N}\left(\tilde{N}^T\tilde{N}\right)^{-1}\tilde{N}^T,\]
+	\[\tilde{P} = \tilde{N}\tilde{N}^T,\]
 	There is no need to explicitly form the matrix $\tilde{N}$ because we can make use of the equivalent expression of the projection matrix $\tilde{P}$:
 	\begin{equation}\label{eq:minor_subpb_projector}
 		\tilde{P} = I - \tilde{A}^T\left(\tilde{A}\tilde{A}^T\right)^{-1}\tilde{A}.
@@ -396,7 +411,7 @@
 	\end{equation}
 	where $l^{(k,j)}:= l_k - s_{k,j}$ and $u^{(k,j)}:= u_k - s_{k,j}$.
 
-	We now describe how the minor subproblem~\eqref{pb:minor_subpb} is solved. The idea is to apply the projected conjugate gradient~\cite{gould-etal:2001} method with the previous minor iterate $x_{k,j}$ as a starting point. Three termination cases can occur. First, we can generate a direction such that a component in the current active set $\mfabian{I}(x_{k,j})$ violates one on the bounds~\eqref{subeq:minor_subpb_bounds}. When this happens, we scale the direction so that the associate component lies at the bound and stop the CG iterations. The second case occurs when we generate a direction of negative curvature and is handled similarly as the first one, i.e. we modify the direction so that it reaches the limit of the feasible set. The third case is the normal termination one and occurs when we find a local minimizer, with respect to a given tolerance. In all cases, we return the obtained search direction $w_{k,j}$, perform the projected line search to compute the point $x_{k,j+1}$ such that~\cref{eq:minor_iterate_feasible,eq:minor_iterate_decrease} are verified. The handling of the termination cases differ in the continuation of the procedure. The last two cases (negative curvature and local minimality), cause the stopping of our minor iterates mechanism. On the contrary, if the CG iterations stopped because a bound was hit, we go back to solving~\eqref{pb:minor_subpb} using projected conjugate gradient method with $x_{k,j+1}$ as a starting point and $I(x_{k,j+1}) \supset I(x_{k,j})$ as a new set of fixed components.
+	We now describe how the minor subproblem~\eqref{pb:minor_subpb} is solved. The idea is to apply the projected conjugate gradient~\cite{gould-etal:2001} method with the previous minor iterate $x_{k,j}$ as a starting point. Three termination cases can occur. First, we can generate a direction such that a component in the current active set $I(x_{k,j})$ violates one on the bounds~\eqref{subeq:minor_subpb_bounds}. When this happens, we scale the direction so that the associate component lies at the bound and stop the CG iterations. The second case occurs when we generate a direction of negative curvature and is handled similarly as the first one, i.e. we modify the direction so that it reaches the limit of the feasible set. The third case is the normal termination one and occurs when we find a local minimizer, with respect to a given tolerance. In all cases, we return the obtained search direction $w_{k,j}$, perform the projected line search to compute the point $x_{k,j+1}$ such that~\cref{eq:minor_iterate_feasible,eq:minor_iterate_decrease} are verified. The handling of the termination cases differ in the continuation of the procedure. The last two cases (negative curvature and local minimality), cause the stopping of our minor iterates mechanism. On the contrary, if the CG iterations stopped because a bound was hit, we go back to solving~\eqref{pb:minor_subpb} using projected conjugate gradient method with $x_{k,j+1}$ as a starting point and $I(x_{k,j+1}) \supset I(x_{k,j})$ as a new set of fixed components.
 	
 	Each iteration of the conjugate gradient method applied to~\eqref{pb:minor_subpb} requires computing projections onto the null space of the constraints~\eqref{subeq:minor_subpb_fix_bounds}--\eqref{subeq:minor_subpb_fix_bounds}. We denote the associated projection operator, in this case a $n\times n$ matrix, by $\tilde{P}$. The specification of the projected conjugate gradient method applied to solving~\eqref{pb:minor_subpb} is outlined in Algorithm~\ref{algo:projected_cg_method}.
 	
@@ -435,54 +450,11 @@
 	
 	An interesting feature would be to complement each search direction by a steplength computed by a projected search~\cite{moretoraldo:1991,linmore:1999a}. This allows to add more than one constraint at each minor iteration to the active set. The downside is that is would also require to compute the projection of the gradient direction~\eqref{eq:projected_gradient_path} on the feasible set $\Omega$ at every new trial value of the steplength. When $\Omega$ only contains bound constraints, the projection is trivial and cheap to compute. The linear equality case is more costly but can still be handled efficiently by a \textit{normal equations} or \textit{augmented system} approach~\cite{gould-etal:2001}. When $\Omega$ is of the form~\eqref{eq:linear_constraints}, the projection is less trivial and requires to solve the associated minimum-distance quadratic program with a dedicated solver for quadratic programming, which we currently prefer to avoid.
 	
-	We stop the minor-iterations procedure when the reduced gradient associated to the current active set is small enough. More formally, assume we performed the $j+1$ minor minimizations and let $T_{k,j}$ be the tangent space at $x_{x,j}$ with respect to the active bounds in $I(x_{k,j})$. We stop the minor iteration loop whenever the following inequality is satisfied:
+	We stop the minor-iterations procedure when the reduced gradient associated to the current active set is small enough. More formally, assume we performed the $j+1$ minor minimizations and let $T_{k,j}$ be the tangent space at $x_{k,j}$ with respect to the active bounds in $I(x_{k,j})$. We stop the minor iteration loop whenever the following inequality is satisfied:
 	\begin{equation}\label{eq:reduced_gradient_stop_condition}
 		\left\Vert \proj{T_{k,j}}{\nabla m_k(x_{k,j+1})} \right\Vert \le \kappa_{mlt} \left\Vert \proj{T_{k,j}}{\nabla m_k(x_k)}\right\Vert,
 	\end{equation}
 	with $\kappa_{mlt} \in (0,1)$\footnote{Minor Loop Tolerance}. This inequality estimates if there is relative progress that can be made in the tangent subspace spanned by the free variables. 
-	
-	We have described our algorithm with respect to formulation~\eqref{pb:cnls} with equality constraints but we also accept problems with nonlinear inequality constraints of the form $g(x) \ge 0$. We transform the latter into equality constraints by adding non-negative slack variables, which gives the new constraints
-	\begin{equation}
-		g(x) - \nu = 0,\quad \nu \ge 0.
-	\end{equation}.
-	The lower and upper bounds associated to these slack variables are thus $0$ and $\infty$ respectively. Of course, a similar treatment can be applied to transform potential linear inequality constraints into equalities.
-	The AL function is now 
-	\[\Phi(x,\nu,\lambda,\mu) = \varphi(x,\nu) = \dfrac{1}{2} \|r(x)\|^2 + \inner{\lambda}{\begin{pmatrix}
-			c(x) \\ g(x) - \nu
-	\end{pmatrix}} + \dfrac{\mu}{2} \left\| \begin{matrix}
-		c(x) \\ g(x) - \nu
-	\end{matrix}\right\|^2\] 
-	When slack variables are present, the step can be complemented by an additional \textit{magical} step that is guaranteed to further reduce the AL function. This procedure, described in~\cite{conn-etal:1999} and also used in~\cite{arreckx-etal:2016}, consists in a special update of the slack variables that exploits the structure of the AL. Let $(x_k,\nu_k)$ be the current iterate and $\left((\bar{s}_k)_x,(\bar{s}_k)_\nu\right)$ the step computed at an iteration of Algorithm~\ref{algo:trinner_iteration}. We write the associated trial point 
-	\[\begin{pmatrix}
-		\bar{x}_k \\ \bar{\nu}_k
-	\end{pmatrix}=
-	\begin{pmatrix} x_k \\ \mfabian{\nu_k} \end{pmatrix} + \begin{pmatrix} (\bar{s}_k)_x \\ (\bar{s}_k)_\nu \end{pmatrix}.\]
-	Since $\nu \mapsto \Phi(x,\nu,\lambda,\mu)$ 
-	is quadratic and convex, we can further minimize $\Phi$ by solving 
-	\begin{equation}\label{eq:al_min_wrt_slack} 
-		\begin{aligned}
-			\min_{\nu} \quad& \varphi(\bar{x}_k,\nu) \\
-			\text{s.t.}  \quad & \nu \ge 0. 
-		\end{aligned}	
-	\end{equation}
-	The solution, noted $\hat{\nu}_k$, is explicit with components given by
-	\begin{equation}\label{eq:magical_step}
-		\left(\hat{\nu}_k\right)_i = \max\left(0, \dfrac{\lambda_i}{\mu} + g_i(\bar{x}_k)\right).
-	\end{equation}
-	The trial step for the current iteration is thus
-	\begin{equation}\label{eq:magical_trial_step}
-		s_k = \begin{pmatrix}
-			(s_k)_x \\ (s_k)_\nu
-		\end{pmatrix} =
-		\begin{pmatrix}
-			(\bar{s}_k)_x \\ \hat{\nu}_k-\bar{\nu}_k.
-		\end{pmatrix}
-	\end{equation}
-	Using the latter step is tantamount to directly setting the slack variables values to~\eqref{eq:magical_step}, as we do not change the step relative to the $x$ variables. This also implies that it does not require additional functions evaluations, since one only needs $r(\bar{x}_k)$ and $g(\bar{x}_k)$ to compute the actual reduction $\varphi\left(x_k+(s_k)_x,\nu_k+(s_k)_\nu\right)$. However, the predicted reduction needs to be changed to reflect the effect of the complementary step. Since we did not use the model to compute the second step, it is not relevant to evaluate the model reduction at $s_k$. A suitable choice is to define the new predicted reduction as the sum of the predicted reduction obtained by the first step with the actual reduction obtained by the second step, i.e.
-	\begin{equation}\label{eq:pred_magical_step}
-		q_k(s_k) + \varphi\left(x_k+(s_k)_x,\nu_k+(s_k)_\nu\right) - \varphi\left(x_k+(\bar{s}_k)_x,\nu_k+(\bar{s}_k)_\nu\right).
-	\end{equation} 
-	During our numerical experiments, we have observed significant robustness improvements of the algorithm on problems with inequality constraints.
 	
 	\subsubsection{Hessian approximation}\label{subsec:hessian_approx}
 	
@@ -495,15 +467,13 @@
 	\begin{equation}\label{eq:hessian_gn_approx}
 		H_k = J_k^TJ_k + \mu C_k^TC_k.
 	\end{equation}
-	We will call it the Gauss-Newton (GN) approximation, in reference to its counterpart in the unconstrained case. On the one hand, this approximation is very convenient and cheap as it involves already available first-order derivatives, since they are required to evaluate the gradient. Also, when the Jacobians are full rank, the resulting matrix is positive-definite which guarantees the convexity of subproblems of the form~\eqref{eq:inner_itr_subpb}. On the other hand, it is known to be less efficient on problems with non zero residuals at the solution. This downside is amplified when we are to approximate the Hessian of the Lagrangian, or the AL in our case. Indeed, setting $S_k$ to the zero matrix not only neglects the contribution of the residuals to the curvature of the model, but is also neglects the contribution of the Lagrange multipliers, for which there are no reasons to equal zero.
+	We also call it the Gauss-Newton (GN) approximation, in reference to its counterpart in the unconstrained case. On the one hand, this approximation is very convenient and cheap as it involves already available first-order derivatives, since they are required to evaluate the gradient. Also, when the Jacobians are full rank, the resulting matrix is positive-definite which guarantees the convexity of subproblems of the form~\eqref{eq:inner_itr_subpb}. On the other hand, it is known to be less efficient on problems with non zero residuals at the solution. This downside is amplified when we are to approximate the Hessian of the Lagrangian, or the AL in our case. Indeed, setting $S_k$ to the zero matrix not only neglects the contribution of the residuals to the curvature of the model, but is also neglects the contribution of the Lagrange multipliers, for which there are no reasons to equal zero.
 	
 	We thus need to take into account the full Hessian to form an approximation. Looking at the literature on this subject, one can observe that there is a variety of approaches focusing on the unconstrained case, as it is a major challenge in improving the efficiency of algorithms for problems with non zero residuals at the solution. Nevertheless, relevant parallels can be drawn with the AL situation, or the constrained case in general, since these studies explore techniques to deal with second order terms. Because the first-order terms are readily available and provide curvature information, only the second-order components need to be approximated. Therefore, we look for an approximation of the form 
 	\begin{equation}\label{eq:hessian_full_approx}
 		H_k = B^{GN}_k + B_k.
 	\end{equation}
-	where $B^{GN}_k$ is the right hand side of~\eqref{eq:hessian_gn_approx} and  $B_k$ is a symmetric approximation of $S_k$. The simplest choice, apart from setting $S_k=0$, is to approximate $S_k$ by a scalar multiple of the identity matrix $\sigma_k I$ where $\sigma_k$ is an iteration dependent regularization parameter. This approach, known as the Levenberg-Marquardt~\cite{levenberg:1944,marquardt:1963} (LM) method, is more robust than the GN method and performs well in practice, although on paper, it can be slowly convergent on large residuals problems. This technique has also been used in algorithms for nonlinear least-squares with equality constraints. Indeed, the authors in~\cite{bergou-etal:2021} use it to approximate the Hessian of the Lagrangian, whereas in~\cite{orbansiquiera:2020}, the authors add primal and dual regularization terms to the objective function in order to derive a regularized KKT system of equations.  
-	
-	The third class of methods, and the one we will use, consists in starting with an initial approximation $S_0$ and update it iteratively after by a formula derived from a secant equation. Standard quasi-Newton methods employ DFP, BFGS or SR1 formulas~\cite[][Chapter 6]{nocedalwright:2006}. Since this exploits the structure of the Hessian, we will talk about structured quasi-Newton (SQN) methods.
+	where $B^{GN}_k$ is the right hand side of~\eqref{eq:hessian_gn_approx} and  $B_k$ is a symmetric approximation of $S_k$. 
 	If $B_k$ is the current approximation of $S_k$, in order to compute the approximation $B_{k+1}$ of $S_{k+1}$, we require that a secant equation of the form
 	\begin{equation}\label{eq:structured_secant_equation}
 		B_{k+1}s_k = y_k,
@@ -518,25 +488,27 @@
 	\begin{equation}\label{eq:components_secant_equations}
 		B^{r_i}_{k+1}s_k = \nabla r_i(x_{k+1}) - \nabla r_i(x_k) \qquad \text{and} \qquad B^{c_i}_{k+1}s_k = \nabla c_i(x_{k+1}) - \nabla c_i(x_k),
 	\end{equation}
-	i.e. that each Hessian maps the change in the variables to the change in the gradients. Noticing that, for each $i$, $\nabla r_i(x_{k+1}) - \nabla r_i(x_k)$, resp. $\nabla c_i(c_{k+1}) - \nabla c_i(x_k)$, is the $i$-th row of $\left(J_{k+1}-J_k\right)^T$, resp. $\left(C_{k+1}-C_k\right)^T$, summing over the residuals and constraints indices all the terms of~\eqref{eq:components_secant_equations} gives, by~\eqref{eq:sum_hessian_approximations}, the structured secant equation
+	i.e. that each Hessian maps the change in the variables to the change in the gradients. Noticing that, for each $i$, $\nabla r_i(x_{k+1}) - \nabla r_i(x_k)$, resp. $\nabla c_i(x_{k+1}) - \nabla c_i(x_k)$, is the $i$-th row of $\left(J_{k+1}-J_k\right)^T$, resp. $\left(C_{k+1}-C_k\right)^T$, summing over the residuals and constraints indices all the terms of~\eqref{eq:components_secant_equations} gives, by~\eqref{eq:sum_hessian_approximations}, the structured secant equation
 	\begin{equation}\label{eq:structured_sr1_secant_eq}
 		B_{k+1}s_k = \left(J_{k+1}-J_k\right)^Tr_{k+1} + \left(C_{k+1}-C_k\right)^T\bar{\lambda}_{k+1}.
 	\end{equation}
-	To follow the conventional notations of quasi-Newton methods, we will note $y_k:= g_{k+1}-g_k$ and denote the right hand side of~\mfabian{\eqref{eq:structured_sr1_secant_eq}} by $y^A_k$ to insist on its link with the AL formulation.
+	To follow the conventional notations of quasi-Newton methods, we will denote the right hand side of~\eqref{eq:structured_sr1_secant_eq} by $\tilde{y}_k$ to insist on its distinction with the standard term $y_ky_k:= g_{k+1}-g_k$. Note that, as in structured QN methods for unconstrained least-squares~\cite{lucksan-etal:2019}, one has
+	\[B^{GN}s_k \tilde{y}_k = y_k,\]
+	so the resulting approximation satisfies the standard secant equation $H_ks_k = y_k$.
 	
-	From~\eqref{eq:structured_sr1_secant_eq}, we can derive the SR1 update formula 
+	We can now derive an update formula from equation~\eqref{eq:structured_sr1_secant_eq}. In our implementation, we apply the SR1 update
 	\begin{equation}\label{eq:structured_sr1_update}
-		B_{k+1} = B_k + \dfrac{(y^A_k-B_ks_k)(y^A_k-B_ks_k)^T}{\inner{y^A_k-B_ks_k}{s_k}},
+		B_{k+1} = B_k + \dfrac{(\tilde{y}_k-B_ks_k)(\tilde{y}_k-B_ks_k)^T}{\inner{\tilde{y}_k-B_ks_k}{s_k}},
 	\end{equation}
-	if $\inner{y^A_k-B_ks_k}{s_k} \neq 0$. When the denominator in~\eqref{eq:structured_sr1_update} is zero, we simply set $B_{k+1}=B_k$. To avoid numerical errors, we apply the update when
+	if $\inner{\tilde{y}_k-B_ks_k}{s_k} \neq 0$. When the denominator in~\eqref{eq:structured_sr1_update} is zero, we simply set $B_{k+1}=B_k$. To avoid numerical errors, we apply the update when
 	\begin{equation}\label{eq:structured_sr1_safeguard}
-		\left|\inner{y^A_k-B_ks_k}{s_k}\right| \ge \kappa_{sds}\|s_k\|\|y^A_k-B_ks_k\|,
+		\left|\inner{\tilde{y}_k-B_ks_k}{s_k}\right| \ge \kappa_{sds}\|s_k\|\|\tilde{y}_k-B_ks_k\|,
 	\end{equation}
 	for $\kappa_{sds} \in (0,1)$\footnote{Small Denominator Safeguard}. Inequality~\eqref{eq:structured_sr1_safeguard} is one of the most commons safeguards used in SR1 methods. 
 	
 	The choice of the SR1 method is motivated by its robustness in the least-squares context, as the exhaustive benchmarks in~\cite{lucksan-etal:2019} show, and its tendency to better approximate the true Hessian with each iteration~\cite{conn-etal:1991a}. The approximation could thus be indefinite, which could be considered as a weakness compared to BFGS of DFP updates, that are guaranteed to be positive definite as long as it is the case for the initial approximation $B_0$. However, as it is highlighted in Algorithm~\ref{algo:projected_cg_method}, the use of the conjugate gradients method in a trust region framework handles, and even exploits, the potential non-convexity of the subproblems. Moreover, this update does not require a curvature condition $\inner{s_k}{y_k} > 0$ to be satisfied. In other works on the constrained case, SQN methods are used to approximate the projected Hessian of the Lagrangian \cite{tjoabiegler:1991}, or of a merit function~\cite{amiribartels:1989}, in the null space of the active constraints. The BFGS update is then preferred because this matrix is, under standard assumptions, positive semidefinite, according to the second-order necessary conditions.
 	
-	We end our description of the Hessian approximation by discussing about hybrid updates, a feature that we do not implement but that is commonly used in SQN methods for nonlinear least-squares algorithms, either in the unconstrained~\cite{dennisetal:1981,albaalifletcher:1985,fletcherxu:1987} or constrained~\cite{tjoabiegler:1991,li-etal:2002} case. The idea is to test at every iteration if the problem has small or large residuals at the solution. In the latter case, a structured update is used to increase the accuracy of the approximated Hessian whereas in the former, the GN approximation is employed. Note that the update, such as~\eqref{eq:structured_sr1_update}, is still computed at every iteration to continue accumulate curvature information. We have tested a strategy inspired from~\cite{fletcherxu:1987} adapted to the constrained case, that computes the relative reduction
+	We end our description of the Hessian approximation by discussing about hybrid updates, a feature commonly used in SQN methods for nonlinear least-squares algorithms, either in the unconstrained~\cite{dennisetal:1981,albaalifletcher:1985,fletcherxu:1987} or constrained~\cite{tjoabiegler:1991,li-etal:2002} case. The idea is to test at every iteration if the problem has small or large residuals at the solution. In the latter case, a structured update is used to increase the accuracy of the approximated Hessian whereas in the former, the GN approximation is employed, as it is more likely to correspond to the true Hessian. Note that the update, such as~\eqref{eq:structured_sr1_update}, is still computed at every iteration to continue accumulate curvature information. We use a strategy inspired from~\cite{fletcherxu:1987} adapted to the constrained case in~\cite{tjoabiegler:1991}, that computes the relative reduction
 	\begin{equation}\label{eq:relative_reduction_al}
 		\zeta_k = \dfrac{\varphi(x_{k})-\varphi(x_{k+1})}{\varphi(x_{k})},
 	\end{equation}
@@ -547,11 +519,11 @@
 			&B^{GN}_{k+1} + B_{k+1} & & \text{otherwise}, 
 		\end{aligned}\right.
 	\end{equation}
-	where $\kappa_{hyb}$ is a parameter in $(0,1)$. Update~\eqref{eq:hybrid_update_strategy} is used with $\kappa_{hyb}=0.1$ in~\cite{tjoabiegler:1991} where the AL plays the role of a merit function. We observed that the algorithm does less outer and inner iterations without using an hybrid switching rule. We suspect that a rule base on the ratio~\eqref{eq:relative_reduction_al} is not suited for the AL Hessian, as there are second-order terms that can not legitimately be neglected even for small residuals problems and close to a feasible point.
+	where $\kappa_{hyb}$ is a parameter in $(0,1)$. Update~\eqref{eq:hybrid_update_strategy} is used with $\kappa_{hyb}=0.1$ in~\cite{tjoabiegler:1991} where the AL plays the role of a merit function, they use the same update~\eqref{eq:hybrid_update_strategy} scheme . As we will in section~\ref{sec:numerical_experiments}, it has an important impact on the performance of the algorithm.
 	
 	\subsubsection{Summary and implementation details}\label{subsec:implementation_details}
 	
-	We end our description of algorithm by summarizing the relations between outer, inner and minor iterates and the default values for the different constants exposed in this section.
+	We end our discussion by summarizing the relations between outer, inner and minor iterates and the default values for the different constants exposed in this section.
 	\begin{itemize}
 		\item The outer iterates $x_K$ are the main iterates of the algorithm and are approximate minimizers of the AL
 		\item Each outer iterate is formed after a sequence of inner iterates $(x_k)_k$, linked by $x_{k+1}=x_k+s_k$ where $s_k$ is an approximate solution of the QP~\eqref{pb:quadratic_subproblem}
@@ -607,7 +579,7 @@
 		\draw[->, thick, gray, dashed] (boundhit.east) -- ++(6mm,0) |- node[right, font=\scriptsize, pos=0.25]{restart} (pcg.east);
 		
 		\end{tikzpicture}
-		\caption{Hierarchy of the three iteration levels in the TRAULLS algorithm. The outer loop updates the Lagrange multipliers and penalty parameter. Each outer iteration triggers a sequence of trust-region inner iterations, and each inner iteration computes its step via a Cauchy point followed by minor iterations using the projected conjugate gradient method.}
+		\caption{Hierarchy of the three iteration levels in the AL algorithm. The outer loop updates the Lagrange multipliers and penalty parameter. Each outer iteration triggers a sequence of trust-region inner iterations, and each inner iteration computes its step via a Cauchy point followed by minor iterations using the projected conjugate gradient method.}
 		\label{fig:iteration_hierarchy}
 	\end{figure}
 	Our intention with the work presented in this paper was to conceive an algorithm able to handle directly linear constraints of the form~\eqref{eq:linear_constraints} but we also accept problems where linear constraints are only bounds and then
@@ -622,14 +594,16 @@
 		\end{aligned} \right.
 	\end{equation}
 	One could argue that, since computing~\eqref{eq:projection_bounds} is cheaper than solving the normal equations~\eqref{eq:proj_normal_eq_auxiliary_syst}, we could make use of projected searches~\cite{moretoraldo:1991} as it is done in the solver TRON~\cite{linmore:1999a}. Indeed, this method have interesting convergence properties and could improve the efficiency of the Cauchy step computation or the steplength. We preferred, however, not to include it, because with a feasible region of the form~\eqref{eq:linear_constraints}, projected searches require to compute projections very often, which could negatively impact the performance. Nevertheless, those are likely to be investigated for future updates of the bounds constrained version. The other practical difference with the polyhedral case is that we can use directly the norm of the projected gradient
-	\[\left\| x_K - \proj{\Omega}{x_K-\Phi_K}\right\|,\]
+	\[\left\| x_K - \proj{\Omega}{x_K-\nabla_x\Phi_K}\right\|,\]
 	as a criticality measure.
 	
 	The default values for tolerances and constants of Algorithm~\ref{algo:traulls} are
-	\[ \mu_0 = 10,\ \kappa_\omega = \beta_\omega = \eta = \omega = 1,\ \kappa_\eta = 0.1,\ \beta_\eta = 0.9,\ \tau = 100,\  \omega^*=\eta^* = 10^{-7}.\]
-	The constants relative to the inner minimization process of Algorithm~\ref{algo:trinner_iteration} are set to
-	\[ \kappa_{cg} = \kappa_{mlt} = 0.1.\]
+	\[ \mu_0 = 10,\ \kappa_\omega = \beta_\omega = \eta = \omega = 1,\ \kappa_\eta = 0.1,\ \beta_\eta = 0.9,\ \tau = 100,\  \omega_*=\eta_* = 10^{-7}.\]
+	The constants relative to the inner minimization process of Algorithm~\ref{algo:trinner_iteration} are set to the subproblem, criticality tolerance, i.e. at outer iteration $K$, we set
+	\[ \kappa_{cg} = \kappa_{mlt} = \omega_K.\]
 	The value of constant $\kappa_{sds}$ used safeguard~\eqref{eq:structured_sr1_safeguard} is set to the square root of the relative double precision.
+	
+	At the start of each outer iteration, we set out initial approximation of the second order terms of the Hessian to $B_0 = 0$ and the constant used to monitor the hybrid switching scheme~\eqref{eq:hybrid_update_strategy} of the Hessian is set to $\kappa_{hyb}=0.1$.
 	
 	We now discuss about the trust region handling. The initial radius value for Algorithm~\ref{algo:trinner_iteration} is set to
 	\begin{equation}\label{eq:initial_radius}
@@ -642,27 +616,16 @@
 		\Delta_{k+1} = \left\{\begin{aligned}
 			& \max\left(\alpha_2 \|s_k\|_\infty,\Delta_k\right) & &\text{if } \rho_k \ge \eta_2 \\
 			& \Delta_k &  &\text{if } \rho_k \in [\eta_1,\eta_2) \\
-			& \alpha_1\Delta_k & &\text{if } \rho_k \in [0,\eta_1) \\
+			& \alpha_1\|s_k\|_\infty & &\text{if } \rho_k \in [0,\eta_1) \\
 			& \min\left(\alpha_1 \|s_k\|_\infty,\gamma_1\Delta_k\right) & &\text{if } \rho_k < 0,
 		\end{aligned}\right.
 	\end{equation}
 	with constant values
 	\[\alpha_1 = 0.25,\ \alpha_2 = 2.5,\ \eta_1 = 0.25,\ \eta_2 = 0.75,\ \gamma_1 = 0.0625.\]
-	We have also implemented two safeguards to prevent the inner minimization algorithm from stalling. This can occur when the trust region radius is so small that no relative progress can be made, or when two consecutive iterates are indistinguishable from  each, up to a relative tolerance. For the former, we stop Algorithm~\ref{algo:trinner_iteration} when 
-	\begin{equation}\label{eq:very_small_radius}
-		\Delta_k \le \epsilon_{rad} \|x\|_\infty,
-	\end{equation}
-	for some $\epsilon_{rad} > 0$. For the second condition, the algorithm is stopped when
-	\begin{equation}
-		\left|(s_k)_i\right| < \epsilon_{step} \left|(x_k)_i\right|,
-	\end{equation}
-	for all $i=1,\ldots,n$ such that $(x_k)_i \neq 0$. In our implementation, we have set
-	\[ \epsilon_{rad}=\epsilon_{step}=\sqrt{\epsilon_{dbl}},\]
-	where $\epsilon_{dbl}$ is the relative double machine precision. During our numerical experiments, we have tested several values, but these ones best reflected the numerical intuition that a radius or step were ``too'' small in norm.
 	
 	\section{Convergence analysis}\label{sec:convergence_analysis}
 	
-	In this section, we study the convergence of algorithm TRAULLS\footnote{Trust Region AUgmented nonLinear Least-squares Solver}, towards a first-order critical point of problem~\eqref{pb:cnls}. We start by showing global convergence of Algorithm~\ref{algo:trinner_iteration}, implying that the inner minimization phase of Algorithm~\ref{algo:traulls} is always well defined. We then establish global convergence of the main algorithm.
+	In this section, we study the convergence of algorithm~\ref{algo:traulls} towards a first-order critical point of problem~\eqref{pb:cnls}. We start by showing global convergence of Algorithm~\ref{algo:trinner_iteration}, implying that the inner minimization phase of Algorithm~\ref{algo:traulls} is always well defined. We then establish global convergence of the main algorithm.
 	
 	\subsection{Global convergence of the inner minimization}
 	
@@ -768,8 +731,8 @@
 	\begin{lemma}\label{lemma:majoration_reduced_gradient_norm}
 		If Assumption~\ref{assumption:inner_iterates_compact} holds and that $h_k>0$, then 
 		\[\|z_k(t_k^{(1)})\| \ge \dfrac{h_k}{2},\]
-		where $\kappa_{ubg}$\footnote{Upper Bound on the Gradient norm} is the constant defined by \[\kappa_{ubg} := \max\left(1, \max_{x \in \calX} \|\nabla \varphi(x)\|\right),\] 
-		and $t_k^{(1)}=\frac{h_k}{2\kappa_{ubg}}$.
+		where \[t_k^{(1)}=\frac{h_k}{2\kappa_{ubg}},\]
+		and $\kappa_{ubg}$\footnote{Upper Bound on the Gradient norm} is the constant defined by $\kappa_{ubg} := \max\left(1, \max_{x \in \calX} \|\nabla \varphi(x)\|\right)$.
 	\end{lemma}
 	
 	\begin{proof} 
@@ -821,10 +784,10 @@
 		Combined with~\eqref{eq:t1_leq_t2} and~\eqref{eq:def_t2}, we get
 		\begin{equation}
 			\begin{split}
-				\|z_k(t_k^{(1)})\| & \ge (t_k^{(2)}-t_k^{(1)}) \|z_k(t_k^{(1)})\| \\
-				& \ge \|s_k(t_k^{(2)}) - s_k(t_k^{(1)})\| \\
-				& \ge \|s_k(t_k^{(2)})\| - \|s_k(t_k^{(1)})\| \\
-				& \ge \dfrac{h_k}{2},
+				\dfrac{h_k}{2} = \|s_k(t_k^{(2)})\| - \dfrac{h_k}{2} &\le  \|s_k(t_k^{(2)})\| - \|s_k(t_k^{(1)})\| \\ 
+				& \le \|s_k(t_k^{(2)}) - s_k(t_k^{(1)})\| \\
+				& \le 	(t_k^{(2)}-t_k^{(1)}) \|z_k(t_k^{(1)})\| \\
+				& \le  \|z_k(t_k^{(1)})\|,
 			\end{split}
 		\end{equation}
 		which is the desired inequality.
@@ -925,12 +888,17 @@
 		with $\kappa_{sdc} = \eta_1 \kappa_{mdc}$.
 	\end{lemma} 
 	\begin{proof}
-		We first observe that if we use $t_1^{(k)}$ as $t_k^{(3)}$ in the proof of Lemma~\ref{lemma:bound_model_proj_grad_path} and apply Lemma~\ref{lemma:majoration_reduced_gradient_norm}, we get 
+		We first observe that if we use $t_k^{(1)}$ as $t_k^{(3)}$ in the proof of Lemma~\ref{lemma:bound_model_proj_grad_path} and apply Lemma~\ref{lemma:majoration_reduced_gradient_norm}, we get 
 		\begin{equation}\label{eq:model_bound_t1}
-			q_k(t) \le -\dfrac{h_k^2}{8} t,
+			\psi(t) \le -\dfrac{h_k^2}{8} t,
 		\end{equation}
 		for $t \in [0,t_k^{(5)}]$ with \[t_k^{(5)} := \min\left(t_k^{(1)},\dfrac{h_k^2}{8\kappa_{ubg}^2 (\|H_k\|+1)}\right) = \dfrac{h_k^2}{8\kappa_{ubg}^2 (\|H_k\|+1)}.\]
-		First, assume that $\|s_k(t_k^{(5)})\|_\infty \le \Delta_k.$ Then \footnote{TODO: might have to justify this ``then"}, by~\eqref{eq:step_drecrease_wrt_cauchy}:
+		We will bound the decrease obtained with the step depending on where the point associated with $t_k^{(5)}$ lies with respect to the trust region boundary.
+		
+		First, assume that $\|s_k(t_k^{(5)})\|_\infty \le \Delta_k$. By~\eqref{eq:model_bound_t1}, one has $\psi^\prime(t) < -h_k^2 /8 < 0$ for all $t \in  [0,t_k^{(5)}]$, so $\psi$ in strictly decreasing on this segment. Because the Cauchy point is the first local minimizer of $\psi$ subject to the trust region and the trust region is not violated at $t_k^{(5)}$, we must have $t_k^C \ge t_k^{(5)}$. Therefore, 
+		\[\psi(t_k^C) \le \psi(t_k^(5)) \le -\dfrac{h_k^2}{8} t_k^(5) \]
+		
+		Then, by~\eqref{eq:step_drecrease_wrt_cauchy}, $q_k(s_k) \le \kappa_{fcd} q_k(s_k^C)$ and it follows that
 		\begin{equation}\label{eq:model_decrease_cauchy_in_tr}
 			q_k(s_k) \le -\kappa_{fcd} \frac{h_k^2}{8} t_k^{(5)}.
 		\end{equation}
@@ -944,7 +912,7 @@
 		\end{equation}
 		Therefore, using~\eqref{eq:model_bound_t1} with $t=t_k^C$ and~\eqref{eq:step_drecrease_wrt_cauchy} implies
 		\begin{equation}\label{eq:model_decrease_cauchy_at_tr}
-			q_k(s_k) \le -\kappa_{fcd} \frac{h_k^2}{8\kappa_{ubg}} \Delta_k \le -\kappa_{fcd} \frac{h_k^2}{\mfabian{64\kappa_{ubg}^2}} \Delta_k,
+			q_k(s_k) \le -\kappa_{fcd} \frac{h_k^2}{8\kappa_{ubg}} \Delta_k \le -\kappa_{fcd} \frac{h_k^2}{64\kappa_{ubg}^2} \Delta_k,
 		\end{equation} 
 		because $\kappa_{ubg} \ge 1.$
 		The inequality~\eqref{eq:bound_step_decrease} results from gathering~\eqref{eq:model_decrease_cauchy_in_tr},~\eqref{eq:model_decrease_cauchy_at_tr} and the definition of scalar $b_k$. 
@@ -989,16 +957,101 @@
 		Assume that assumptions~\ref{assumption:functions_C2}~and~\ref{assumption:feasible_linear_cons} hold. Let $(x_k)_{k\in \calK}$ be an infinite sub-sequence of iterates produced by Algorithm~\ref{algo:traulls} converging to a limit point $x^*$ for which assumptions~\ref{assumption:iterates_domain_bounded} and~\ref{assumption:cq_null_space_jacobian} hold and let $\lambda^*=\lambda^{LS}(x^*)$ be its associate least-squares multipliers. Then $c(x^*)=0$ and $x^*$ is a first-order critical point of problem~\eqref{pb:cnls} with corresponding multipliers $\lambda^*$. Moreover, the sequence $\left(\bar{\lambda}(x_k,\lambda_k,\mu_k)\right)_{k \in \calK}$ converges to $\lambda^*$.   
 	\end{theorem}
 	
-	\fabian{The result follow the same line, but is still an adaptation to our context. A sketch of the proof could be useful.}
-	
 	\section{Numerical experiments}\label{sec:numerical_experiments}
-	TODO
+	
+	In this section, we report numerical experiments conducted with the Julia implementation of our algorithm, named TRAULLS\footnote{Trust Region AUgmented nonLinear Least-squares Solver} on Mac mini with a M4 processor and 24 GB of RAM. Our solver solver is open-source and can be downloaded from \url{https://github.com/UncertainLab/Traulls.jl}. All the benchmarks we present here are also accessible in the \texttt{benchmark} folder of the linked Github repository.
+	 The tests were carried out on a set of 49 constrained NLS from collections~\cite{hockschittkowski:1980, schittkowski:1987, lucksanvlcek:1999} and problems 2 and 3 referenced in~\cite{biegler-etal2000}. For problems with variable dimensions, we set the number of variables to $n \in \{100, 500, 1000\}$. Thus, we have a total of 79 problem instances ranging from 2 to 1000 variables, with up to 2500 residuals and 1000 constraints. Problems with inequality constraints were converted to the form~\eqref{pb:cnls} by adding slack variables. For our tests, we set the criticality tolerance to $\omega_* = 10^{-5}$, the feasibility tolerance to $\eta_* = 10^{-6}$, the maximum number of outer iterations to 500 and the maximum number of iterations to 1000. We let the other parameters of the algorithm at the values given at the end of section~\ref{sec:algorithm}. We present our results with performance profiles of type~\citet{dolanmore:2002} produced with the \texttt{BenchmarkProfiles.jl} package~\cite{benchmark-profiles-julia}.
+	
+	\subsection{Comparison of Hessian approximations}
+	
+	Our first set of experiments compare the behavior and performance of our algorithm depending on the Hessian approximation used during the inner minimization. We compared the GN approximation~\eqref{eq:hessian_gn_approx} against structured approximations of the form~\eqref{eq:hessian_full_approx}. Based on the structured secant equation~\ref{eq:structured_secant_equation}, we implemented the SR1 update we discussed and the BFGS update that one can derive similarly. Both structured approximations were used in their plain and hybrid variants with the switching rule~\eqref{eq:hybrid_update_strategy}.
+	We compared these five strategies against three metrics: computation time, number of outer iterations and number
+	of inner iterations. Results are indicated in figure~\ref{fig:compare_hessians}. 
+	\begin{figure}[htbp]
+		\centering
+		\begin{subfigure}[b]{0.32\textwidth}
+			\centering
+			\includegraphics[width=\textwidth]{figures/traulls_all_hessians_time}
+		\end{subfigure}
+		\hfill
+		\begin{subfigure}[b]{0.32\textwidth}
+			\centering
+			\includegraphics[width=\textwidth]{figures/traulls_all_hessians_outer}
+		\end{subfigure}
+		\hfill
+		\begin{subfigure}[b]{0.32\textwidth}
+			\centering
+			\includegraphics[width=\textwidth]{figures/traulls_all_hessians_inner}
+		\end{subfigure}
+		\caption{Performance profiles comparing five different Hessian approximations strategies with respect to computation time (left), number of outer iterations (center),
+			and number of inner iterations (right).}
+		\label{fig:compare_hessians}
+	\end{figure}
+	All five variants successfully solved all but one problem: the plain SR1 variant reaches the maximum number of iterations on the HS373 problem.
+	In terms of computation time, the GN approximation is the fastest: since it requires no	additional storage or update computation, it is the cheapest per iteration as our method mainly involves matrix-vector products. The GN approximation especially dominates on problems having sparse jacobians and small residuals at the solution, since the second order terms are still stored as a dense matrix. When measured by the number of inner iterations, the hybrid variant prove more efficient than their plain counterpart for both formulas. These observations are consistent with the discussion about the hybrid switching rule~\eqref{eq:hybrid_update_strategy} which -- as in the unconstrained case -- correctly identify situations where the Gauss--Newton approximation must be corrected and activates the structured quasi-Newton correction accordingly. All approximations approaches are closer in terms of outer iterations, with plain BFGS a little bit behind, but overall, the Hybrid SR1 appears to be the most robust. To confirm these observations, we have focused our attention to a comparison of GN with Hybrid approximations, the latter appearing to be the most efficient. Profiles in figure~\ref{fig:gn_vs_hybrid} compare the 3 approaches against the number of residual and gradient evaluation. The latter are similar with the inner iterations profile previously shown, as we evaluate the residuals one time per inner iteration and evaluate the gradient at every accepted step.
+	Nevertheless, Hybrid-SR1 exhibits the best efficiency and robustness. This also seems to indicate that the SR1 approximation is adequate with the negative curvature handling in the trust region setting. 
+	\begin{figure}[htbp]
+	\centering
+	\begin{subfigure}[b]{0.45\textwidth}
+		\centering
+		\includegraphics[width=\textwidth]{figures/gn_vs_hybrid_reseval_profile}
+	\end{subfigure}
+	\hfill
+	\begin{subfigure}[b]{0.45\textwidth}
+		\centering
+		\includegraphics[width=\textwidth]{figures/gn_vs_hybrid_gradeval_profile}
+	\end{subfigure}
+	\caption{Performance profiles comparing the Gauss-Newton approximation against hybrid approaches with respect to computation time (left), residual evaluations (left),
+		and gradient evaluations (right).}
+	\label{fig:gn_vs_hybrid}
+\end{figure}
+	Based on these results, we retain the Hybrid SR1 variant as the best overall strategy for
+	TRAULLS, and use it in the comparisons that follow.
+	
+	\subsection{Comparison with IPOPT and Percival}
+	
+	We now compare TRAULLS (with the Hybrid SR1 approximation) against solvers IPOPT~\cite{wachterbiegler:2006} and Percival~\cite{arreckx-etal:2016}. The latter is also an augmented Lagrangian algorithm and has a native Julia implementation and uses a Julia version of the TRON~\cite{linmore:1999a} algorithm -- part of the \texttt{JSOSolvers.jl} package~\cite{migot-etal:2026} -- for the inner minimization. To benefit from the benchmarking facilities provided by the JuliaSmoothOptimizers (JSO)\footnote{https://jso.dev/} ecosystem, we used the wrapper \texttt{NLPModelsIpopt.jl}\cite{nlp-models-ipopt-julia}. This allows us to run both solvers on our test set of problems -- all models being encoded in \texttt{NLSProblems.jl}~\cite{nls-problems-julia} -- and export the benchmark metrics using \texttt{SolverBenchmark.jl}~\cite{solver-benchmark-julia}.  To make the comparison with IPOPT relevant, we have set the parameters \texttt{nlp\_scaling\_method} = \texttt{none}, \texttt{dual\_inf\_tol} = \texttt{Inf}, \texttt{constr\_viol\_tol} = \texttt{Inf}, \texttt{compl\_inf\_tol }= \texttt{Inf}, \texttt{acceptable\_iter} = \texttt{0} and the maximum number of iterations to 1000. For Percival, since it also follows algorithm~\ref{algo:traulls}, we have set its tolerances and parameters to the same value as ours.
+	For these tests, we compare the three solvers against the CPU time, the number of residual evaluations and the number of gradient evaluation. The results are presented in figure~\ref{fig:perf_solvers}. During our experiments, IPOPT reached the maximum number of iterations on problem HS27 and returned the \texttt{unknown} internal message on problem HS70. Percival reached the maximum of iterations on the two instances of problem 5.11 from~\cite{lucksanvlcek:1999} having $n=500$ and $n=1000$.
+	\begin{figure}[htbp]
+		\centering
+		\begin{subfigure}[b]{0.32\textwidth}
+			\centering
+			\includegraphics[width=\textwidth]{figures/traulls_vs_others_time_profile}
+		\end{subfigure}
+		\hfill
+		\begin{subfigure}[b]{0.32\textwidth}
+			\centering
+			\includegraphics[width=\textwidth]{figures/traulls_vs_others_gradeval_profile}
+		\end{subfigure}
+		\hfill
+		\begin{subfigure}[b]{0.32\textwidth}
+			\centering
+			\includegraphics[width=\textwidth]{figures/traulls_vs_others_reseval_profile}
+		\end{subfigure}
+		\caption{Performance profiles comparing TRAULLS (Hybrid SR1), IPOPT, and Percival
+			on the test set, with respect to computation time (left), residual evaluations (center),
+			and gradient evaluations (right).}
+		\label{fig:perf_solvers}
+	\end{figure}
+	
+	In terms of computation time, TRAULLS and IPOPT achieve comparable performance, with
+	IPOPT holding a modest advantage on the fastest problems but the gap narrowing as
+	problem difficulty increases. Percival is consistently slower than both solvers across the
+	test set. Regarding the function-evaluation metrics, IPOPT dominates: its interior-point
+	strategy, which exploits second-order information through exact Hessians, requires
+	significantly fewer residual and gradient evaluations to reach convergence. TRAULLS, which
+	relies on a structured quasi-Newton approximation and therefore does not require exact
+	second derivatives, performs comparably to Percival on these metrics and outperforms it on
+	a majority of problems.
+	Across all three metrics, IPOPT is a clear winner, in spite on the two failures. However, our method is a close second in computation time and achieves similar robustness regarding to the number of residuals evaluation. The clear advantage of TRAULLS on Percival shows that within the same algorithmic framework, exploiting the least-squares structures leads to better performance.
+	
+	\section*{Conclusion}
+	In this paper, we have presented an algorithm able to solve NLS problem subject to constraints of general form. Our method fully exploits the structure of the problem through the AL reformulation and a structured Hessian approximation. 
+	Although our implementation exhibit good promising performance, its for large-scale applications lies in the Hessian approximation: the dense storage of the structured second order correction and the associated computations become prohibitive as the number of variables grows. A limited-memory variant of the structured update, following~\cite{byrd-etal:1994}, would be a natural extension to address this bottleneck. To tackle problems with large number of residuals, another venue of research could be to combine the AL framework with an adaptative sampling strategy applied to the residuals, lowering the dimensions of the inner minimization subproblems. This would extend to the constrained case techniques currently investigated for unconstrained problems~\cite{bellavia-etal:2026}.
 	
 	
 	\section*{Acknowledgments}
-	
-	\pierre{TODO: Vérifier les numéros de subventions et les formulations exactes.}
-	The authors would like to thank Mitacs, the Natural Sciences and Engineering Research Council of Canada (NSERC), the Institute for Data Valorization (IVADO), and Hydro-Québec for their financial support.
+	The authors would like to thank Natural Sciences and Engineering Research Council of Canada (NSERC), the Institute for Data Valorization (IVADO), and Mitacs Hydro-Québec for their financial support through grants IT40867 and IT38322.
 	
 		%%%%%%%%%%%%%%%% APPENDIX 
 	\clearpage
@@ -1018,7 +1071,13 @@
 	\end{bmatrix}\]
 	Simple computations first show that 
 	\[ZZ^T = I_p,\quad AZ^T = [A_{i_1},\ldots,A_{i_p}].\]
-	The latter, written $A_{|\calA}$, is the restriction of A to the columns corresponding to the indices in $\calA$. Let $\tilde{L}$ be $(m+p)\times(m+p)$ triangular such that $MM^T=\tilde{L}\tilde{L}^T$. We apply the same block structure to $\tilde{L}$, i.e.
+	The latter, written $A_{|\calA}$, is the restriction of A to the columns corresponding to the indices in $\calA$. We can write $MM^T$ as 
+	\begin{equation}\label{eq:augmented_grammat}
+		\begin{bmatrix}
+			AA^T &  A_{|\calA} \\  A_{|\calA}^T & I_p.
+		\end{bmatrix}
+	\end{equation}
+	Let $\tilde{L}$ be $(m+p)\times(m+p)$ triangular such that $MM^T=\tilde{L}\tilde{L}^T$. We apply the same block structure to $\tilde{L}$, i.e.
 	\[\tilde{L} = \begin{bmatrix}
 		\tilde{L}_{11} & 0 \\ G_{21} & \tilde{L}_{22},
 	\end{bmatrix},\]
@@ -1047,12 +1106,22 @@
 			I_p &= G_{21}G_{21}^T + \tilde{L}_{22}\tilde{L}_{22}^T.
 		\end{aligned}
 	\end{equation*}
-	Therefore, we can form $\tilde{L}$ by first setting $\tilde{L}_{11}=L$, then solve $\mfabian{p}$ lower triangular systems to compute $G_{21}$ and finally compute the Cholesky factor of $I_p-G_{21}G_{21}^T$ to get $\tilde{L}_{22}$.
+	Therefore, we can form $\tilde{L}$ by first setting $\tilde{L}_{11}=L$, then solve $p$ lower triangular systems to compute $G_{21}$ and finally compute the Cholesky factor of $I_p-G_{21}G_{21}^T$ to get $\tilde{L}_{22}$. We briefly justify why the latter is well defined. By definition of $G_{21}^T$ and the full rank assumption of $A$, one has
+	\[G_{21}^T = \left(\tilde{L}_{11}\right)^{-1}A_{|\calA} = L^{-1}A_{|\calA}.\]
+	Then, we obtain
+	\begin{equation*}
+		\begin{aligned}
+			I_p - G_{21}G_{21}^T &= I_p - \left(L^{-1}A_{|\calA}\right)^T\left(L^{-1}A_{|\calA}\right) \\
+			&= I_p - A_{|\calA}^T \left(LL^T\right)^{-1}A_{|\calA} \\
+			&= I_p - A_{|\calA}^T \left(AA^T\right)^{-1}A_{|\calA},
+		\end{aligned}
+	\end{equation*}
+	which is nothing but the Schur complement of $AA^T$ of the augmented matrix~\eqref{eq:augmented_grammat}. Thus, the positive definiteness of $I_p-G_{21}G_{21}^T$ comes from the positive definiteness of $MM^T$ (also implied by the full rank assumption of $A$).
 	
 	\section{Cauchy point computation}\label{appendix:cauchy_point_computation}
 	
 	We now describe a procedure to compute the Cauchy point as the first local minimizer of the quadratic model along the projected gradient path adapted from~\cite{conn-etal:1988a} to the case where linear equalities are present. For the sake of clarity, we omit the iteration index during the rest of this subsection. 
-	The piece-wise arc $s(t) = \proj{\Omega}{x-\mfabian{t}g}-x$ satisfies the constraints
+	The piece-wise arc $s(t) = \proj{\Omega}{x-tg}-x$ satisfies the constraints
 	\begin{itemize}
 		\item $As(t) = 0$
 		\item $s^{(l)} \le s(t) \le s^{(u)}$,
@@ -1091,7 +1160,7 @@
 	If the latter belongs to the interval of interest, i.e. 
 	\[t_i-\psi_i'/\psi_i'' < t_{i+1},\]
 	then it is the required minimizer. In other cases, the minimizer is at or beyond $t_{i+1}$. To prepare for the study of the next interval, we first need to find the next breakpoint, given by the smallest scalar $t_{i+1}>t_i$ such that, at $s(t_{i+1})$, one of the free component hits one of its bounds. By introducing
-	\[\delta_i^- = \mfabian{\min_{(z_i)_j > 0}} \left\{ \mfabian{(s(t_i)_j - s^{(l)}_j)/(z_i)_j}\right\}, \qquad \delta_i^+ = \mfabian{\min_{(z_i)_j < 0}} \left\{\mfabian{(s(t_i)_j - s^{(u)}_j)/(z_i)_j}\right\},\]
+	\[\delta_i^- = \min_{(z_i)_j > 0} \left\{ (s(t_i)_j - s^{(l)}_j)/(z_i)_j\right\}, \qquad \delta_i^+ = \min_{(z_i)_j < 0} \left\{(s(t_i)_j - s^{(u)}_j)/(z_i)_j\right\},\]
 	the next breakpoint is given by 
 	\begin{equation}\label{eq:next_breakpoint}
 		t_{i+1} = t_i + \delta_i,
@@ -1106,17 +1175,17 @@
 			\State Set \textbf{found} $\gets$ \textbf{false} 
 			\State Set $t_0\gets 0$, $s^{(0)}\gets 0$ and initialize counter $i\gets 0$
 			\Repeat
-			\State $\psi_i' \gets \mfabian{-\inner{s^{(i)}}{Hz_i}} -\inner{g}{z_i},\ \mfabian{\psi_i''} \gets \inner{z_i}{Hz_i}$
+			\State $\psi_i' \gets -\inner{s^{(i)}}{Hz_i}-\inner{g}{z_i},\ \psi_i'' \gets \inner{z_i}{Hz_i}$
 			\State Find the next breakpoint $t_{i+1}$ by~\eqref{eq:next_breakpoint}
 			\If{$\psi_i' > 0 \text{ or } \psi'_i=0 \text{ and } \psi_i'' > 0$}
 			\State Set $s^C \gets s^{(i)}$
 			\State \textbf{found $\gets$ \textbf{true}}
 			\ElsIf{$\psi_i' < 0 \text{ and } \psi_i'' > 0$ \text{ and } $t_i- \psi_i'/\psi_i'' < t_{i+1}$}
-			\State Set $\Delta t \gets - \mfabian{\psi_i'}/\mfabian{\psi_i''}$
+			\State Set $\Delta t \gets - \psi_i'/\psi_i''$
 			\State Set$s^C \gets s^{(i)} - \Delta t z_i$, \textbf{found $\gets$ \textbf{true}}
 			\Else
 			\State Set $\Delta t \gets t_{i+1}-t_i$
-			\State Compute the next direction $\mfabian{z_{i+1}}$
+			\State Compute the next direction $z_{i+1}$
 			\State Set $s^{(i+1)} \gets s^{(i)} - \Delta t z_i$
 			\EndIf
 			\State Increment $i \gets i+1$

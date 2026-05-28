@@ -111,13 +111,7 @@
   }
 }
 
-@Misc{nlp-models:2020,
-  author = {D. Orban and A.S. Siqueira and {contributors}},
-  title = {{NLPModels.jl}: Data Structures for Optimization Models},
-  howpublished = {\url{https://github.com/JuliaSmoothOptimizers/NLPModels.jl}},
-  year = {2020},
-  DOI = {10.5281/zenodo.2558627},
-}
+
 
 @article{dennisetal:1981,
 author = {J.E. {Dennis Jr} and D.M. Gay and R.E. Walsh},
@@ -421,6 +415,29 @@ doi = {10.24200/squjs.vol17iss1pp103-124}}
 	year={2018},
 	doi = {10.1007/s00211-018-0977-z}}
 	
+@article{bellavia-etal:2026,
+	author = {Bellavia, Stefania and Malaspina, Greta and Morini, Benedetta},
+	title = {A Variable Dimension Sketching Strategy for Nonlinear Least-Squares},
+	journal = {SIAM Journal on Scientific Computing},
+	volume = {48},
+	number = {3},
+	pages = {A1206-A1234},
+	year = {2026},
+	doi = {10.1137/25M175980X}
+}
+
+
+@article{gratton-etal:2007,
+	author = {S.Gratton and  A. S. Lawless and  N.K. Nichols},
+	title = {Approximate Gauss–Newton Methods for Nonlinear Least Squares Problems},
+	journal = {SIAM Journal on Optimization},
+	volume = {18},
+	number = {1},
+	pages = {106-132},
+	year = {2007},
+	doi = {10.1137/050624935}}
+
+
 	
 @article{woodruff:2014,
 	author = {D.P. Woodruf},
@@ -488,6 +505,15 @@ number = {1},
 pages = {208-224},
 year = {1997},
 doi = {10.1137/S1052623493248809}}
+
+@article{huynhhwang:2024,
+author = {D.Q. Huynh and {F-N} Hwang},
+title = {An accelerated structured quasi-{Newton} method with a diagonal second-order {Hessian} approximation for nonlinear least squares problems},
+journal = {Journal of Computational and Applied Mathematics},
+volume = {442},
+pages = {115718},
+year = {2024},
+doi = {10.1016/j.cam.2023.115718}}
 
 @article{porcelli:2013,
 author = {M. Porcelli},
@@ -559,6 +585,15 @@ doi = {10.15807/jorsj.38.55}}
 	year = {1991},
 	doi = {10.1021/ie00050a015}}
 
+@article{biegler-etal2000,
+	author = {L.T. Biegler and J. Nocedal and C. Schmid and D. Ternet},
+	title = {Numerical Experience with a Reduced Hessian Method for Large Scale Constrained Optimization},
+	journal = {Computational Optimization and Applications},
+	year= {2000},
+	volume = {15},
+	pages = {45-67},
+	doi = {10.1023/A:1008723031056}}
+
 
 @article{yabetakahashi:1991,
 	author = {H. Yabe and T. Takahashi},
@@ -568,6 +603,16 @@ doi = {10.15807/jorsj.38.55}}
 	pages = {75-100},
 	year = {1991},
 	doi = {10.1007/BF01586927}}
+
+@article{zhang-etal:2000,
+author = {J.Z. Zhang and L.H. Chen and N.Y. Deng},
+title = {A Family of Scaled Factorized Broydon-Like Methods for Nonlinear Least Squares Problems},
+journal = {SIAM Journal on Optimization},
+volume = {10},
+number = {4},
+pages = {1163-1179},
+year = {2000},
+doi = {10.1137/S105262349834530}}
 	
 @article{zhouchen:2010,
 	author = {W. Zhou and X. Chen},
@@ -620,6 +665,14 @@ pages = {1152-1170},
 year = {1987}, 
 doi = {10.1137/0724076}}
 
+@article{byrd-etal:1994,
+author = {R.H. Byrd and J. Nocedal and R.B. Schnabel},
+title = {Representations of quasi-{Newton} matrices and their use in limited memory methods},
+journal = {Mathematical Programming},
+volume = {63},
+pages = {129-156},
+year = {1994},
+doi = {10.1007/BF01582063}}
 @article{byrd-etal:1999,
 author = {R.H. Byrd and M.E. Hribar and J. Nocedal},
 title = {An Interior Point Algorithm for Large-Scale Nonlinear Programming},
@@ -1266,14 +1319,23 @@ doi = {10.1137/0801008}
 
 @book{hockschittkowski:1980,
 	author    = {W. Hock and K. Schittkowski},
-	edition   = {Seconde},
-	publisher = {Springer},
-	address   = {Berlin, Heidelberg},
+	edition   = {2nd},
+	publisher = {Springer Berlin},
+	address   = {Heidelberg},
 	series    = {Lecture Notes in Economics and Mathematical Systems},
 	volume    = {187},
 	title     = {Test Examples for Nonlinear Programming Codes},
 	year      = {1980},
 	doi       = {10.1007/978-3-642-48320-2}}
+	
+@book{schittkowski:1987,
+author = {K. Schittkowski},
+publisher = {Springer Berlin},
+address   = {Heidelberg},
+title = {More Test Examples for Nonlinear Programming Codes},
+series    = {Lecture Notes in Economics and Mathematical Systems},
+year = {1987},
+doi = {10.1007/978-3-642-61582-5}}
 
 @book{nocedalwright:2006,
 	author    = {J. Nocedal and S.J. Wright},
@@ -1372,3 +1434,71 @@ doi = {10.1137/0801008}
 	publisher = {SIAM: Society for Industrial and Applied Mathematics},
 	address = {Philadelphia, PA, USA},
 	year = {2021}}
+	
+%%% SOFTWARE
+	
+@misc{percival-julia,
+	author       = {E. {Antunes dos Santos} and T. Migot and D. Orban and A. {Soares Siquiera} and contributors},
+	title        = {Percival.jl: An Augmented {Lagrangian} Method},
+	month        = {January},
+	year         = {2026},
+	publisher    = {Zenodo},
+	doi          = {10.5281/zenodo.18231829},
+	url = {https://doi.org/10.5281/zenodo.18231829}}
+		
+		
+@misc{nls-problems-julia,
+	author       = {A. {Soares Siqueira} and D. Orban},
+	title        = {{NLSProblems}.jl},
+	year         = {2019},
+	publisher    = {Zenodo},
+	version      = {v0.4.0},
+	doi          = {10.5281/zenodo.4605405},
+	url          = {https://doi.org/10.5281/zenodo.4605405},
+}
+
+@misc{benchmark-profiles-julia,
+	author       = {D. Orban},
+	title        = {{BenchmarkProfiles}.jl},
+	year         = {2019},
+	publisher    = {Zenodo},
+	version      = {v0.3.3},
+	doi          = {10.5281/zenodo.4630955},
+	url          = {https://doi.org/10.5281/zenodo.4630955}}
+	
+@misc{nlp-models-ipopt-julia,
+	author       = {A. {Soares Siqueira} and D. Orban},
+	title        = {{NLPModelsIpopt}.jl},
+	year         = {2026},
+	publisher    = {Zenodo},
+	version      = {v0.11.3},
+	doi          = {10.5281/zenodo.19420624},
+	url          = {https://doi.org/10.5281/zenodo.19420624},
+	swhid        = {swh:1:dir:9e104f6b771d2ec899824bca72c4fdc12704c5af
+	;origin=https://doi.org/10.5281/zenodo.2629034;vis
+	it=swh:1:snp:5b5fe9f8f33032c1ff7ca310830cd22a2e22b
+	129;anchor=swh:1:rel:8e71248cb4b5b192b24a0382c388f
+	4d3c1589d3c;path=JuliaSmoothOptimizers-
+	NLPModelsIpopt.jl-241e67c
+	}}
+	
+@misc{solver-benchmark-julia,
+	author       = {A. {Soares Siqueira} and D. Orban},
+	title        = {{SolverBenchmark}.jl},
+	year         = 2020,
+	publisher    = {Zenodo},
+	version      = {v0.3.1},
+	doi          = {10.5281/zenodo.3948381},
+	url          = {https://doi.org/10.5281/zenodo.3948381}}
+	
+@article{migot-etal:2026, 
+	doi = {10.21105/joss.09467}, 
+	url = {https://doi.org/10.21105/joss.09467}, 
+	year = {2026}, 
+	publisher = {The Open Journal}, 
+	volume = {11}, 
+	number = {117}, 
+	pages = {9467}, 
+	author = {T. Migot and D. Monnet and D. Orban and S. {Abel Soares}}, 
+	title = {{JSOSolvers.jl}: Unconstrained and bound-constrained optimization solvers}, 
+	journal = {Journal of Open Source Software} } 
