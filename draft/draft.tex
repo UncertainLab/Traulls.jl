@@ -227,7 +227,7 @@
 			\end{equation}
 			\If{$\|c(x_k)\| \le \eta_k$}
 			\If{\(\|\proj{\Omega}{x_k-\nabla_x\Phi_k}-x_k\|  \le \omega_*\) and \(\left\Vert c(x_k)\right\Vert \le \eta_*\)}
-			\State{\textbf{stop} and} \Return approximate solution $(x_k),\lambda_k$
+			\State{\textbf{stop} and} \Return approximate solution $(x_k,\lambda_k)$
 			\EndIf
 			\State Update the Lagrange multipliers $\lambda_{k+1}\gets \bar{\lambda}(x_k,\lambda_k,\mu_k)$ 
 			\State Set the next starting point $x_{k+1}^s \gets x_k $
