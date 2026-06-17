@@ -3,8 +3,13 @@
 
 `Enum` type to caracterize the differente Hessian approximations used in our solver.
 
-- `gn`: Gauss-Newton approximation 
-- `sr1`: second-order terms updates by a SR1 formula
+- `gn`: Gauss-Newton approximation (second-order terms set to 0)
+- `sr1`: second-order terms updated by a SR1 formula
+- `bfgs`: second-order terms updated by BFGS formula
+- `hybrid_bfgs`: second-order terms updated by BFGS formula and used if non zero residuals
+- `hybrid_sr1`: second-order terms updated by SR1 formula and used if non zero residuals
+- `limited_sr1`: second-order terms approximated by a limited memory hessian and updated
+with SR1 formula
 """
 @enum HessianApprox begin
     gn
