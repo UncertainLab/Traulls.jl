@@ -70,6 +70,8 @@ case of good improvement of the primal feasibility (default: `1.0`)
 case of good improvement of the feasibility (default: `0.9`)
 - `hessian_approx`: Symbol encoding the Hessian approximation used during the inner
 minimization (default: `:gn` for Gauss-Newton)
+- `init_mult`: Boolean. If set to true, initialises the Lagrange multipliers with the
+least-squares estimate.
 
 ## Trust region parameters
 
@@ -432,14 +434,14 @@ change in both the objective and the iterate or if the trust region radius is to
 - `proj_op`: `Projector` operator to compute projections onto tangent spaces
 - `tr`: `TrustRegion` encoding the trust region constraint and the constants involved in the
 radius update mechanism (see [`TrustRegion`](@ref))
-- `rel_tol_crit`: Relative optimality tolerance
+- `reltol_crit`: Relative optimality tolerance
 - `hessian_approx`: Instance of `HessianApprox` enum type encoding how the approximated
 Hessian is updated
 - `max_iter::Int`: maximum number of inner iterations
 - `max_cg_iter::Int`: maximum number of uses of the conjugate gradient method, i.e. minor
 iterates
-- `workspace`: `Workspace` whose fields contain pre-allocated memory for vectors involed in
-linear algebra computations
+- `workspace`: Instance of `Workspace` whose fields contain pre-allocated memory for vectors
+involed in linear algebra computations
 - `patience_counter`: Maximum number of consecutive stalling iterations before exiting the
 algorithm (default: `3`)
 - `verbose`:Boolean. If set to `true`, print iteration detail into `io` (default: false)
@@ -680,13 +682,14 @@ In the QP model, `||.||` denotes the `∞`-norm `||s|| = maxᵢ |sᵢ|`.
 - `P`: `Projector` operator to compute projections onto tangent spaces
 - `xₗ`: Lower bounds on `x`
 - `xᵤ`: Upper bounds on `x`
-- `Δ::T`: Trust region radius
-- `max_cg_iter::Int`: Number of maximum uses of the conjugate gradient method
-- `κₛ::T`: Positive constant used to define the convergence criteria
+- `Δ`: Trust region radius
+- `max_cg_iter`: Number of maximum uses of the conjugate gradient method
+- `κ_pg`: Positive constant used to define the convergence criteria
 relative of the gradient projection method
-- `κᵪ::T`: Positve constant used to define the convergence criteria of
+- `κ_cg`: Positve constant used to define the convergence criteria of
 the conjugate gradient method
-
+- `workspace`: Instance of `Workspace` whose fields contain pre-allocated memory for vectors
+involed in linear algebra computations
 # On return
 
 - `s`: This argument is modified in place and contains the trial step
@@ -730,8 +733,6 @@ function projected_gradient!(
                  proj_op,
                  gproj,
                  Hs)
-
-
 
     # Set up for conjugate gradient iterations
     mul!(Hs, hess_op, s)
@@ -786,7 +787,25 @@ function projected_gradient!(
     return pred
 end
 
+"""
+    initial_point_and_projector!(model, x, args...)
 
+Computes an initial point feasible with respect to the linear constraints of the problem
+encoded in `model`.
+
+Also forms the projector operator used to compute projections onto null spaces.
+
+# On return
+
+- Vector `x` is modified in place with components corresponding to the initial point found
+- Return the projector operator adapted to the structure of the linear constraints
+
+# Methods
+
+- `initial_point_and_projector!(model, x, Val(false))`
+
+- `initial_point_and_projector!(model, x, Val(true))`
+"""
 # Modifies the initial guess for the solution such that it is feasible to the bounds
 # Forms and returns the operator computing projections on coordinate subspaces
 function initial_point_and_projector!(
@@ -806,9 +825,9 @@ end
 function initial_point_and_projector!(
     model::AbstractCnlsModel{T},
     x::AbstractVector{T},
-    ::Val{true};
-    tol::T=sqrt(eps(T))) where T
+    ::Val{true}) where T
 
+    tol = sqrt(eps(T))
     A, b = model.linmat, model.linrhs
     n, m = model.n, model.nlincons
     xlow, xupp = model.xlow, model.xupp
@@ -870,9 +889,12 @@ end
 
 
 """
-    criticality_measure(x,g,xₗ,xᵤ)
+    criticality_measure(x, g, xₗ, xᵤ)
 
 Computes the criticality measure for problems where linear constraints are bounds.
+
+It equals `πₓ = ||P[x-g] - x||` where `P` denotes the projection onto the box
+`[xₗ, xᵤ]` and `||.||` is the `∞`-norm.
 
 # Arguments
 
@@ -885,8 +907,7 @@ iterate
 
 # Return
 
-- `πₓ = ||P[x-g] - x||` where `P` denotes the projection onto the box
-`[xₗ, xᵤ]` and `||.||` is the `∞`-norm.
+- Infinite norm of the projected gradient
 """
 function criticality_measure(
     x::AbstractVector{T},
@@ -901,7 +922,7 @@ function criticality_measure(
 end
 
 """
-    criticality_measure(x, g, gproj, xₗ, xᵤ)
+    criticality_measure(x, g, gproj, P)
 
 Computes the criticality measure for problems where linear constraints are polyhedral, which
 is the norm of the reduced gradient.
@@ -910,13 +931,12 @@ is the norm of the reduced gradient.
 
 - `x`: Current iterate
 - `g`: Gradient of the Augmented Lagrangian at current primal-dual iterate
-- `gproj`: Buffer vector to store the projected gradient
-- `proj_op`: `Projector` operator to form the projected gradient
+- `gproj`: Buffer vector to store the reduced gradient
+- `proj_op`: `Projector` operator to form the reduced gradient
 
 # On return
 
-- `πₓ = ||P[x-g] - x||` where `P` denotes the projection onto tangent space of linear
-feasible directions at `x` and `||.||` is the `∞`-norm.
+- Infinite norm of the reduced gradient
 """
 function criticality_measure(
     x::AbstractVector{T},
