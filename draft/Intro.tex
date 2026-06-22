@@ -1,0 +1,70 @@
+\section{Introduction}
+
+We consider the constrained nonlinear least-squares (NLS) problem
+\begin{equation}
+	\label{pb:cnls}
+	\begin{aligned}
+		\min_{x\in \RR^n} \quad & \dfrac{1}{2} \|r(x)\|^2 \\
+		\text{s.t.} \quad & c(x) = 0 \\
+		& x \in \Omega
+	\end{aligned}
+\end{equation}
+where $\|\cdot\|$ denotes the $\ell_2$ norm. The residuals $r\colon \RR^n \to \RR^{n_r}$ and constraints $c\colon \RR^n \to \RR^{n_c}$ functions are assumed to be twice continuously differentiable with respective Jacobian $J$ and $C$. We may also write the least-squares objective as a general function $f$ with gradient 
+\[\nabla f(x) = J(x)^\top r(x).\] 
+The set $\Omega$ consists of linear constraints and is defined as
+\begin{equation}\label{eq:linear_constraints}
+	\Omega = \left\{ x \in \RR^n \ | \ Ax=b,\ l \le x \le u\right\},
+\end{equation}
+with $A\in\RR^{m\times n}$, $m < n$, $b\in \RR^m$, and $l,u \in \RR^n$. Without loss of generality, some components of the latter two vectors can be set to $\pm \infty$ for unbounded parameters. For convenience, we also assume that the linear equalities do not involve single-variable constraints. Formulation~\eqref{pb:cnls} is also suitable for problems with nonlinear inequality constraints of the form $g(x) \ge 0$. The latter are transformed into equality constraints by adding non-negative slack variables, which gives the new constraints
+\begin{equation*}
+	g(x) - \nu = 0,\quad \nu \ge 0.
+\end{equation*}
+The lower and upper bounds associated to these slack variables are thus $0$ and $\infty$ respectively. Linear inequality constraints can be converted into equalities similarly.
+
+The Lagrangian for problem~\eqref{pb:cnls}, with respect to the nonlinear constraints, is defined by 
+\begin{equation*}
+	\calL(x,\lambda) = f(x) + \inner{\lambda}{c(x)},
+\end{equation*}
+where $\lambda \in \RR^{n_c}$ is the vector of Lagrange multipliers and $\inner{\cdot}{\cdot}$ is the standard inner product.
+
+An algorithm for solving problem~\eqref{pb:cnls} aims to find a first-order critical point $(x_*,\lambda_*)$ that satisfies the necessary condition
+\begin{equation*}
+	\begin{aligned}
+		&x_* \in \Omega\ \text{and}\ c(x_*)=0 \\
+		&\proj{\Omega}{x_*-\nabla_x \calL(x_*,\lambda_*)}=x_*,
+	\end{aligned}
+\end{equation*}
+where $\proj{\Omega}{\cdot}$ is the projector operator onto $\Omega$, defined, for any vector $x$, as
+\begin{equation*}
+	\proj{\Omega}{x}= \argmin_{v\in \Omega} \ \|v-x\|^2. 
+\end{equation*}
+
+The NLS structure arises naturally in data fitting, parameter estimation, and scientific computing, and its efficient resolution has attracted a sustained research effort~\cite{dennisschnabel:1996,nocedalwright:2006,bjork:2024}. 
+A distinctive feature of NLS problems is that the Hessian of the objective decomposes into a first-order part $J(x)^\top J(x)$, where $J(x)$ is the Jacobian of $r$, and second-order part involving the individual Hessians of the residuals weighted by their values. Exploiting this decomposition is the central challenge in designing
+efficient algorithms.
+The Gauss--Newton (GN) method~\cite[][Chapter 9]{dennisschnabel:1996} retains only the first-order term, which is effective when residuals are small at the solution but can lead to poor convergence otherwise.
+The Levenberg--Marquardt (LM) method, initiated in~\cite{levenberg:1944,	marquardt:1963} and further studied, for instance, in~\cite{bellavia-etal:2018,	bergou-etal:2021}, regularizes the GN matrix by a scalar multiple of the identity, providing robustness at the cost of potentially slower convergence on large-residual problems.
+A richer class of approaches, known as structured quasi-Newton (SQN) methods, approximates the second-order part through secant equations tailored to the least-squares structure. The NL2SOL package~\cite{dennisetal:1981,dennis-etal:1989} is a popular implementation of this idea, complementing the GN term with a structured quasi-Newton correction updated via a dedicated secant equation. This algorithm also switches between the GN model or the full Hessian depending on the quality of the step. Other hybrid strategies with switching criterion based on the residual magnitude have also been explored in~\cite{albaalifletcher:1985, fletcherxu:1987, zhouchen:2010}. Further SQN formulations, including factorized updates and sizing strategies, have been proposed in~\cite{biggs:1977, betts:1976, huschens1994, yabetakahashi:1991, zhang-etal:2000}. A comprehensive numerical comparison of these techniques can be found in~\cite{lucksan-etal:2019}.
+
+Extending structured NLS methods to the constrained setting has received comparatively less attention, though it remains an active area of research. Such formulations arise, for example, in data-fitting problems where the constraints enforce the physical consistency of an underlying model~\cite{grenieretal:2006, delbos-etal2006, pu-etal:2015}. The convex case, especially the bound constrained case, is studied in~\cite{bellavia-etal:2004, bellavia-etal:2011, porcelli:2013, goncalvesmenezes:2020}.
+For more general nonlinear constraints, most methods operate within a sequential quadratic programming (SQP) framework. In that paradigm, each iteration solves a quadratic subproblem obtained by linearizing the constraints and approximating the Hessian of the Lagrangian. \cite{li-etal:2002} propose an SQP method whose Hessian approximation
+is based on a secant equation derived from~\cite{biggs:1977}; \cite{tjoabiegler:1991} use a BFGS update of the projected Hessian of a merit function; and~\cite{amiribartels:1989} update the structured  approximation projected Hessian in the null space of the active constraints.
+For problems with equality constraints only, more recent work includes regularized approaches: \cite{bergou-etal:2021} combine a Levenberg--Marquardt approximation of the Lagrangian Hessian with a trust-region method, and~\cite{orbansiquiera:2020} derive a regularized KKT system by adding primal and dual regularization terms.
+Structured approximations of the Hessian within general constrained	formulations have also been studied from a theoretical perspective in~\cite{tapia:1988}.
+
+When the constraints can be split into two categories, as in formulation~\eqref{pb:cnls}, an alternative to SQP methods is the augmented Lagrangian (AL) framework, also known as the method of multipliers, independently introduced by~\cite{hestenes:1969} and~\cite{powell:1969}, with further theoretical foundations provided by~\cite{rockafellar:1973}.
+Rather than solving a sequence of quadratic subproblems, AL methods incorporate the nonlinear constraints into the objective as a penalty term and solve a sequence of subproblems in which only the easier constraints remain.
+For problem~\eqref{pb:cnls}, this amounts to approximately minimizing, at each outer iteration, the AL function over the polyhedral set $\Omega$, thereby reducing the problem to a linearly constrained one. This strategy is particularly attractive as the linear part can be handled directly and efficiently by gradient projection techniques, without sacrificing the ability to enforce nonlinear constraints.
+The theoretical underpinnings of this approach, including global convergence results, are developed in~\cite{conn-etal:1988a,conn-etal:1991, conn-etal:1993, conn-etal:1996b} and summarized	in~\cite[][Chapter~14]{conn-etal:2000}.
+A major implementation of this philosophy is the LANCELOT solver~\cite{conn-etal:1992}, which handles bound-constrained
+subproblems using a gradient projection technique~\cite{conn-etal:1988b}.
+More recent AL implementations have broadened this framework in several	directions: \cite{andreani-etal:2008} establish convergence under
+weaker constraint qualifications; \cite{gillrobinson:2012} propose a primal-dual AL method that behaves like a stabilized SQP method in the local regime; \cite{arreckx-etal:2016} implement a matrix-free AL approach and \cite{curtis-etal:2015} develop an adaptive AL algorithm with inexact subproblem solves.
+For the inner minimization that arises at each outer AL iteration, gradient projection methods~\cite{moretoraldo:1991, linmore:1999a} are particularly effective for bound-constrained problems as they allow for rapid changes in the active set throughout the iterations. The linear equality case can be handled efficiently, as the projections can be computed by solving a system of normal equations~\cite{gould-etal:2001}.
+When both bounds and linear equalities are present, as in our setting, direct projection onto $\Omega$ is not available in closed form. Nevertheless, we will see in the next section that the norm of the reduced gradient provides a practical criticality measure, as used in solvers such as MINOS~\cite{murtaghsaunders:1978} and LSNNO~\cite{tointtuyttens:1992}.
+
+The present work combines two well-established lines of research: the augmented Lagrangian framework of Conn, Gould, and Toint~\cite{conn-etal:1988a, conn-etal:1991, conn-etal:1993, conn-etal:1996b, conn-etal:2000}, with its mature convergence theory and gradient projection inner minimization, and the quasi-Newton approximations that exploit the sum-of-squares structure of both the objective and the penalty term, following the secant equation philosophy of~\cite{biggs:1977,dennisetal:1981} adapted to the AL setting in the spirit of~\cite{li-etal:2002}. Bringing these together yields a solver specifically designed for NLS problems while handling constraints of general form, including nonlinear equalities and inequalities alongside linear equalities and bounds. Our algorithm is implemented in the Julia programming language~\cite{bezanson-etal:2017} and is open-source.
+
+We end this section by introducing some notations. Jacobian matrices of $r$ and $c$ evaluated at $x$ are respectively noted $J(x)$ and $C(x)$. Components of a vector $x\in\RR^n$ are noted $x_i$ for $i=1,\ldots,n$. Vectors $e_i$ denote the columns of the $n \times n$ identity matrix. When describing iterative processes to solve problem~\eqref{pb:cnls}, we index vectors and matrices by the iteration number. For instance, at iteration $k$, $(x_k,\lambda_k)$ is the current primal-dual iterate. For functions evaluated at $x_k$, we use the shorthand notation $r_k = r(x_k)$, $c_k =c(x_k)$, $J_k=J(x_k)$ etc. To not interfere with previous notation for components, we add parentheses to make the distinction clear. For instance, $(x_k)_i$ denotes the $i$-th component of vector $x_k$. For any sequence $(u_k)_k$, the limit of a converging subsequence indexed by $\calK \subset \NN$ will be written $\lim\limits_{k \in \calK} u_k$. The orthogonal complement of a subspace $V \subset \RR^n$, i.e. the set $\{ w\ | \ \inner{w}{v}=0\ \text{for all}\ v \in V\}$, will be written $V^\perp$.
+
+The rest of the paper is organized as follows. In Section~\ref{sec:algorithm}, we present our algorithmic framework and discuss implementation details. We study global convergence in Section~\ref{sec:convergence_analysis}. Numerical experiments are shown in Section~\ref{sec:numerical_experiments} and we conclude with perspectives.
