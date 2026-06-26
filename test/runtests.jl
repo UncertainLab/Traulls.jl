@@ -3,7 +3,7 @@ using Test
 
 
 # include("aug_lag.jl")
-# include("projection.jl")
+include("projection.jl")
 # include("hessian.jl")
 # include("workspace.jl")
 # include("metrics.jl")
@@ -11,3 +11,4 @@ using Test
 
 # include("solve_hs65.jl")
 include("sparse_model.jl")
+include("polyhedral_solve.jl")

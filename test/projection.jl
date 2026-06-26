@@ -1,80 +1,105 @@
-@testset "Subspace matrix" begin
-
-    m=4; n = 8
-    A = rand(m,n)
-    chol_aat = cholesky(A*A')
-    B = Traulls.SubspaceMatrix(A)
-
-    @test B.eqmat ≈ A
-    @test all(.!(B.fixvars))
-    fix_bounds = [1,3,5,7]
-    Traulls.add_subspace!(B, fix_bounds)
-    @test all(B.fixvars[fix_bounds]) && all(.!(B.fixvars[setdiff(1:n,fix_bounds)]))
-    p = size(fix_bounds,1)
-
-    
-    Z = Matrix{Float64}(I,n,n)[fix_bounds,:]
-    greedy_B = vcat(A,Z)
-    
-    x = Vector{Float64}(collect(1:n))
-    xt = Vector{Float64}(collect(1:m+p))
-    
-    res = B*x
-    res_tr = Traulls.transpose(B)*xt
-    
-    @test size(res,1) == m+p
-    @test size(res_tr,1) == n
-    @test res ≈ greedy_B*x
-    @test res_tr ≈ greedy_B'xt
-
-    # try with all bounds inactive
-    B.fixvars .= false
-    xt = Vector{Float64}(collect(1:m))
-    res = B*x
-    res_tr = Traulls.transpose(B)*xt
-
-    @test Traulls.nb_fixed(B) == 0
-    @test size(res, 1) == m
-    @test size(res_tr, 1) == n
-    @test res ≈ A*x
-    @test res_tr ≈ A'xt
+# Orthogonal projection onto {v | Av = 0, vᵢ = 0 for i ∈ fixed}, computed
+# directly (and order-independently) as a reference for the incremental
+# SubspaceProjector.
+function reference_projection(A, fixed, x)
+    n = size(A, 2)
+    Z = Matrix{Float64}(I, n, n)[fixed, :]
+    B = isempty(fixed) ? A : vcat(A, Z)
+    return x - B' * ((B * B') \ (B * x))
 end
 
-@testset "Subspace projections" begin
-    m=4; n = 8
-    A = rand(m,n)
-    chol_aat = cholesky(A*A')
-    active = [1, 3]
-    fix_bounds = BitVector([true,false,true,false,false,false,false,false])
-    
-    Z = Matrix{Float64}(I,n,n)[findall(fix_bounds),:]
-    greedy_B = vcat(A,Z)
+# Measured through a function barrier so the result reflects only mul!'s own
+# allocations (used to check the in-place projection is allocation-free).
+projection_allocs(r, P, x) = @allocated mul!(r, P, x)
 
-    scratch_chol = Traulls.cholesky_augmented_gram_mat(A, fix_bounds, chol_aat)
+@testset "Subspace projector — construction and projection" begin
+    m, n = 4, 8
+    A = rand(m, n)
+    chol_aat = cholesky(A * A')
+    x = collect(1.0:n)
 
     P = Traulls.SubspaceProjector(A, chol_aat)
 
-    @test all(.!(P.workspace_mat.fixvars))
+    # No bound active: projection onto null(A)
+    @test all(.!P.fixvars)
+    @test Traulls.nb_degrees_of_freedom(P) == n - m
+    proj_x = P * x
+    @test proj_x ≈ reference_projection(A, Int[], x)
+    @test norm(A * proj_x) < 1e-10            # lies in null(A)
+    @test P * proj_x ≈ proj_x                 # idempotent
+end
+
+@testset "Subspace projector — active set management" begin
+    m, n = 4, 8
+    A = rand(m, n)
+    chol_aat = cholesky(A * A')
+    x = collect(1.0:n)
+
+    P = Traulls.SubspaceProjector(A, chol_aat)
+    active = [3, 1, 6]                         # deliberately unsorted
     Traulls.set_active!(P, active)
 
-    @test all(P.workspace_mat.fixvars[active]) &&
-        all(.!(P.workspace_mat.fixvars[setdiff(1:n, active)]))
-    @test findall(i -> Traulls.is_fixed(P, i), 1:n) == active
-    @test Traulls.nb_degrees_of_freedom(P) == n - m - size(active, 1)
+    @test all(P.fixvars[active]) && all(.!P.fixvars[setdiff(1:n, active)])
+    @test findall(i -> Traulls.is_fixed(P, i), 1:n) == sort(active)
+    @test Traulls.nb_degrees_of_freedom(P) == n - m - length(active)
 
-    x = Vector{Float64}(collect(1:n))
-    proj_x = Vector{Float64}(undef,n)
+    proj_x = P * x
+    @test proj_x ≈ reference_projection(A, active, x)
+    @test norm(proj_x[active]) < 1e-12         # fixed components vanish
+    @test norm(A * proj_x) < 1e-10             # still in null(A)
+    @test P * proj_x ≈ proj_x                  # idempotent
 
-    Traulls.mul!(proj_x, P, x)
-
-    @test P.chol_gram_augmat.L ≈ scratch_chol.L
-    @test P.workspace_mat*x ≈ greedy_B*x
-    @test norm(proj_x[findall(fix_bounds)]) < 1e-12
-    @test norm(P.workspace_mat*proj_x) < 1e-12
-
+    # Freeing the bounds restores the null(A) projector
     Traulls.set_free!(P, active)
-    @test P.workspace_mat.eqmat ≈ A
-    @test all(i -> !Traulls.is_fixed(P, i), 1:n)
+    @test all(.!P.fixvars)
+    @test Traulls.nb_degrees_of_freedom(P) == n - m
+    @test P * x ≈ reference_projection(A, Int[], x)
+end
+
+@testset "Subspace projector — order independence and reset" begin
+    m, n = 3, 9
+    A = rand(m, n)
+    chol_aat = cholesky(A * A')
+    x = randn(n)
+    active = [7, 2, 5, 8]
+
+    # Activating in different orders yields the same projection
+    P1 = Traulls.SubspaceProjector(A, chol_aat)
+    Traulls.set_active!(P1, active)
+
+    P2 = Traulls.SubspaceProjector(A, chol_aat)
+    for j in reverse(active)
+        Traulls.set_active!(P2, [j])
+    end
+
+    P3 = Traulls.SubspaceProjector(A, BitVector([i in active for i in 1:n]), chol_aat)
+
+    ref = reference_projection(A, active, x)
+    @test P1 * x ≈ ref
+    @test P2 * x ≈ ref
+    @test P3 * x ≈ ref
+
+    # reset_projector! returns to the all-free state and is reusable
+    Traulls.reset_projector!(P1)
+    @test all(.!P1.fixvars) && Traulls.nb_degrees_of_freedom(P1) == n - m
+    @test P1 * x ≈ reference_projection(A, Int[], x)
+    Traulls.set_active!(P1, [4])
+    @test P1 * x ≈ reference_projection(A, [4], x)
+end
+
+@testset "Subspace projector — in-place mul! is allocation free" begin
+    # Large n: the previous implementation allocated O(n) temporaries per call;
+    # the rewritten one only uses preallocated buffers, so allocations are O(1).
+    m, n = 20, 200
+    A = rand(m, n)
+    chol_aat = cholesky(A * A')
+    P = Traulls.SubspaceProjector(A, chol_aat)
+    Traulls.set_active!(P, collect(2:2:60))
+
+    x = randn(n)
+    r = similar(x)
+    mul!(r, P, x)                              # warm up / compile
+    @test projection_allocs(r, P, x) < 256     # independent of n
 end
 
 @testset "Coordinate subspace projector" begin
