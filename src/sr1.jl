@@ -29,14 +29,14 @@ by first order quantities.
 quantities involved when computing matrix-vector products
 
 """
-mutable struct SR1{T<:Real} <: ALHessian{T}
-    J::AbstractMatrix{T}
-    C::AbstractMatrix{T}
-    S::AbstractMatrix{T}
+mutable struct SR1{T<:Real, MJ<:AbstractMatrix{T}, MC<:AbstractMatrix{T}} <: ALHessian{T}
+    J::MJ
+    C::MC
+    S::Matrix{T}
     mu::T
-    step::AbstractVector{T}
-    secant_rhs::AbstractVector{T}
-    temp::AbstractVector{T} # buffer vector for intermediate computations
+    step::Vector{T}
+    secant_rhs::Vector{T}
+    temp::Vector{T} # buffer vector for intermediate computations
 end
 
 """
@@ -75,15 +75,15 @@ end
 # Hybrid structured and scaled SR1 formula
 # Uses the secant equation from Zhou and Chen and the same heuristic to detect small
 # residuals problems and applies the SR1 update
-mutable struct HybridSR1{T<:Real} <: ALHessian{T}
-    J::AbstractMatrix{T}
-    C::AbstractMatrix{T}
-    S::AbstractMatrix{T}
+mutable struct HybridSR1{T<:Real, MJ<:AbstractMatrix{T}, MC<:AbstractMatrix{T}} <: ALHessian{T}
+    J::MJ
+    C::MC
+    S::Matrix{T}
     mu::T
-    step::AbstractVector{T}
-    secant_rhs::AbstractVector{T}
+    step::Vector{T}
+    secant_rhs::Vector{T}
     small_res::Bool
-    temp::AbstractVector{T}
+    temp::Vector{T}
 end
 
 # Constructor for the HybridSR1 struct

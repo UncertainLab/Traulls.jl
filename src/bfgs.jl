@@ -2,13 +2,13 @@
 # Approximation of the AL Hessian with second order terms approximated with
 # BFGS update formula
 # Based on the NL2SOL-style secant equation
-mutable struct BFGS{T<:Real} <: ALHessian{T}
-    J::AbstractMatrix{T}
-    C::AbstractMatrix{T}
-    S::AbstractMatrix{T}
+mutable struct BFGS{T<:Real, MJ<:AbstractMatrix{T}, MC<:AbstractMatrix{T}} <: ALHessian{T}
+    J::MJ
+    C::MC
+    S::Matrix{T}
     mu::T
-    step::AbstractVector{T}
-    secant_rhs::AbstractVector{T}
+    step::Vector{T}
+    secant_rhs::Vector{T}
     temp::Vector{T}
 end
 
@@ -35,15 +35,15 @@ end
 
 
 # Hybrid version of the structured BFGS update
-mutable struct HybridBFGS{T<:Real} <:ALHessian{T}
-    J::AbstractMatrix{T}
-    C::AbstractMatrix{T}
-    S::AbstractMatrix{T}
+mutable struct HybridBFGS{T<:Real, MJ<:AbstractMatrix{T}, MC<:AbstractMatrix{T}} <:ALHessian{T}
+    J::MJ
+    C::MC
+    S::Matrix{T}
     mu::T
-    step::AbstractVector{T}
-    secant_rhs::AbstractVector{T}
+    step::Vector{T}
+    secant_rhs::Vector{T}
     small_res::Bool
-    temp::AbstractVector{T}
+    temp::Vector{T}
 end
 
 # Constructor method for `HybridBFGS` struct

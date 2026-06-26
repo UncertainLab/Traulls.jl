@@ -108,3 +108,95 @@ end
     H_test = J'*J + new_mu*C'*C
     @test H*v ≈ H_test*v
 end
+
+@testset "BFGS Hessian-vector product" begin
+
+    n = 5   # parameters
+    m = 10  # residuals
+    p = 3   # nonlinear constraints
+
+    J = rand(m, n)
+    C = rand(p, n)
+    mu = 10.0
+    v = rand(n)
+
+    H = Traulls.BFGS(J, C, mu)
+    Hv = similar(v)
+
+    # Second order terms initialized to the identity: H = JᵀJ + μCᵀC + I
+    H_test = J'*J + mu*C'*C + I
+    mul!(Hv, H, v)
+    @test Hv ≈ H_test*v
+
+    # Matrix-vector product with a generic second order term
+    S = rand(n, n)
+    H.S .= S
+    H_test = J'*J + mu*C'*C + S
+    mul!(Hv, H, v)
+    @test Hv ≈ H_test*v
+end
+
+@testset "HybridBFGS Hessian-vector product" begin
+
+    n = 5   # parameters
+    m = 10  # residuals
+    p = 3   # nonlinear constraints
+
+    J = rand(m, n)
+    C = rand(p, n)
+    mu = 10.0
+    v = rand(n)
+
+    H = Traulls.HybridBFGS(J, C, mu)
+    Hv = similar(v)
+
+    # Second order terms initialized to the identity and small_res = false:
+    # H = JᵀJ + μCᵀC + S
+    @test H.small_res == false
+    S = rand(n, n)
+    H.S .= S
+    H_test = J'*J + mu*C'*C + S
+    mul!(Hv, H, v)
+    @test Hv ≈ H_test*v
+
+    # Small residuals heuristic active: the second order term is dropped
+    H.small_res = true
+    H_test = J'*J + mu*C'*C
+    mul!(Hv, H, v)
+    @test Hv ≈ H_test*v
+end
+
+@testset "HybridSR1 Hessian-vector product" begin
+
+    n = 5   # parameters
+    m = 10  # residuals
+    p = 3   # nonlinear constraints
+
+    J = rand(m, n)
+    C = rand(p, n)
+    mu = 10.0
+    v = rand(n)
+
+    H = Traulls.HybridSR1(J, C, mu)
+    Hv = similar(v)
+
+    # Second order terms initialized to zero and small_res = false:
+    # H = JᵀJ + μCᵀC
+    @test H.small_res == false
+    H_test = J'*J + mu*C'*C
+    mul!(Hv, H, v)
+    @test Hv ≈ H_test*v
+
+    # Matrix-vector product with a generic second order term
+    S = rand(n, n)
+    H.S .= S
+    H_test = J'*J + mu*C'*C + S
+    mul!(Hv, H, v)
+    @test Hv ≈ H_test*v
+
+    # Small residuals heuristic active: the second order term is dropped
+    H.small_res = true
+    H_test = J'*J + mu*C'*C
+    mul!(Hv, H, v)
+    @test Hv ≈ H_test*v
+end

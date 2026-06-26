@@ -36,16 +36,16 @@ Lagrangian Hessian
 
 * `μ`: penalty parameter
 
-* `temp`: buffer vector to avoid reallocations for intermediate
+* `temp`: buffer vector to avoid reallocations of the intermediate
 quantities involved when computing matrix-vector products
 
 The resulting approximation is `H = JᵀJ + μCᵀC`.
 """
-mutable struct GN{T<:Real} <: ALHessian{T}
-    J::AbstractMatrix{T}
-    C::AbstractMatrix{T}
+mutable struct GN{T<:Real, MJ<:AbstractMatrix{T}, MC<:AbstractMatrix{T}} <: ALHessian{T}
+    J::MJ
+    C::MC
     mu::T
-    temp::AbstractVector{T}
+    temp::Vector{T}
 end
 
 """
@@ -71,7 +71,7 @@ function GN(
 
     m = size(J,1)
     p = size(C,1)
-    return GN(copy(J),copy(C),mu,zeros(max(m,p)))
+    return GN(copy(J),copy(C),mu,zeros(T,max(m,p)))
 end
 
 """
