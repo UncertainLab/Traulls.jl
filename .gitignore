@@ -28,3 +28,6 @@
 *.blg
 draft/draft.synctex.gz
 draft/draft.fdb_latexmk
+
+# arXiv submission build
+draft/arxiv_build/
