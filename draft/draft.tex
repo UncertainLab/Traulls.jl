@@ -87,7 +87,7 @@
 
 \title{An augmented Lagrangian algorithm for constrained nonlinear least-squares} %%%%%%%%%%%%
 
-\author{Pierre Borie\footremember{udem}{University of Montreal, Department of Computer Science and Operations Research, Montreal, QC, Canada}, Fabian Bastin\footrecall{udem}, Stéphane Dellacherie\footremember{hq}{Hydro-Québec, Montreal, QC, Canada}\footremember{uqam}{Université du Québec à Montréal, Montreal, QC, Canada}}
+\author{Pierre Borie\footremember{udem}{Université de Montréal, Department of Computer Science and Operations Research, Montreal, QC, Canada}\footremember{mailpb}{\texttt{pierre.borie@umontreal.ca}}, Fabian Bastin\footrecall{udem}\footremember{mailfb}{\texttt{bastin@iro.umontreal.ca}}, Stéphane Dellacherie\footremember{hq}{Hydro-Québec, Montreal, QC, Canada}\footremember{uqam}{Université du Québec à Montréal, Montreal, QC, Canada}\footremember{mailsd}{\texttt{dellacherie.stephane@hydroquebec.com}}}
 
 \date{\today}
 
@@ -98,14 +98,14 @@
 	\maketitle
 	
 	\begin{abstract} 
-		\noindent We present an algorithm for solving nonlinear least-squares problems subject to a mix of nonlinear and linear constraints. The nonlinear constraints are handled by reformulating the objective as the augmented Lagrangian function while linear constraints are handled directly. Each iteration consists in approximately solving a linearly constrained problem by means of a gradient projection technique. Our approach also involves a structured approximation of the augmented Lagrangian Hessian. We show global convergence of the method and provide numerical experiments.
+		\noindent We present an algorithm for solving nonlinear least-squares problems subject to a mix of nonlinear and linear constraints. The nonlinear constraints are handled by reformulating the objective as the augmented Lagrangian function while linear constraints are handled directly. Each iteration consists of approximately solving a linearly constrained problem by means of a gradient projection technique. Our approach also involves a structured approximation of the augmented Lagrangian Hessian. We show global convergence of the method and assess the performance through numerical experiments.
 		
 		%% If you want to inform the reader of the paper about your
 		%% supplementary material, you can refer to it this way. The file
 		%% itself should be placed in a directory called Attach.
 	\end{abstract}
 	
-	\vspace{1em}\noindent\textbf{Keywords:} constrained nonlinear least-squares, augmented Lagrangian method, Julia programming language, structured quasi-Newton update. 
+	\vspace{1em}\noindent\textbf{Keywords:} constrained nonlinear least-squares, augmented Lagrangian method, structured quasi-Newton update.
 	
 	\section{Introduction}
 	
@@ -152,16 +152,16 @@
 	A distinctive feature of NLS problems is that the Hessian of the objective decomposes into a first-order part $J(x)^\top J(x)$, where $J(x)$ is the Jacobian of $r$, and a second-order part involving the individual Hessians of the residuals weighted by their values. Exploiting this decomposition is the central challenge in designing
 	efficient algorithms.
 	The Gauss--Newton (GN) method retains only the first-order term, which is effective when residuals are small at the solution but can lead to poor convergence otherwise.
-	The Levenberg--Marquardt (LM) method, initiated in~\cite{levenberg:1944,	marquardt:1963} and further studied, for instance, in~\cite{bellavia-etal:2018, bergou-etal:2021}, regularizes the GN matrix by a scalar multiple of the identity, providing robustness at the cost of potentially slower convergence on large-residual problems.
+	The Levenberg--Marquardt (LM) method, initiated by Levenberg~\cite{levenberg:1944} and Marquardt~\cite{marquardt:1963} and further studied, for instance, in~\cite{bellavia-etal:2018, bergou-etal:2021}, regularizes the GN matrix by a scalar multiple of the identity, providing robustness at the cost of potentially slower convergence on large-residual problems.
 	A richer class of approaches, known as structured quasi-Newton (SQN) methods, approximates the second-order part through secant equations tailored to the least-squares structure. The NL2SOL package~\cite{dennisetal:1981,dennis-etal:1989} is a popular implementation of this idea, complementing the GN term with a structured quasi-Newton correction updated via a dedicated secant equation. This algorithm also switches between the GN model or the full Hessian depending on the quality of the step. Other hybrid strategies with a switching criterion based on the residual magnitude have also been explored in~\cite{albaalifletcher:1985, fletcherxu:1987, zhouchen:2010}. Further SQN formulations, including factorized updates and sizing strategies, have been proposed in~\cite{biggs:1977, betts:1976, huschens1994, yabetakahashi:1991, zhang-etal:2000}. A comprehensive numerical comparison of these techniques can be found in~\cite{lucksan-etal:2019}.
 	
 	Extending structured NLS methods to the constrained setting has received comparatively less attention, though it remains an active area of research. Such formulations arise, for example, in data-fitting problems where the constraints enforce the physical consistency of an underlying model~\cite{grenieretal:2006, delbos-etal2006, pu-etal:2015}. The convex case, especially the bound-constrained case, is studied in~\cite{bellavia-etal:2004, bellavia-etal:2011, porcelli:2013, goncalvesmenezes:2020}.
 	
 	
-	For more general nonlinear constraints, most methods operate within a sequential quadratic programming (SQP) framework. In that paradigm, each iteration solves a quadratic subproblem obtained by linearizing the constraints and approximating the Hessian of the Lagrangian. An SQP method whose Hessian approximation is based on a secant equation derived from~\cite{biggs:1977} is proposed in~\cite{li-etal:2002}. A BFGS update of the projected Hessian of a merit function is used in~\cite{tjoabiegler:1991}, while a structured approximation of the projected Hessian is updated within the null space of the active constraints in~\cite{amiribartels:1989}.
+	For more general nonlinear constraints, most methods operate within a sequential quadratic programming (SQP) framework. In that paradigm, each iteration solves a quadratic subproblem obtained by linearizing the constraints and approximating the Hessian of the Lagrangian. An SQP method whose Hessian approximation is based on a secant equation derived from that of Biggs~\cite{biggs:1977} is proposed by Li et al.~\cite{li-etal:2002}. A BFGS update of the projected Hessian of a merit function is used in~\cite{tjoabiegler:1991}, while a structured approximation of the projected Hessian is updated within the null space of the active constraints in~\cite{amiribartels:1989}.
 	For problems with equality constraints only, more recent work includes regularized approaches. A Levenberg--Marquardt approximation of the Lagrangian Hessian is combined with a trust-region method in~\cite{bergou-etal:2021}, and a regularized KKT system is derived in~\cite{orbansiquiera:2020} by adding primal and dual regularization terms.
 	Structured approximations of the Hessian within general constrained formulations have also been studied from a theoretical perspective in~\cite{tapia:1988}.
-	When the constraints can be split into two categories, as in formulation~\eqref{pb:cnls}, an alternative to SQP methods is the augmented Lagrangian (AL) framework, also known as the method of multipliers, independently introduced by~\cite{hestenes:1969} and~\cite{powell:1969}, with further theoretical foundations provided by~\cite{rockafellar:1973}.
+	When the constraints can be split into two categories, as in formulation~\eqref{pb:cnls}, an alternative to SQP methods is the augmented Lagrangian (AL) framework, also known as the method of multipliers, independently introduced by Hestenes~\cite{hestenes:1969} and Powell~\cite{powell:1969}, with further theoretical foundations provided by Rockafellar~\cite{rockafellar:1973}.
 	Rather than solving a sequence of quadratic subproblems, AL methods incorporate the nonlinear constraints into the objective as a penalty term and solve a sequence of subproblems in which only the easier constraints remain.
 	For problem~\eqref{pb:cnls}, this amounts to approximately minimizing, at each outer iteration, the AL function over the polyhedral set $\Omega$, thereby reducing the problem to a linearly constrained one. This strategy is particularly attractive as the linear part can be handled directly and efficiently by gradient projection techniques, without sacrificing the ability to enforce nonlinear constraints.
 	The theoretical underpinnings of this approach, including global convergence results, are developed in~\cite{conn-etal:1988a,conn-etal:1991, conn-etal:1993, conn-etal:1996b} and summarized in~\cite[Chapter~14]{conn-etal:2000}.
@@ -170,9 +170,9 @@
 	For the inner minimization that arises at each outer AL iteration, gradient projection methods~\cite{moretoraldo:1991, linmore:1999a} are particularly effective for bound-constrained problems as they allow for rapid changes in the active set throughout the iterations. The linear equality case can be handled efficiently, as the projections can be computed by solving a system of normal equations~\cite{gould-etal:2001}.
 	When both bounds and linear equalities are present, as in our setting, direct projection onto $\Omega$ is not available in closed form. Nevertheless, we will see in the next section that the norm of the reduced gradient provides a practical criticality measure, as used in solvers such as MINOS~\cite{murtaghsaunders:1978} and LSNNO~\cite{tointtuyttens:1992}.
 	
-	The present work combines two well-established lines of research: the augmented Lagrangian framework~\cite{conn-etal:1988a}, with its mature convergence theory and gradient projection inner minimization, and the quasi-Newton approximations that exploit the sum-of-squares structure of both the objective and the penalty term, following the secant equation philosophy of~\cite{biggs:1977,dennisetal:1981} adapted to the AL setting in the spirit of~\cite{li-etal:2002}. Bringing these together yields a solver specifically designed for NLS problems while handling constraints of general form, including nonlinear equalities and inequalities alongside linear equalities and bounds. Our algorithm is implemented in the Julia programming language~\cite{bezanson-etal:2017} and is open-source.
+	The present work combines two well-established lines of research: the augmented Lagrangian framework~\cite{conn-etal:1988a}, with its mature convergence theory and gradient projection inner minimization, and the quasi-Newton approximations that exploit the sum-of-squares structure of both the objective and the penalty term, following the secant equation philosophy of~\cite{biggs:1977,dennisetal:1981} adapted to the AL setting in the spirit of~\cite{li-etal:2002}. Bringing these together yields a solver specifically designed for NLS problems while handling constraints of general form, including nonlinear equalities and inequalities alongside linear equalities and bounds. A Julia~\cite{bezanson-etal:2017} implementation of the proposed algorithm is available at \url{https://github.com/UncertainLab/Traulls.jl}.
 	
-	We end this section by introducing some notations. Jacobian matrices of $r$ and $c$ evaluated at $x$ are respectively denoted $J(x)$ and $C(x)$. Components of a vector $x\in\RR^n$ are denoted $x_i$ for $i=1,\ldots,n$. Vectors $e_i$ denote the columns of the $n \times n$ identity matrix written $I_n$ -- or simply $I$ when the dimension is clear from the context. When describing iterative processes to solve problem~\eqref{pb:cnls}, we index vectors and matrices by the iteration number. For instance, at iteration $k$, $(x_k,\lambda_k)$ is the current primal-dual iterate. For functions evaluated at $x_k$, we use the shorthand notation $r_k = r(x_k)$, $c_k =c(x_k)$, $J_k=J(x_k)$ etc. To not interfere with previous notation for components, we add parentheses to make the distinction clear. For instance, $(x_k)_i$ denotes the $i$-th component of vector $x_k$. For any sequence $(u_k)_k$, the limit of a converging subsequence indexed by $\calK \subset \NN$ will be written $\lim_{k \in \calK} u_k$. The orthogonal complement of a subspace $V \subset \RR^n$, i.e. the set $\{ w\ | \ \inner{w}{v}=0\ \text{for all}\ v \in V\}$, will be written $V^\perp$.
+	We end this section by introducing some notations. Jacobian matrices of $r$ and $c$ evaluated at $x$ are respectively denoted $J(x)$ and $C(x)$. Components of a vector $x\in\RR^n$ are denoted $x_i$ for $i=1,\ldots,n$. Vectors $e_i$ denote the columns of the $n \times n$ identity matrix written $I_n$ -- or simply $I$ when the dimension is clear from the context. When describing iterative processes to solve problem~\eqref{pb:cnls}, we index vectors and matrices by the iteration number. Our method has a nested structure (Section~\ref{sec:algorithm}): we use an uppercase index $K$ for its outer iterations and a lowercase index $k$ for the inner iterations. For instance, at outer iteration $K$, $(x_K,\lambda_K)$ is the current primal-dual iterate, while for functions evaluated at an iterate $x_k$ we use the shorthand notation $r_k = r(x_k)$, $c_k =c(x_k)$, $J_k=J(x_k)$ etc., and similarly at outer iterates. To not interfere with previous notation for components, we add parentheses to make the distinction clear. For instance, $(x_k)_i$ denotes the $i$-th component of vector $x_k$. For any sequence $(u_k)_k$, the limit of a converging subsequence indexed by $\calK \subset \NN$ will be written $\lim_{k \in \calK} u_k$. The orthogonal complement of a subspace $V \subset \RR^n$, i.e. the set $\{ w\ | \ \inner{w}{v}=0\ \text{for all}\ v \in V\}$, will be written $V^\perp$.
 	
 	The rest of the paper is organized as follows. In Section~\ref{sec:algorithm}, we present our algorithmic framework and discuss implementation details. We study global convergence in Section~\ref{sec:convergence_analysis}. Numerical experiments are shown in Section~\ref{sec:numerical_experiments} and we conclude with perspectives.
 	
@@ -199,7 +199,7 @@
 	where $\mu > 0$ is a penalty parameter.
 	
 	We maintain the linear constraints in the formulation of the problem and only penalize the violation of the nonlinear constraints.
-	One has the following expression for the gradient: 
+	The gradient is given by 
 	\begin{equation*}
 		\nabla_x \Phi(x,\lambda,\mu) = J(x)^\top r(x) + C(x)^\top\bar{\lambda}(x,\lambda,\mu),
 	\end{equation*}
@@ -226,76 +226,80 @@
 			\text{s.t.}  \quad & x \in \Omega.
 		\end{aligned}	
 	\end{equation}
-	Moving the nonlinear constraints into the objective simplifies the problem because only linear constraints are left, which enables one to use iterative methods for linearly constrained optimization while still improving feasibility of the nonlinear constraints. Since $\Omega$ is a convex set, a first-order critical point of~\eqref{pb:cnls_al_reformulation} can also be characterized by the condition
+	Moving the nonlinear constraints into the objective simplifies the problem since only linear constraints are left, which enables one to use iterative methods for linearly constrained optimization~\cite{gould-etal:2001,conn-etal:1988b} while still improving feasibility of the nonlinear constraints. Since $\Omega$ is a convex set, a first-order critical point of~\eqref{pb:cnls_al_reformulation} can also be characterized by the condition
 	\begin{equation*}
 		\proj{\Omega}{x_*-\nabla_x \Phi(x_*,\lambda,\mu)} = x_*.
 	\end{equation*}
-	In our methods, and as in standard AL methods, each iterate $x_k$ is an approximate solution of a subproblem of the form~\eqref{pb:cnls_al_reformulation} satisfying
+	In our methods, and as in standard AL methods~\cite{conn-etal:1991,conn-etal:2000}, each iterate $x_K$ is an approximate solution of a subproblem of the form~\eqref{pb:cnls_al_reformulation} satisfying
 	\begin{equation}\label{eq:algo_traulls_criticality_test}
-		\|\proj{\Omega}{x_k-\nabla_x\Phi(x_k, \lambda_k, \mu_k)}-x_k\| \le \omega_k,
+		\|\proj{\Omega}{x_K-\nabla_x\Phi(x_K, \lambda_K, \mu_K)}-x_K\| \le \omega_K,
 	\end{equation}
-	for a fixed vector of multipliers $\lambda_k$, penalty parameter $\mu_k$ and tolerance $\omega_k$.
-	If the iterate $x_k$ improves the feasibility violation of the nonlinear constraints, a dual ascent step is taken on the Lagrange multipliers by setting
+	for a fixed vector of multipliers $\lambda_K$, penalty parameter $\mu_K$ and tolerance $\omega_K$.
+	If the iterate $x_K$ improves the feasibility violation of the nonlinear constraints, a dual ascent step is taken on the Lagrange multipliers by setting
 	\begin{equation*}
-		\lambda_{k+1} = \lambda_k + \mu_k c_k = \bar{\lambda}(x_k,\lambda_k,\mu_k).
+		\lambda_{K+1} = \lambda_K + \mu_K c_K = \bar{\lambda}(x_K,\lambda_K,\mu_K).
 	\end{equation*}
-	If on the contrary, feasibility has not been improved, the minimization~\eqref{pb:cnls_al_reformulation} is restarted using an increased penalty parameter $\mu_{k+1} > \mu_k$ to enforce feasibility. The method is outlined in Algorithm~\ref{algo:traulls}. Following our notation for iteration dependent quantities, we respectively write $\nabla_x\Phi(x_k, \lambda_k, \mu_k)$ and $\bar{\lambda}(x_k,\lambda_k,\mu_k)$ in the compact form $\nabla_x \Phi_k$ and $\bar{\lambda}_k$.
+	If on the contrary, feasibility has not been improved, the minimization~\eqref{pb:cnls_al_reformulation} is restarted using an increased penalty parameter $\mu_{K+1} > \mu_K$ to enforce feasibility. The method is outlined in Algorithm~\ref{algo:traulls}. Following our notation for iteration dependent quantities, we respectively write $\nabla_x\Phi(x_K, \lambda_K, \mu_K)$ and $\bar{\lambda}(x_K,\lambda_K,\mu_K)$ in the compact form $\nabla_x \Phi_K$ and $\bar{\lambda}_K$.
 	\begin{algorithm}
 		\caption{Augmented Lagrangian algorithm}\label{algo:traulls}
 		\begin{algorithmic}[1]
-			\Require Initial starting point $x^s_0 \in \Omega$, Lagrange multipliers estimate $\lambda_0$, penalty parameter $\mu_0$
-			\State Penalty parameter increase factor $\tau > 1$, tolerance update constants $\omega,\eta, \kappa_\omega, \kappa_\eta, \beta_\omega, \beta_\eta$
+			\Require Initial point $x^s_0 \in \Omega$, multiplier estimate $\lambda_0$, penalty parameter $\mu_0 > 0$, increase factor $\tau > 1$, tolerance update constants $\omega,\eta,\kappa_\omega,\kappa_\eta,\beta_\omega,\beta_\eta > 0$, stopping tolerances $\omega_*,\eta_* > 0$
 			\State{Set initial tolerances $\omega_0\gets \omega \mu_0^{-\kappa_\omega}$ and $\eta_0\gets \eta \mu_0^{-\kappa_\eta}$}
-			\For{k=0,1,2,\ldots}
-			\State\label{line:inner_iteration} Starting from $x_k^s$, approximately solve $\min_{x\in \Omega} \Phi(x,\lambda_k,\mu_k)$ to find $x_k \in \Omega$ satisfying~\eqref{eq:algo_traulls_criticality_test}.
-			\If{$\|c(x_k)\| \le \eta_k$}
-			\If{\(\|\proj{\Omega}{x_k-\nabla_x\Phi_k}-x_k\|  \le \omega_*\) and \(\left\Vert c(x_k)\right\Vert \le \eta_*\)}
-			\State{\textbf{stop} and} \Return approximate solution $(x_k,\lambda_k)$
+			\For{K=0,1,2,\ldots}
+			\State\label{line:inner_iteration} Starting from $x_K^s$, approximately solve $\min_{x\in \Omega} \Phi(x,\lambda_K,\mu_K)$ to find $x_K \in \Omega$ satisfying~\eqref{eq:algo_traulls_criticality_test}.
+			\If{$\|c(x_K)\| \le \eta_K$}
+			\If{\(\|\proj{\Omega}{x_K-\nabla_x\Phi_K}-x_K\|  \le \omega_*\) and \(\left\Vert c(x_K)\right\Vert \le \eta_*\)}
+			\State{\textbf{stop} and} \Return approximate solution $(x_K,\lambda_K)$
 			\EndIf
-			\State Update the Lagrange multipliers $\lambda_{k+1}\gets \bar{\lambda}_k$ 
-			\State Set the next starting point $x_{k+1}^s \gets x_k $
-			\State Leave the penalty parameter unchanged \(\mu_{k+1} \gets \mu_k\)
-			\State Decrease the tolerances $\omega_{k+1}\gets \omega_k \mu_{k+1}^{-\beta_\omega}$ and $\eta_{k+1}\gets \eta_k \mu_{k+1}^{-\beta_\eta}$
+			\State Update the Lagrange multipliers $\lambda_{K+1}\gets \bar{\lambda}_K$ 
+			\State Set the next starting point $x_{K+1}^s \gets x_K $
+			\State Leave the penalty parameter unchanged \(\mu_{K+1} \gets \mu_K\)
+			\State Decrease the tolerances $\omega_{K+1}\gets \omega_K \mu_{K+1}^{-\beta_\omega}$ and $\eta_{K+1}\gets \eta_K \mu_{K+1}^{-\beta_\eta}$
 			\Else{}
-			\State Leave the iterate unchanged \(\left(x_{k+1}^s,\lambda_{k+1}\right) \gets \left(x_k^s,\lambda_k\right)\)
-			\State Increase the penalty parameter $\mu_{k+1} \gets \tau\mu_k$
-			\State Update tolerances $\omega_{k+1}\gets \omega \mu_{k+1}^{-\kappa_\omega}$ and $\eta_{k+1}\gets \eta \mu_{k+1}^{-\kappa_\eta}$
+			\State Leave the iterate unchanged \(\left(x_{K+1}^s,\lambda_{K+1}\right) \gets \left(x_K^s,\lambda_K\right)\)
+			\State Increase the penalty parameter $\mu_{K+1} \gets \tau\mu_K$
+			\State Update tolerances $\omega_{K+1}\gets \omega \mu_{K+1}^{-\kappa_\omega}$ and $\eta_{K+1}\gets \eta \mu_{K+1}^{-\kappa_\eta}$
 			\EndIf
 			\EndFor
 		\end{algorithmic}
 	\end{algorithm}
 	One first notices that Algorithm~\ref{algo:traulls} has an outer-inner iteration structure, in the sense that each iteration requires approximately solving an optimization problem (line~\ref{line:inner_iteration}), which also involves an iterative process. The techniques used for the latter are detailed in the following sections.
 	
-	Tolerances in Algorithm~\ref{algo:traulls} are updated in such a way that both sequences $\omega_k$ and $\eta_k$ tend to $0$ when $k \to \infty$. The update scheme that we outline follows the rules described in~\cite[Chapter 14]{conn-etal:2000}. The parameter values used in our implementation are given in Section~\ref{subsec:implementation_details}.
+	Tolerances in Algorithm~\ref{algo:traulls} are updated in such a way that both sequences $\omega_K$ and $\eta_K$ tend to $0$ when $K \to \infty$. The update scheme that we outline follows the rules described in~\cite[Chapter 14]{conn-etal:2000}. The parameter values used in our implementation are given in Section~\ref{subsec:implementation_details}.
 	
 	We describe the convergence in terms of the norm of the projected gradient but this quantity is not directly computable in practice, as there is no closed form formula for the projection on a polyhedral set of the form $\Omega$. For our implementation, we will use the norm of the reduced gradient, which we define now. 
 	
-	For $x \in \Omega$, $\calA^+(x)$, resp. $\calA^-(x)$ denotes the indices of upper bounds, resp. lower bounds, satisfied as equalities (active) at $x$ and $\calA(x) := \calA^+(x) \cup \calA^-(x)$, i.e.:
+	For $x \in \Omega$, $\calA^+(x)$ and $\calA^-(x)$ respectively denote the indices of upper and lower bounds satisfied as equalities (active) at $x$, and we set $\calA(x) := \calA^+(x) \cup \calA^-(x)$, so that
 	\begin{equation*}
-		i \in \calA(x) \implies x_i \in \{l_i,u_i\}.
+		i \in \calA(x) \iff x_i \in \{l_i,u_i\}.
 	\end{equation*}
-	We also introduce the notion of tangent space at a point $x$, written $T(x)$ and defined as the set of directions $d$ such that the same constraints are satisfied with equality at both $x$ and $x+d$. In our case, this corresponds to the linear equality constraints and the active bounds. Formally:
+	We also introduce the notion of tangent space at a point $x$, written $T(x)$ and defined as the set of directions $d$ such that the same constraints are satisfied with equality at both $x$ and $x+d$. In our case, this corresponds to the linear equality constraints and the active bounds. Formally,
 	\begin{equation}\label{eq:tangent_space}
 		T(x) := \left\{ d \in \RR^n \ | \ Ad = 0,\ d_i=0\ \text{for all}\ i\in \calA(x)\right\}.
 	\end{equation}
-	At a given point \((x,\lambda)\) and parameter $\mu$, the reduced gradient is defined as 
+	At a given point \((x,\lambda)\) and parameter $\mu$, the reduced gradient is defined as
 	\begin{equation*}
-		\proj{T(x)}{\nabla_x \Phi(x,\lambda,\mu)}.
+		\proj{T(x)}{\nabla_x \Phi(x,\lambda,\mu)},
 	\end{equation*}
+	where $\proj{T(x)}{\cdot}$ denotes the orthogonal projection operator onto the tangent space $T(x)$.
 	Provided that the multipliers associated with the active bounds are of appropriate sign, the quantity $\|\proj{T(x)}{\nabla_x \Phi(x,\lambda,\mu)}\|$ is an appropriate criticality measure used in optimization algorithms for linearly constrained optimization such as MINOS~\cite{murtaghsaunders:1978} and LSNNO~\cite{tointtuyttens:1992}.
-	Projections on the tangent space also have the advantage of being available in closed form. Indeed, by the full rank and non-degeneracy assumptions on $A$, the subspace $T(x)$ is the null space of the matrix
+	Projections on the tangent space also have the advantage of being available in closed form. The subspace $T(x)$ is the null space of the matrix
 	\begin{equation}\label{eq:matrix_tangent_space}
 		\tilde{A} = \begin{pmatrix}
 			A \\ E_\calA^\top
 		\end{pmatrix},
 	\end{equation}
-	where $E_\calA$ is formed by the columns $(e_i)_{i \in \calA(x)}$ of the identity. Therefore, projecting on $T(x)$ is equivalent to applying the linear operator
+	where $E_\calA$ is formed by the columns $(e_i)_{i \in \calA(x)}$ of the identity. We assume throughout that these active constraints remain non-degenerate.
+	\begin{assumption}\label{assumption:full_rank_active}
+		For every $x \in \Omega$, the matrix~\eqref{eq:matrix_tangent_space} formed from the bounds active at $x$ has full row rank.
+	\end{assumption}
+	Assumption~\ref{assumption:full_rank_active} strengthens Assumption~\ref{assumption:full_rank_A}: it is a linear independence (non-degeneracy) condition on the active linear constraints, which holds, in particular, when no active bound is linearly dependent on the rows of $A$. Under this assumption, projecting on $T(x)$ is equivalent to applying the orthogonal projection operator
 	\begin{equation}\label{eq:minor_subpb_projector}
 		\tilde{P} = I - \tilde{A}^\top\left(\tilde{A}\tilde{A}^\top\right)^{-1}\tilde{A}.
 	\end{equation}
 	We will provide more details on how the projections are calculated in practice in Section~\ref{subsec:implementation_details}, but this offers an initial justification for using
 	\begin{equation}\label{eq:criticality_cond_reduced_grad}
-		\|\proj{T_k}{\nabla_x\Phi_k}\| \le \omega_k
+		\|\proj{T_K}{\nabla_x\Phi_K}\| \le \omega_K
 	\end{equation}
 	as a stopping condition in Algorithm~\ref{algo:traulls} instead of~\eqref{eq:algo_traulls_criticality_test}.
 	
@@ -314,11 +318,11 @@
 	\begin{equation*}
 		\|\proj{T(x)}{\nabla \varphi(x)}\| \le \omega,
 	\end{equation*}
-	for a tolerance $\omega > 0$. This task also involves an iterative process, for which the iterates will be indexed with subscript $k$ but are distinct from the outer iterates of Algorithm~\ref{algo:traulls}. At each iteration $k$, we compute a step $s_k$ and recursively update the iterate by $x_{k+1}=x_k+s_k$. The step is obtained after minimizing a model of the objective function $\varphi$ around $x_k$. We consider the quadratic model:
+	for a tolerance $\omega > 0$. This task also involves an iterative process, for which the iterates will be indexed with subscript $k$ but are distinct from the outer iterates of Algorithm~\ref{algo:traulls}. At each iteration $k$, we compute a step $s_k$ and recursively update the iterate by $x_{k+1}=x_k+s_k$. The step is obtained after minimizing a model of the objective function $\varphi$ around $x_k$. We consider the quadratic model
 	\begin{equation}\label{eq:al_quadratic_model}
 		m_k(x) = \varphi_k + \inner{g_k}{x-x_k} + \dfrac{1}{2}\inner{x-x_k}{H_k(x-x_k)},
 	\end{equation}
-	where $\varphi_k:=\varphi(x_k)$, $g_k:=\nabla \varphi_k$ and $H_k$ is a symmetric approximation of the true Hessian $\nabla^2_{xx} \varphi_k$. Using the latter would negatively impact the performance of the algorithm because computing the second-order terms~\eqref{eq:al_hessian_2nd_terms} requires too much time and storage in practice. We discuss the aspects of the methods relative to the choice of approximation in Section~\ref{subsec:hessian_approx}. 
+	where $\varphi_k:=\varphi(x_k)$, $g_k:=\nabla \varphi_k$ and $H_k$ is a symmetric approximation of the true Hessian $\nabla^2_{xx} \varphi_k$. Using the latter would negatively impact the performance of the algorithm since computing the second-order terms~\eqref{eq:al_hessian_2nd_terms} requires too much time and storage in practice. We discuss the aspects of the methods relative to the choice of approximation in Section~\ref{subsec:hessian_approx}. 
 	Model~\eqref{eq:al_quadratic_model} is appropriate to describe the algorithm in terms of the iterate. When discussing subproblems, we prefer to emphasize the step and would then use the following model of the primal reduction $\varphi(x_k+s)-\varphi_k$, given by
 	\begin{equation*}
 		q_k(s) = \dfrac{1}{2}\inner{s}{H_ks} + \inner{g_k}{s}.
@@ -333,13 +337,13 @@
 		& \|s\|_\infty \le \Delta_k,
 	\end{align*}	
 	
-	Vector $s$ denotes the unknown of the subproblem whose solution $s_k$ is the step and is used to compute the new iterate $x_{k+1}=x_k+s_k$.
+	Here, $s$ denotes the unknown of the subproblem, whose solution $s_k$ is the step used to compute the new iterate $x_{k+1}=x_k+s_k$.
 	
 	Since $x_0$ is feasible, the constraints $x_k+s\in \Omega$ are satisfied at every iteration as long as the steps satisfy
 	\[As = 0, \qquad l - x_k \le s \le u-x_k,\]
 	for all $k$.
 	
-	In our method, we also incorporate a trust-region strategy to control and assert the quality of a step. Therefore, we add to each subproblem the constraint $\|s\|_\infty \le \Delta_k$ with a radius $\Delta_k > 0$. This constraint reflects the domain on which we believe that the model well approximates the true function. Since the $\ell_\infty$ trust region constraint is equivalent to imposing $x_i \in [-\Delta_k,\Delta_k]$ for all $i$, we can rewrite this subproblem	
+	In our method, we also incorporate a trust-region strategy to control and assess the quality of a step. Therefore, we add to each subproblem the constraint $\|s\|_\infty \le \Delta_k$ with a radius $\Delta_k > 0$, which reflects the domain on which we believe that the model well approximates the true function. We use the $\ell_\infty$ norm because the intersection of the resulting trust region with $\Omega$ is again a polyhedron of the form~\eqref{eq:linear_constraints}: the radius constraint only tightens the bounds and leaves the linear equalities untouched, so the subproblem retains the structure of a problem with bounds and linear equalities that our projection machinery handles directly. Since $\|s\|_\infty \le \Delta_k$ amounts to imposing $s_i \in [-\Delta_k,\Delta_k]$ for all $i$, we can rewrite this subproblem	
 	\begin{subequations}\label{pb:quadratic_subproblem} 
 		\begin{align}
 			\min_{s} \quad& q_k(s)  \\
@@ -424,7 +428,7 @@
 	\end{equation}
 	where $l^{(k,j)}:= l_k - s_{k,j}$ and $u^{(k,j)}:= u_k - s_{k,j}$.
 	
-	The minor subproblem~\eqref{pb:minor_subpb} is solved by applying the projected conjugate gradient~\cite{gould-etal:2001} method with the previous minor iterate $x_{k,j}$ as a starting point. Three termination cases can occur. First, a direction can be generated such that one of the bounds~\eqref{subeq:minor_subpb_bounds} is violated for one of the free variables. When this happens, the search direction is scaled so that the associated component lies at the bound and the CG iterations stop. The second case occurs when we generate a direction of negative curvature and is handled similarly to the first one, i.e. we modify the direction so that all the variables remain within their bounds. The third case is the normal termination one and occurs when a local minimizer -- with respect to a given tolerance -- has been found. In all cases, we return the obtained search direction $w_{k,j}$, perform the projected line search to compute the point $x_{k,j+1}$ such that~\cref{eq:minor_iterate_feasible,eq:minor_iterate_decrease} are verified. The handling of the termination cases differs in the continuation of the procedure. The last two cases (negative curvature and local minimality), cause the stopping of the minor iterates loop. On the contrary, if the CG iterations stopped because a bound was hit, we go back to solving~\eqref{pb:minor_subpb} using projected conjugate gradient method with $x_{k,j+1}$ as a starting point and $\calA(x_{k,j+1}) \supset \calA(x_{k,j})$ as a new set of fixed components.
+	The minor subproblem~\eqref{pb:minor_subpb} is solved by applying the projected conjugate gradient~\cite{gould-etal:2001} method with the previous minor iterate $x_{k,j}$ as a starting point. Three termination cases can occur. First, a direction can be generated such that one of the bounds~\eqref{subeq:minor_subpb_bounds} is violated for one of the free variables. When this happens, the search direction is scaled so that the associated component lies at the bound and the CG iterations stop. The second case occurs when we generate a direction of negative curvature and is handled similarly to the first one, i.e. we modify the direction so that all the variables remain within their bounds. The third case is the normal termination one and occurs when a local minimizer -- with respect to a given tolerance -- has been found. In all cases, we return the obtained search direction $w_{k,j}$, perform the projected line search to compute the point $x_{k,j+1}$ such that~\cref{eq:minor_iterate_feasible,eq:minor_iterate_decrease} are verified. The handling of the termination cases differs in the continuation of the procedure. The last two cases (negative curvature and local optimality) cause the stopping of the minor iterates loop. On the contrary, if the CG iterations stopped because a bound was hit, we go back to solving~\eqref{pb:minor_subpb} using projected conjugate gradient method with $x_{k,j+1}$ as a starting point and $\calA(x_{k,j+1}) \supset \calA(x_{k,j})$ as a new set of fixed components.
 	The specification of the projected conjugate gradient method applied to solving~\eqref{pb:minor_subpb} is outlined in Algorithm~\ref{algo:projected_cg_method}.
 	\begin{algorithm}
 		\caption{The projected conjugate gradient method applied to~\eqref{pb:minor_subpb}}\label{algo:projected_cg_method}
@@ -458,9 +462,9 @@
 	\end{algorithm} 
 	The operations occurring at lines~\ref{line:pcg_initial_projection}~and~\ref{line:pcg_iteration_projection} are projections onto the null space defined by the constraints~\eqref{subeq:minor_subpb_eq_cons}--\eqref{subeq:minor_subpb_fix_bounds}.
 	
-	An interesting feature would be to complement each search direction by a steplength computed by a projected search~\cite{moretoraldo:1991,linmore:1999a}. This allows one to add more than one constraint at each minor iteration to the active set. The downside is that it would also require computing the projection of the gradient direction~\eqref{eq:projected_gradient_path} on the feasible set $\Omega$ at every new trial value of the steplength. When $\Omega$ only contains bound constraints, the projection is trivial and cheap to compute. The linear equality case is more costly but the projections can also be computed directly. When $\Omega$ is of the form~\eqref{eq:linear_constraints}, the projection is less trivial and requires solving the associated minimum-distance quadratic program with a dedicated solver for quadratic programming, which we prefer to avoid.
+	An interesting feature would be to complement each search direction by a steplength computed by a projected search~\cite{moretoraldo:1991,linmore:1999a}. This allows one to add more than one constraint at each minor iteration to the active set. The downside is that it would also require computing the projection of the gradient direction~\eqref{eq:projected_gradient_path} on the feasible set $\Omega$ at every new trial value of the steplength. When $\Omega$ only contains bound constraints, the projection is trivial and cheap to compute. The linear equality case is more costly but the projections can also be computed directly. When $\Omega$ is of the form~\eqref{eq:linear_constraints}, the projection is less trivial, as it amounts to solving a minimum-distance quadratic program over $\Omega$ at every trial steplength. Performing such a projection repeatedly would require a dedicated quadratic programming solver -- an external dependency whose per-trial cost would outweigh the benefit of enlarging the active set more aggressively -- which we prefer to avoid.
 	
-	We stop the minor-iterations procedure when the reduced gradient associated with the current active set is small enough. More formally, assume we performed the $j+1$ minor minimizations and let $T_{k,j}$ be the tangent space at $x_{k,j}$ with respect to the active bounds in $\calA(x_{k,j})$. We stop the minor iteration loop whenever the following inequality is satisfied:
+	We stop the minor-iterations procedure when the reduced gradient associated with the current active set is small enough. More formally, assume we performed the $j+1$ minor minimizations and let $T_{k,j}$ be the tangent space at $x_{k,j}$ with respect to the active bounds in $\calA(x_{k,j})$. We stop the minor iteration loop whenever
 	\begin{equation*}
 		\left\Vert \proj{T_{k,j}}{\nabla m_k(x_{k,j+1})} \right\Vert \le \kappa_{mlt} \left\Vert \proj{T_{k,j}}{\nabla m_k(x_k)}\right\Vert,
 	\end{equation*}
@@ -477,9 +481,9 @@
 	\begin{equation}\label{eq:hessian_gn_approx}
 		H_k = J_k^\top J_k + \mu C_k^\top C_k.
 	\end{equation}
-	The GN approximation~\eqref{eq:hessian_gn_approx} -- in reference to its unconstrained counterpart -- is computationally cheap as it involves first-order derivatives quantities already required to evaluate the gradient. Also, when the Jacobians are full rank, the resulting matrix is positive-definite which guarantees the convexity of subproblems of the form~\eqref{eq:inner_itr_subpb}. However, it is known to exhibit a slower rate of convergence on problems with nonzero residuals at the solution. This downside is amplified when we are to approximate the Hessian of the Lagrangian, or the AL in our case. Indeed, setting $S_k$ to the zero matrix not only neglects the contribution of the residuals to the curvature of the model, but also neglects the contribution of the Lagrange multipliers, for which there are no a priori reasons to equal zero.
+	The GN approximation~\eqref{eq:hessian_gn_approx} -- in reference to its unconstrained counterpart -- is computationally cheap as it involves first-order derivatives quantities already required to evaluate the gradient. This matrix is always positive semidefinite. It is positive definite -- which guarantees the convexity of the quadratic subproblems~\eqref{pb:quadratic_subproblem} -- if and only if the stacked matrix $\left(\begin{smallmatrix} J_k \\ \sqrt{\mu}\,C_k \end{smallmatrix}\right)$ has full column rank, that is, $\ker J_k \cap \ker C_k = \{0\}$. However, it is known to exhibit a slower rate of convergence on problems with nonzero residuals at the solution. This downside is amplified when we are to approximate the Hessian of the Lagrangian, or the AL in our case. Indeed, setting $S_k$ to the zero matrix not only neglects the contribution of the residuals to the curvature of the model, but also neglects the contribution of the Lagrange multipliers, for which there are no a priori reasons to equal zero.
 	
-	We thus need to take into account the full Hessian to form an approximation. Looking at the literature on this subject, one can observe that there is a variety of approaches focusing on the unconstrained case, as it is a major challenge in improving the efficiency of algorithms for problems with nonzero residuals at the solution. Nevertheless, relevant parallels can be drawn with the AL situation, or the constrained case in general, since these studies explore techniques to deal with second-order terms. Because the first-order terms are readily available and provide curvature information, only the second-order components need to be approximated. Therefore, we look for an approximation of the form 
+	We thus need to take into account the full Hessian to form an approximation. Looking at the literature on this subject, one can observe that there is a variety of approaches focusing on the unconstrained case~\cite{biggs:1977,dennisetal:1981,huschens1994,yabetakahashi:1991,zhang-etal:2000,lucksan-etal:2019}, as it is a major challenge in improving the efficiency of algorithms for problems with nonzero residuals at the solution. Nevertheless, relevant parallels can be drawn with the AL situation, or the constrained case in general, since these studies explore techniques to deal with second-order terms. Because the first-order terms are readily available and provide curvature information, only the second-order components need to be approximated. Therefore, we look for an approximation of the form 
 	\begin{equation}\label{eq:hessian_full_approx}
 		H_k = B^{GN}_k + B_k,
 	\end{equation}
@@ -493,7 +497,7 @@
 	\begin{equation}\label{eq:components_secant_equations}
 		B^{r_i}_{k+1}s_k = \nabla r_i(x_{k+1}) - \nabla r_i(x_k) \qquad \text{and} \qquad B^{c_i}_{k+1}s_k = \nabla c_i(x_{k+1}) - \nabla c_i(x_k),
 	\end{equation}
-	i.e. that each Hessian maps the change in the variables to the change in the gradients. Noticing that, for each $i$, $\nabla r_i(x_{k+1}) - \nabla r_i(x_k)$, resp. $\nabla c_i(x_{k+1}) - \nabla c_i(x_k)$, is the $i$-th row of $\left(J_{k+1}-J_k\right)^\top$, resp. $\left(C_{k+1}-C_k\right)^\top$, summing over the residuals and constraints indices all the terms of~\eqref{eq:components_secant_equations} gives, by~\eqref{eq:sum_hessian_approximations}, the structured secant equation
+	i.e. that each Hessian maps the change in the variables to the change in the gradients. Noticing that, for each $i$, the vectors $\nabla r_i(x_{k+1}) - \nabla r_i(x_k)$ and $\nabla c_i(x_{k+1}) - \nabla c_i(x_k)$ are respectively the $i$-th rows of $\left(J_{k+1}-J_k\right)^\top$ and $\left(C_{k+1}-C_k\right)^\top$, summing over the residuals and constraints indices all the terms of~\eqref{eq:components_secant_equations} gives, by~\eqref{eq:sum_hessian_approximations}, the structured secant equation
 	\begin{equation}\label{eq:structured_secant_eq}
 		B_{k+1}s_k = \left(J_{k+1}-J_k\right)^\top r_{k+1} + \left(C_{k+1}-C_k\right)^\top\bar{\lambda}_{k+1}.
 	\end{equation}
@@ -509,7 +513,7 @@
 	\begin{equation}\label{eq:structured_sr1_safeguard}
 		\left|\inner{\tilde{y}_k-B_ks_k}{s_k}\right| \ge \kappa_{sds}\|s_k\|\|\tilde{y}_k-B_ks_k\|,
 	\end{equation}
-	for $\kappa_{sds} \in (0,1)$. Inequality~\eqref{eq:structured_sr1_safeguard} is one of the most common safeguards used in SR1 methods. 
+	for $\kappa_{sds} \in (0,1)$. Inequality~\eqref{eq:structured_sr1_safeguard} is one of the most common safeguards used in SR1 methods~\cite[Section~6.2]{nocedalwright:2006}.
 	
 	The choice of the SR1 update formula is motivated by its robustness in the least-squares context, as the exhaustive benchmarks in~\cite{lucksan-etal:2019} show, and its tendency to better approximate the true Hessian with each iteration~\cite{conn-etal:1991a}. The approximation could thus be indefinite, which could be considered as a weakness compared to BFGS or DFP updates, that are guaranteed to be positive definite as long as it is the case for the initial approximation $B_0$. However, as it is highlighted in Algorithm~\ref{algo:projected_cg_method}, the use of the conjugate gradients method in a trust region framework handles, and even exploits, the potential non-convexity of the subproblems. Moreover, this update does not require a curvature condition $\inner{s_k}{y_k} > 0$ to be satisfied. In other works on the constrained case, SQN methods are used to approximate the projected Hessian of the Lagrangian \cite{tjoabiegler:1991} -- or of a merit function~\cite{amiribartels:1989} -- in the null space of the active constraints. The BFGS update is then preferred because this matrix is, under standard assumptions, positive semidefinite, according to the second-order necessary conditions.
 	
@@ -528,12 +532,8 @@
 	
 	\subsection{Summary and implementation details}\label{subsec:implementation_details}
 	
-	We end our discussion by summarizing the relations between outer, inner and minor iterates and the default values for the parameters of the algorithm presented in this section. We temporarily index the outer iterates with $K$ instead of $k$ to make the distinction from the inner iterates clearer.
-	\begin{itemize}
-		\item The outer iterates $x_K$ are the main iterates of the algorithm and are approximate minimizers of the AL
-		\item Each outer iterate is formed after a sequence of inner iterates $(x_k)_k$, linked by $x_{k+1}=x_k+s_k$ where $s_k$ is an approximate solution of the QP~\eqref{pb:quadratic_subproblem}
-		\item Each inner iterate is formed after a sequence of $M$ minor iterates $x_{k,j}$ linked by $x_{k,j+1}=x_{k,j}+w_{k,j}$ where $w_{k,j}$ is a descent direction obtained by applying the projected conjugate gradient Algorithm~\ref{algo:projected_cg_method}
-	\end{itemize} 
+	We end our discussion by summarizing the relations between outer, inner and minor iterates and the default values for the parameters of the algorithm presented in this section. Recall that the outer iterates are indexed with $K$ and the inner iterates with $k$.
+	The outer iterates $x_K$ are the main iterates of the algorithm and are approximate minimizers of the AL. Each outer iterate is formed after a sequence of inner iterates $(x_k)_k$, linked by $x_{k+1}=x_k+s_k$, where $s_k$ is an approximate solution of the QP~\eqref{pb:quadratic_subproblem}. In turn, each inner iterate is formed after a sequence of $M$ minor iterates $x_{k,j}$, linked by $x_{k,j+1}=x_{k,j}+w_{k,j}$, where $w_{k,j}$ is a descent direction obtained by applying the projected conjugate gradient Algorithm~\ref{algo:projected_cg_method}. 
 	The relations between the three levels of iterations are illustrated in Figure~\ref{fig:iteration_hierarchy}.
 	\begin{figure}[ht]
 		\centering
@@ -547,7 +547,7 @@
 			]
 			% Outer iteration frame
 			\node[outerbox, minimum width=13.5cm, minimum height=10.5cm, label={[font=\small\bfseries, anchor=north]north:Outer iterations (Algorithm~\ref{algo:traulls})}] (outer) {};
-			\node[font=\footnotesize, anchor=north] at ([yshift=-4mm]outer.north) {Approx.\ minimize AL $\Phi$, update $\lambda$, $\mu$, tolerances};
+			\node[font=\footnotesize, anchor=north] at ([yshift=-4mm]outer.north) {Outer iterate $x_K$: approx.\ minimize AL $\Phi$, update $\lambda_{K+1}$, $\mu_{K+1}$, tolerances};
 			
 			% Inner iteration frame
 			\node[innerbox, minimum width=12cm, minimum height=8.2cm, label={[font=\small\bfseries, anchor=north]north:Inner iterations (Algorithm~\ref{algo:trinner_iteration})}] (inner) at ([yshift=-6mm]outer.center) {};
@@ -598,7 +598,7 @@
 	\begin{equation}
 		v - \tilde{A}^\top y.
 	\end{equation}
-	This approach, referred to as the \textit{normal equations} approach~\cite{gould-etal:2001}, requires solving the system~\eqref{eq:proj_normal_eq_auxiliary_syst}. This is done by using the Cholesky decomposition of $\tilde{A}\tilde{A}^\top = LL^\top$ -- with $L$ lower triangular -- and system~\eqref{eq:proj_normal_eq_auxiliary_syst} is thus reduced to two successive lower triangular systems. The latter factorization is well defined because the matrix $\tilde{A}\tilde{A}^\top$ is symmetric by construction and positive definite by the full rank and non-degeneracy assumptions on $A$. Moreover, the block structure of $\tilde{A}\tilde{A}^\top$ can be exploited to incrementally maintain the $L$ factor -- instead of forming it from scratch -- across the changes in the active set. Given an active set $\calA \subset \{1,\ldots,n\}$ of cardinal $p < n-m$ and writing $A_\calA := AE_\calA$, for the restriction to the columns of $A$ indexed by $\calA$, $\tilde{A}\tilde{A}^\top $ can be written
+	This approach, referred to as the \textit{normal equations} approach~\cite{gould-etal:2001}, requires solving the system~\eqref{eq:proj_normal_eq_auxiliary_syst}. This is done by using the Cholesky decomposition of $\tilde{A}\tilde{A}^\top = LL^\top$ -- with $L$ lower triangular -- and system~\eqref{eq:proj_normal_eq_auxiliary_syst} is thus reduced to two successive lower triangular systems. The latter factorization is well defined since the matrix $\tilde{A}\tilde{A}^\top$ is symmetric by construction and positive definite by Assumption~\ref{assumption:full_rank_active}. Moreover, the block structure of $\tilde{A}\tilde{A}^\top$ can be exploited to incrementally maintain the $L$ factor -- instead of forming it from scratch -- across the changes in the active set. Given an active set $\calA \subset \{1,\ldots,n\}$ of cardinal $p < n-m$ and writing $A_\calA := AE_\calA$, for the restriction to the columns of $A$ indexed by $\calA$, $\tilde{A}\tilde{A}^\top $ can be written
 	\begin{equation}\label{eq:augmented_grammat}
 		\begin{bmatrix}
 			AA^\top &  A_{\calA} \\  A_{\calA}^\top & I_p
@@ -609,11 +609,7 @@
 		L_{11} & 0 \\ L_{21} & L_{22}
 	\end{bmatrix},\]
 	where 
-	\begin{itemize}
-		\item $L_{11}$ is the $m \times m$ Cholesky factor of $AA^\top$
-		\item $L_{21} := (L_{11}^{-1}  A_{\calA})^\top$ (size $p \times m$)
-		\item $L_{22}$ is the $p \times p$ Cholesky factor of $G := I_p - L_{21}L_{21}^\top$
-	\end{itemize}
+	$L_{11}$ is the $m \times m$ Cholesky factor of $AA^\top$, $L_{21} := (L_{11}^{-1} A_{\calA})^\top$ is of size $p \times m$, and $L_{22}$ is the $p \times p$ Cholesky factor of $G := I_p - L_{21}L_{21}^\top$.
 	The matrix $A$ being fixed, forming its Cholesky decomposition and $L_{11}^{-1} A$ just has to be done once at the start of the algorithm. Therefore, $L_{11}$ and $L_{21}$ -- the latter given by extracting the columns of $L_{11}^{-1} A$ indexed by $\calA$ -- are both available quantities and only the $L_{22}$ part needs to be maintained. Since adding an index to $\calA$ results in adding a column to $A_\calA$, and thus in appending a row and a column to $G$, the new factor $L_{22}$ can be updated incrementally by applying a bordered update to the existing one in $\calO(p^2)$ flops, which is less costly than the $\calO((m+p)^3)$ time complexity required to form the entire $L$ factor from scratch.
 	\paragraph*{Bound constrained problems}
 	Our intention with the work presented in this paper was to conceive an algorithm able to handle directly linear constraints of the form~\eqref{eq:linear_constraints} but we also accept problems where linear constraints are only bounds and then
@@ -631,18 +627,14 @@
 	\[\left\| x_K - \proj{\Omega}{x_K-\nabla_x\Phi_K}\right\|,\]
 	as a criticality measure. Also note that the projections onto tangent spaces are also simplified, as they are now given by setting the components corresponding to active bounds to $0$.
 	
-	\paragraph*{Parameter values} 
-	The default values for tolerances and constants of Algorithm~\ref{algo:traulls} are
-	\[ \mu_0 = 10,\ \kappa_\omega = \beta_\omega = \eta = \omega = 1,\ \kappa_\eta = 0.1,\ \beta_\eta = 0.9,\ \tau = 100,\  \omega_*=\eta_* = 10^{-7}.\]
-	The constants relative to the inner minimization process of Algorithm~\ref{algo:trinner_iteration} are set to the subproblem criticality tolerance, i.e. at outer iteration $K$, we set
-	\[ \kappa_{cg} = \kappa_{mlt} = \omega_K.\]
-	The value of constant $\kappa_{sds}$ used in safeguard~\eqref{eq:structured_sr1_safeguard} is set to the square root of the relative double precision.
+	\paragraph*{Parameter conditions} 
+	Algorithm~\ref{algo:traulls} requires $\mu_0 > 0$, $\tau > 1$, positive tolerance constants $\omega,\eta,\kappa_\omega,\kappa_\eta,\beta_\omega,\beta_\eta$ and positive stopping tolerances $\omega_*,\eta_*$, the tolerance sequences being updated following~\cite[Chapter~14]{conn-etal:2000}. The constants driving the inner minimization of Algorithm~\ref{algo:trinner_iteration} are tied to the subproblem criticality tolerance, so that at outer iteration $K$ we set $\kappa_{cg} = \kappa_{mlt} = \omega_K$, while the safeguard constant $\kappa_{sds} \in (0,1)$ of~\eqref{eq:structured_sr1_safeguard} is taken as the square root of the relative machine precision.
 	
-	At the start of each outer iteration, we set our initial approximation of the second-order terms of the Hessian to $B_0 = 0$ and the constant used to monitor the hybrid switching scheme~\eqref{eq:hybrid_update_strategy} of the Hessian is set to $\kappa_{hyb}=0.1$. That same value is also used in~\cite{tjoabiegler:1991}.
+	At the start of each outer iteration, the initial approximation of the second-order terms of the Hessian is $B_0 = 0$, and the hybrid switching scheme~\eqref{eq:hybrid_update_strategy} is monitored through a constant $\kappa_{hyb} \in (0,1)$, as in~\cite{tjoabiegler:1991}.
 	
 	We now discuss the trust region handling. The initial radius value for Algorithm~\ref{algo:trinner_iteration} is set to
 	\begin{equation*}
-		\Delta_0 = 0.1\| g_0\|_\infty.
+		\Delta_0 = \delta_0 \| g_0\|_\infty, \quad \delta_0 > 0.
 	\end{equation*}
 	The mechanism to update the trust region given in~\eqref{eq:tr_basic_update} still leaves important flexibility. We choose to follow a standard strategy similar to the one presented in Chapter 17 of~\cite{conn-etal:2000}. We also added a refinement to handle the case where the ratio $\rho_k$ is negative, which can happen when there is very poor agreement between the function and the model. In such cases, we reduce the radius more severely by taking
 	\[\Delta_{k+1} = \gamma_1 \Delta_k.\]
@@ -655,8 +647,7 @@
 			& \min\left(\alpha_1 \|s_k\|_\infty,\gamma_1\Delta_k\right) & &\text{if } \rho_k < 0,
 		\end{aligned}\right.
 	\end{equation*}
-	with constant values
-	\[\alpha_1 = 0.25,\ \alpha_2 = 2.5,\ \eta_1 = 0.25,\ \eta_2 = 0.75,\ \gamma_1 = 0.0625.\]
+	whose constants satisfy $0 < \alpha_1 < 1 < \alpha_2$, $0 < \eta_1 \le \eta_2 < 1$ and $0 < \gamma_1 < 1$, refining the generic scheme~\eqref{eq:tr_basic_update}. The specific numerical values of all parameters used in our tests are reported in Section~\ref{sec:numerical_experiments}.
 	
 	
 	\section{Convergence analysis}\label{sec:convergence_analysis}
@@ -704,7 +695,7 @@
 	\end{equation}
 	with $(l_k)_i = \max\left(-\Delta_k,l_i-(x_k)_i\right)$ and $(u_k)_i = \min\left(\Delta_k,u_i-(x_k)_i\right)$ for all $i=1,\ldots,n$.
 	
-	We assume that the total step $s_k$ produces a fraction of the reduction achieved by the Cauchy point:
+	We assume that the total step $s_k$ produces a fraction of the reduction achieved by the Cauchy point, in the sense that
 	\begin{equation}\label{eq:step_drecrease_wrt_cauchy}
 		q_k(s_k) \le \kappa_{fcd} \ q_k(s_k^C),
 	\end{equation}
@@ -716,15 +707,15 @@
 	\end{equation}
 	Let \(0=t_0 < t_1 < \ldots < t_p\) be the successive values of $t$ at which the projected step $s_k(t)$ hits a bound, also called breakpoints. Hitting a bound not only affects the corresponding components, that are now fixed, but it also affects the other components, as the steepest direction must now be projected on a subspace
 	\[\left\{d \in \RR^n \ | \ Ad=0,\ d_i=0\ \text{for all fixed components}\ i\right\}\]
-	This motivates adapting the notion of tangent space at a point on the projected gradient path:
+	This motivates adapting the notion of tangent space to a point on the projected gradient path
 	\begin{equation*}
 		T(t) := \left\{ d \in \RR^n \ | \ Ad = 0,\ d_i=0\ \text{for all fixed components}\ i\in \calA(t)\right\},
 	\end{equation*}
-	for $t\ge0$. This enables us to give a recursive expression of $s_k(t)$ on each interval $[t_i,t_{i+1})$, with $0 \leq i \le p$, as:
+	for $t\ge0$. This enables us to give a recursive expression of $s_k(t)$ on each interval $[t_i,t_{i+1})$, with $0 \leq i \le p$, as
 	\begin{equation}\label{eq:projected_gradient_path_recursion}
 		s_k(t) = (t-t_i) \proj{T(t_i)}{-g_k} + s_k(t_i).
 	\end{equation}
-	We also define the reduced gradient on the projected gradient path:
+	We also define the reduced gradient on the projected gradient path
 	\begin{equation}\label{eq:reduced_gradient_proj_grad_path}
 		z_k(t) := \proj{T(t)}{g_k}.
 	\end{equation}
@@ -746,17 +737,17 @@
 	\end{proof}
 	When referring to the tangent space and the reduced gradient at a given breakpoint $t_i$, we will make use of the shorthand notation $T_i := T(t_i)$ and $z_i:=z_k(t_i)$. Notice that because the active set is fixed on each interval $[t_i,t_{i+1})$, so is the tangent space and hence, the reduced gradient is constant. Also, we can deduce from Lemma~\ref{lemma:non_increasing_reduced_gradient_norm} that the tangent spaces associated with each breakpoint form a finite sequence of nested linear subspaces
 	\[T_0 \supseteq T_1 \supseteq \ldots \supseteq T_p.\]
-	We can now expand equation~\eqref{eq:projected_gradient_path_recursion}:
+	We can now expand equation~\eqref{eq:projected_gradient_path_recursion} into
 	\begin{equation}\label{eq:projected_gradient_path_full_expr}
 		s_k(t) = -(t-t_i)z_i - \sum_{j=0}^{i-1}(t_{j+1}-t_j)z_j,
 	\end{equation}
-	which shows that on each interval $(t_i,t_{i+1})$, $s_k(t)$ is differentiable w.r.t. $t$ and that
+	which shows that on each interval $(t_i,t_{i+1})$, $s_k(t)$ is differentiable with respect to $t$ and that
 	\begin{equation}\label{eq:projected_gradient_path_derivative}
 		s_k^\prime(t) = -z_k(t) = -z_i,
 	\end{equation}
 	for $t \in (t_i,t_{i+1})$.
 	
-	We start by establishing an inequality on the decrease of the objective function after taking step $s_k$. This will involve the norm of the projected gradient, i.e.:
+	We start by establishing an inequality on the decrease of the objective function after taking step $s_k$. This will involve the norm of the projected gradient,
 	\begin{equation}\label{eq:crit_norm_projected_grad}
 		h_k := \left\|s_k(1)\right\|.
 	\end{equation}
@@ -769,9 +760,9 @@
 	\end{lemma}
 	
 	\begin{proof} 
-		First note that the constant $\kappa_{ubg}$ is well defined because $\varphi$ is continuously differentiable on $\calX$, the latter being compact by Assumption~\ref{assumption:inner_iterates_compact}.
+		First note that the constant $\kappa_{ubg}$ is well defined since $\varphi$ is continuously differentiable on $\calX$, the latter being compact by Assumption~\ref{assumption:inner_iterates_compact}.
 		
-		Since the set $\Omega$ is closed and convex, the projection mapping $\proj{\Omega}{\cdot}$ is non expansive, thus, for any $t\ge 0$:
+		Since the set $\Omega$ is closed and convex, the projection mapping $\proj{\Omega}{\cdot}$ is non expansive, so that for any $t\ge 0$
 		\begin{equation*}
 			\begin{split}
 				\left\| s_k\left(t\right) \right\| & = \left\| \proj{\Omega}{x_k-tg_k}-x_k\right\| \\
@@ -792,7 +783,7 @@
 		\begin{equation}\label{eq:t1_leq_t2}
 			0 < t_k^{(1)} < t_k^{(2)} \le 1.
 		\end{equation}
-		On each interval $(t_i,t_{i+1})$, the left, resp. right, derivative of $s_k(t)$ at $t_i$, resp. $t_{i+1}$, are well defined and equal $z_i$. We can thus rewrite~\eqref{eq:projected_gradient_path_full_expr} as
+		On each interval $(t_i,t_{i+1})$, the right derivative of $s_k(t)$ at $t_i$ and its left derivative at $t_{i+1}$ are well defined and equal $-z_i$. We can thus rewrite~\eqref{eq:projected_gradient_path_full_expr} as
 		\begin{equation*}
 			s_k(t) = \int_{t_i}^{t} s_k^\prime(t)dt + \sum_{j=0}^{i-1} \int_{t_j}^{t_{j+1}} s_k^\prime(t)dt,
 		\end{equation*} 
@@ -801,7 +792,7 @@
 			s_k(t) = -\int_{0}^{t} z_k(t)dt,
 		\end{equation}
 		using~\eqref{eq:projected_gradient_path_derivative} and keeping in mind that it is a sum of integrals defined on each segment $[t_i,t_{i+1}]$. 
-		Now let $i_1$, resp. $i_2$ be the breakpoint index such that $t_k^{(1)} \in [t_{i_1},t_{i_1+1})$, resp. $t_k^{(2)} \in [t_{i_2},t_{i_2+1})$. Then by~\eqref{eq:projected_gradient_path_integral_form}:
+		Now let $i_1$ and $i_2$ be the breakpoint indices such that $t_k^{(1)} \in [t_{i_1},t_{i_1+1})$ and $t_k^{(2)} \in [t_{i_2},t_{i_2+1})$ respectively. Then, by~\eqref{eq:projected_gradient_path_integral_form},
 		\begin{equation*}
 			s_k(t_k^{(2)}) - s_k(t_k^{(1)}) = -\int_{t_k^{(1)}}^{t_k^{(2)}} z_k(t)dt, 
 		\end{equation*}
@@ -852,14 +843,14 @@
 	\end{lemma}
 	
 	\begin{proof}
-		For $t \in T$, let $i$ be the breakpoint index such that $t\in(t_i,t_{i+1})$. On the latter interval, $\psi$ is differentiable and we have, by expression~\eqref{eq:projected_gradient_path_full_expr}:
+		For $t \in T$, let $i$ be the breakpoint index such that $t\in(t_i,t_{i+1})$. On the latter interval, $\psi$ is differentiable and we have, by expression~\eqref{eq:projected_gradient_path_full_expr},
 		\begin{equation*}
 			\begin{split}
 				\psi^\prime(t) & = \inner{g_k}{s_k^\prime(t)} + \inner{s_k(t)}{H_ks_k^\prime(t)} \\
 				& = -\inner{g_k}{z_i} - \inner{s_k(t)}{H_kz_i}.
 			\end{split}
 		\end{equation*}
-		Because $z_i$ is, by definition, the orthogonal projection of the vector $g_k$ on a linear subspace:
+		Because $z_i$ is, by definition, the orthogonal projection of the vector $g_k$ on a linear subspace, we have
 		\begin{equation}\label{eq:ineq_derivative_model_first_order}
 			\begin{split}
 				\inner{g_k}{z_i} & = \inner{z_i}{z_i} \\
@@ -868,7 +859,7 @@
 		\end{equation}
 		where the last inequality follows from the monotonicity of the reduced gradient norm on $[0,\infty)$. 
 		
-		We now look at the quadratic terms. First, by the Cauchy--Schwarz inequality:
+		We now look at the quadratic terms. First, by the Cauchy--Schwarz inequality,
 		\begin{equation*}
 			\left|\inner{s_k(t)}{H_kz_i}\right| \le \|s_k(t)\| \|H_kz_i\|.
 		\end{equation*}
@@ -880,15 +871,15 @@
 				& \le t\|g_k\| \le t_k^{(3)}\kappa_{ubg},
 			\end{split}
 		\end{equation}
-		where we have used the facts that for all breakpoints indices $j$, $\|z_i\| \le \|g_k\| \le \kappa_{ubg}$ and that the scalar $t$ is taken in $T$. For the remaining terms:
+		where we have used the facts that for all breakpoints indices $j$, $\|z_i\| \le \|g_k\| \le \kappa_{ubg}$ and that the scalar $t$ is taken in $T$. For the remaining terms,
 		\begin{equation*}
 			\|H_kz_i\| \le \|H_k\| \|z_i\| \le \kappa_{ubg}\|H_k\|.
 		\end{equation*}
-		Combining the latter inequality with~\eqref{eq:norm_proj_grad_step_ineq}, we get the following bound for the quadratic terms:
+		Combining the latter inequality with~\eqref{eq:norm_proj_grad_step_ineq} bounds the quadratic terms by
 		\begin{equation}\label{eq:ineq_derivative_model_second_order}
 			\left|\inner{s_k(t)}{H_kz_i}\right| \le t_k^{(3)} \kappa_{ubg}^2 \|H_k\|.
 		\end{equation}
-		Hence, using~\eqref{eq:ineq_derivative_model_first_order} and~\eqref{eq:ineq_derivative_model_second_order}:
+		Hence, using~\eqref{eq:ineq_derivative_model_first_order} and~\eqref{eq:ineq_derivative_model_second_order},
 		\begin{equation*}
 			\psi^\prime(t) \le -\alpha_k^2 + t_k^{(3)} \kappa_{ubg}^2 \|H_k\|,
 		\end{equation*}
@@ -897,7 +888,7 @@
 		\begin{equation*}
 			\psi^\prime(t) \le -\alpha_k^2 + t_k^{(4)} \kappa_{ubg}^2 \|H_k\| \le -\dfrac{\alpha_k^2}{2},
 		\end{equation*}
-		for $t\in T$, $t\le t_k^{(4)}$. It follows that, for all $t\in [0,t_k^{(4)}]$:
+		for $t\in T$, $t\le t_k^{(4)}$. It follows that, for all $t\in [0,t_k^{(4)}]$,
 		\begin{equation*}
 			\psi(t) \le -\dfrac{\alpha_k^2}{2}t,
 		\end{equation*}
@@ -967,14 +958,14 @@
 		The iterates produced by Algorithm~\ref{algo:traulls} lie within a closed bounded domain of $\RR^n$.
 	\end{assumption}
 	
-	Let $(x_k)_k$ be a sequence of such iterates, then Assumption~\ref{assumption:iterates_domain_bounded} ensures the existence of a subsequence indexed by $\calK \subseteq \NN$ converging to a limit point $x_*$. Since the iterates satisfy $x_k \in \Omega$ for all $k$, we also have $x_* \in \Omega$. We recall from~\eqref{eq:tangent_space} that $\calA(x)$ is the set of bounds active at $x$ and $T(x)$ the associated tangent space, and we abbreviate $\calA_* := \calA(x_*)$. We denote by $\tilde A_*$ the matrix gathering the linear constraints active at $x_*$,
+	Let $(x_K)_K$ be a sequence of such iterates, then Assumption~\ref{assumption:iterates_domain_bounded} ensures the existence of a subsequence indexed by $\calK \subseteq \NN$ converging to a limit point $x_*$. Since the iterates satisfy $x_K \in \Omega$ for all $K$, we also have $x_* \in \Omega$. We recall from~\eqref{eq:tangent_space} that $\calA(x)$ is the set of bounds active at $x$ and $T(x)$ the associated tangent space, and we abbreviate $\calA_* := \calA(x_*)$. We denote by $\tilde A_*$ the matrix gathering the linear constraints active at $x_*$,
 	\begin{equation*}
 		\tilde A_* := \begin{pmatrix} A \\ E^\top_* \end{pmatrix},
 	\end{equation*}
 	where $E_*$ is the submatrix of the identity whose columns are $e_i$, $i \in \calA_*$. Consistently with the well-posedness of the projector~\eqref{eq:minor_subpb_projector}, $\tilde A_*$ has full row rank, so $T(x_*) = \mathrm{null}(\tilde A_*)$ and there is an orthonormal matrix $N_*$ whose columns form a basis of $T(x_*)$. The next assumption ensures that the null space of the active linear constraints is large enough to achieve feasibility of the nonlinear constraints, and that the gradients of those constraints are linearly independent within that space.
 	
 	\begin{assumption}\label{assumption:cq_null_space_jacobian}
-		The rank of the matrix $C(x_*)N_*$ is no smaller than $n_c$ at any limit point $x_*$ of the sequence $(x_k)_k$.
+		The rank of the matrix $C(x_*)N_*$ is no smaller than $n_c$ at any limit point $x_*$ of the sequence $(x_K)_K$.
 	\end{assumption}
 	
 	We now introduce the remaining notations and notions used in our convergence analysis.
@@ -994,150 +985,150 @@
 	
 	We can now proceed with the global convergence proof, starting with a first lemma giving a bound on the reduced gradient norm.
 	\begin{lemma}\label{lemma:bound_proj_algrad_sol_nullspace}
-		Let $\left(x_k\right)_{k\in \calK} \in \Omega$ be a sequence converging to $x_*$ and such that
-		\[\left\| \proj{\Omega}{x_k - \nabla_x \Phi_k}-x_k \right\| \le \omega_k,\]
-		with $\lim\limits_{k\to \infty} \omega_k = 0$. Then
+		Let $\left(x_K\right)_{K\in \calK} \in \Omega$ be a sequence converging to $x_*$ and such that
+		\[\left\| \proj{\Omega}{x_K - \nabla_x \Phi_K}-x_K \right\| \le \omega_K,\]
+		with $\lim\limits_{K\to \infty} \omega_K = 0$. Then
 		\begin{equation*}
-			\left\| \proj{T(x_*)}{\nabla_x \Phi_k} \right\| \le  \omega_k,
+			\left\| \proj{T(x_*)}{\nabla_x \Phi_K} \right\| \le  \omega_K,
 		\end{equation*}
-		for all $k\in \calK$ large enough.
+		for all $K\in \calK$ large enough.
 	\end{lemma}
 	
 	\begin{proof}
-		To lighten the notations, we write $v_k := \proj{\Omega}{x_k - \nabla_x \Phi_k}$ and $d_k := v_k - x_k$. We have
+		To lighten the notations, we write $v_K := \proj{\Omega}{x_K - \nabla_x \Phi_K}$ and $d_K := v_K - x_K$. We have
 		\begin{equation*}
 			\begin{split}
-				\|v_k - x_*\| &\le \|v_k - x_k\| + \| x_k - x_*\| \\
-				& \le \omega_k + \| x_k - x_*\|.
+				\|v_K - x_*\| &\le \|v_K - x_K\| + \| x_K - x_*\| \\
+				& \le \omega_K + \| x_K - x_*\|.
 			\end{split}
 		\end{equation*}
-		Since, by hypothesis, $\omega_k \to 0$ and $x_k \to x_*$ for $k\in \calK$, the two terms on the right hand side converge to $0$, which implies that we also have
+		Since, by hypothesis, $\omega_K \to 0$ and $x_K \to x_*$ for $K\in \calK$, the two terms on the right hand side converge to $0$, which implies that we also have
 		\begin{equation*}
-			\lim\limits_{k \in \calK} v_k = x_*.
+			\lim\limits_{K \in \calK} v_K = x_*.
 		\end{equation*}
-		Therefore, there is a threshold index $k_0$ such that all bounds inactive at $x_*$ are also inactive at $v_k$ for $k \ge k_0$. This is equivalent to $\calA(v_k) \subseteq \calA_*$ for $k\ge k_0$. We then have the reverse inclusion for the associated tangent spaces $T(x_*) \subseteq T(v_k)$, giving
+		Therefore, there is a threshold index $K_0$ such that all bounds inactive at $x_*$ are also inactive at $v_K$ for $K \ge K_0$. This is equivalent to $\calA(v_K) \subseteq \calA_*$ for $K\ge K_0$. We then have the reverse inclusion for the associated tangent spaces $T(x_*) \subseteq T(v_K)$, giving
 		\begin{equation}\label{eq:lemma_bound_redgrad_comp_norm_tanproj}
-			\left\| \proj{T(x_*)}{\nabla_x \Phi_k} \right\| \le \left\| \proj{T(v_k)}{\nabla_x \Phi_k} \right\|,
+			\left\| \proj{T(x_*)}{\nabla_x \Phi_K} \right\| \le \left\| \proj{T(v_K)}{\nabla_x \Phi_K} \right\|,
 		\end{equation}
-		whenever $k\in \calK$ is above the threshold index $k_0$.
+		whenever $K\in \calK$ is above the threshold index $K_0$.
 		
-		But recall from Section~\ref{sec:algorithm} that $T(v_k)$ is the null space of a matrix $\tilde A_k$ of the form~\eqref{eq:matrix_tangent_space}. Moreover, since $v_k$ is a projection onto a convex set, it can be characterized by
+		Recall from Section~\ref{sec:algorithm} that $T(v_K)$ is the null space of a matrix $\tilde A_K$ of the form~\eqref{eq:matrix_tangent_space}. Moreover, since $v_K$ is a projection onto a convex set, it can be characterized by
 		\begin{equation*}
-			x_k - \nabla_x \Phi_k - v_k = -\left(\nabla_x \Phi_k + d_k\right) \in \calN_\Omega(v_k).
+			x_K - \nabla_x \Phi_K - v_K = -\left(\nabla_x \Phi_K + d_K\right) \in \calN_\Omega(v_K).
 		\end{equation*} 
-		By the expression~\eqref{eq:normal_cone}, $\calN_\Omega(v_k)$ is trivially a subset of the row space of $\tilde A_k$ and the latter is also the orthogonal complement of the null space of $\tilde A_k$, i.e.  $T(v_k)^\perp$. 
-		Because $T(v_k)^\perp$ is a vector space:
-		\[\nabla_x \Phi_k + d_k \in T(v_k)^\perp,\]
-		and we obtain, by linearity of $\proj{T(v_k)}{\cdot}$:
+		By the expression~\eqref{eq:normal_cone}, $\calN_\Omega(v_K)$ is trivially a subset of the row space of $\tilde A_K$ and the latter is also the orthogonal complement of the null space of $\tilde A_K$, i.e.  $T(v_K)^\perp$. 
+		Because $T(v_K)^\perp$ is a vector space, we also have
+		\[\nabla_x \Phi_K + d_K \in T(v_K)^\perp,\]
+		and we obtain, by linearity of $\proj{T(v_K)}{\cdot}$,
 		\begin{equation}\label{eq:lemma_bound_redgrad_proj_equality}
-			\proj{T(v_k)}{\nabla_x \Phi_k + d_k} = 0 \iff \proj{T(v_k)}{\nabla_x \Phi_k} = -\proj{T(v_k)}{d_k}.
+			\proj{T(v_K)}{\nabla_x \Phi_K + d_K} = 0 \iff \proj{T(v_K)}{\nabla_x \Phi_K} = -\proj{T(v_K)}{d_K}.
 		\end{equation}
 		Combining~\eqref{eq:lemma_bound_redgrad_comp_norm_tanproj} and~\eqref{eq:lemma_bound_redgrad_proj_equality} gives
 		\begin{equation*}
-			\left\| \proj{T(x_*)}{\nabla_x \Phi_k} \right\| \le \left\| \proj{T(v_k)}{\nabla_x \Phi_k} \right\| = \left\| \proj{T(v_k)}{d_k} \right\| \le \|d_k\| \le \omega_k,
+			\left\| \proj{T(x_*)}{\nabla_x \Phi_K} \right\| \le \left\| \proj{T(v_K)}{\nabla_x \Phi_K} \right\| = \left\| \proj{T(v_K)}{d_K} \right\| \le \|d_K\| \le \omega_K,
 		\end{equation*}
-		whenever $k \in \calK$ is above the threshold $k_0$, which is the desired inequality.
+		whenever $K \in \calK$ is above the threshold $K_0$, which is the desired inequality.
 	\end{proof}
 	
 	The next lemma is a standard result about the behavior of the Lagrange multipliers in AL methods.
 	\begin{lemma}[Lemma 14.4.1 from~\cite{conn-etal:2000}]\label{lemma:behavior_multipliers}
-		Assume that $\lim\limits_{k\to \infty} \mu_k = \infty$ when Algorithm~\ref{algo:traulls} is executed. Then 
+		Assume that $\lim\limits_{K\to \infty} \mu_K = \infty$ when Algorithm~\ref{algo:traulls} is executed. Then 
 		\begin{equation*}
-			\lim\limits_{k\to \infty} \frac{\|\lambda_k\|}{\mu_k} = 0.
+			\lim\limits_{K\to \infty} \frac{\|\lambda_K\|}{\mu_K} = 0.
 		\end{equation*}
 	\end{lemma}
 	
 	In the spirit of~\cite[Lemma 4.3]{conn-etal:1996b}, we state the main convergence results.
 	\begin{lemma}\label{lemma:key_lemma}
-		Suppose that Assumptions~\ref{assumption:functions_C2},~\ref{assumption:feasible_linear_cons} hold. Let $\left(x_k\right)_{k\in \calK}$ be a sequence of iterates in $\Omega$ satisfying Assumption~\ref{assumption:iterates_domain_bounded} and converging to $x_*$ for which Assumption~\ref{assumption:cq_null_space_jacobian} holds. Let $\lambda_* = \lambda(x_*)$, $(\lambda_k)_{k \in \calK}$ be any sequence of vectors and $(\mu_k)_{k \in \calK}$ be a non-decreasing sequence of positive scalars. Assume that~\eqref{eq:algo_traulls_criticality_test} holds with $\lim\limits_{k \in \calK}\omega_k = 0$.
+		Suppose that Assumptions~\ref{assumption:functions_C2},~\ref{assumption:feasible_linear_cons} hold. Let $\left(x_K\right)_{K\in \calK}$ be a sequence of iterates in $\Omega$ satisfying Assumption~\ref{assumption:iterates_domain_bounded} and converging to $x_*$ for which Assumption~\ref{assumption:cq_null_space_jacobian} holds. Let $\lambda_* = \lambda(x_*)$, $(\lambda_K)_{K \in \calK}$ be any sequence of vectors and $(\mu_K)_{K \in \calK}$ be a non-decreasing sequence of positive scalars. Assume that~\eqref{eq:algo_traulls_criticality_test} holds with $\lim\limits_{K \in \calK}\omega_K = 0$.
 		
 		Then, there are positive constants $\kappa_2, \kappa_3$ such that
 		\begin{equation}\label{eq:bound_1st_order_mult}
-			\|\bar{\lambda}_k - \lambda_* \| \le \kappa_2 \omega_k + \kappa_3 \|x_k-x_*\|,
+			\|\bar{\lambda}_K - \lambda_* \| \le \kappa_2 \omega_K + \kappa_3 \|x_K-x_*\|,
 		\end{equation}
 		\begin{equation}\label{eq:bound_ls_mult}
-			\|\lambda(x_k) - \lambda_* \| \le \kappa_3 \|x_k-x_*\|,
+			\|\lambda(x_K) - \lambda_* \| \le \kappa_3 \|x_K-x_*\|,
 		\end{equation}
 		and
 		\begin{equation}\label{eq:bound_norm_cons}
-			\|c(x_k)\| \le \kappa_2 \frac{\omega_k}{\mu_k} + \kappa_3 \frac{\|x_k-x_*\|}{\mu_k} + \frac{\|\lambda_k - \lambda_* \|}{\mu_k}.
+			\|c(x_K)\| \le \kappa_2 \frac{\omega_K}{\mu_K} + \kappa_3 \frac{\|x_K-x_*\|}{\mu_K} + \frac{\|\lambda_K - \lambda_* \|}{\mu_K}.
 		\end{equation}
-		If, in addition, $c(x_*) = 0$, then $x_*$ is a first-order critical point for problem~\eqref{pb:cnls} with corresponding Lagrange multipliers $\lambda_*$ and with $\lim\limits_{k \in \calK} \bar{\lambda}_k = \lim\limits_{k \in \calK} \lambda(x_k) = \lambda_*$.
+		If, in addition, $c(x_*) = 0$, then $x_*$ is a first-order critical point for problem~\eqref{pb:cnls} with corresponding Lagrange multipliers $\lambda_*$ and with $\lim\limits_{K \in \calK} \bar{\lambda}_K = \lim\limits_{K \in \calK} \lambda(x_K) = \lambda_*$.
 	\end{lemma}
 	
 	\begin{proof}
-		By Assumptions~\ref{assumption:functions_C2} and~\ref{assumption:cq_null_space_jacobian}, for $k$ sufficiently large, the matrix $\left(C_kN_*\right)^\dagger$ is well defined, bounded and converges to $\left(C_*N_*\right)^\dagger$. Therefore, there is a constant $\kappa_2$ such that
+		By Assumptions~\ref{assumption:functions_C2} and~\ref{assumption:cq_null_space_jacobian}, for $K$ sufficiently large, the matrix $\left(C_KN_*\right)^\dagger$ is well defined, bounded and converges to $\left(C_*N_*\right)^\dagger$. Therefore, there is a constant $\kappa_2$ such that
 		\begin{equation*}
-			\|(\left(C_kN_*\right)^\dagger)^\top \| \le \kappa_2.
+			\|(\left(C_KN_*\right)^\dagger)^\top \| \le \kappa_2.
 		\end{equation*}
 		Furthermore, by Lemma~\ref{lemma:bound_proj_algrad_sol_nullspace}, we have
-		\[ \|N_*^\top \nabla_x\Phi_k\| = \left\| \proj{T(x_*)}{\nabla_x \Phi_k} \right\| \le  \omega_k,\]
-		for $k \in \calK$ large enough. Thus we may deduce
+		\[ \|N_*^\top \nabla_x\Phi_K\| = \left\| \proj{T(x_*)}{\nabla_x \Phi_K} \right\| \le  \omega_K,\]
+		for $K \in \calK$ large enough. Thus we may deduce
 		\begin{equation}\label{eq:bound_mult_1st_ls}
 			\begin{split}
-				\|\bar \lambda_k - \lambda(x_k) \| & = \|(\left(C_kN_*\right)^\dagger)^\top N_*^\top\nabla f_k + \bar\lambda_k\| \\
-				& = \|(\left(C_kN_*\right)^\dagger)^\top (N_*^\top\nabla f_k + (C_kN_*)^\top\bar\lambda_k)\| \\
-				& = \|((C_kN_*)^\dagger)^\top (N_*^\top  \nabla_x \Phi_k)\| \\
-				& \le 	\|(\left(C(x)N_*\right)^\dagger)^\top \| \ \|N_*^\top \nabla_x\Phi_k\| \\
-				& \le \kappa_2 \omega_k.
+				\|\bar \lambda_K - \lambda(x_K) \| & = \|(\left(C_KN_*\right)^\dagger)^\top N_*^\top\nabla f_K + \bar\lambda_K\| \\
+				& = \|(\left(C_KN_*\right)^\dagger)^\top (N_*^\top\nabla f_K + (C_KN_*)^\top\bar\lambda_K)\| \\
+				& = \|((C_KN_*)^\dagger)^\top (N_*^\top  \nabla_x \Phi_K)\| \\
+				& \le 	\|(\left(C(x)N_*\right)^\dagger)^\top \| \ \|N_*^\top \nabla_x\Phi_K\| \\
+				& \le \kappa_2 \omega_K.
 			\end{split}
 		\end{equation}
 		Furthermore, by the mean value theorem for vector-valued functions, we have
-		\[\lambda(x_k) - \lambda_* = \int_{0}^{1} \nabla \lambda(x(t))(x_k-x_*)dt,\]
-		where $x(t) = x_k + t(x_*-x_k)$. By our discussion about the least-squares multipliers~\eqref{eq:least-squares_mult}, one can show that the above integrand is bounded for $x_k$ sufficiently close to $x_*$, hence
-		\[\| \lambda(x_k) - \lambda_*\| \le \kappa_3 \|x_k-x_*\|,\]
-		for $k\in \calK$ sufficiently large and for some positive constant $\kappa_3$, giving~\eqref{eq:bound_ls_mult}.
+		\[\lambda(x_K) - \lambda_* = \int_{0}^{1} \nabla \lambda(x(t))(x_K-x_*)dt,\]
+		where $x(t) = x_K + t(x_*-x_K)$. By our discussion about the least-squares multipliers~\eqref{eq:least-squares_mult}, one can show that the above integrand is bounded for $x_K$ sufficiently close to $x_*$, hence
+		\[\| \lambda(x_K) - \lambda_*\| \le \kappa_3 \|x_K-x_*\|,\]
+		for $K\in \calK$ sufficiently large and for some positive constant $\kappa_3$, giving~\eqref{eq:bound_ls_mult}.
 		Then, combining the latter inequality and~\eqref{eq:bound_mult_1st_ls}, we may deduce that
 		\begin{equation*}
 			\begin{split}
-				\|\bar \lambda_k - \lambda_* \| & \le \|\bar \lambda_k - \lambda(x_k) \| + \|\lambda(x_k) - \lambda_* \| \\
-				& \le \kappa_2 \omega_k + \kappa_3 \|x_k-x_*\|,
+				\|\bar \lambda_K - \lambda_* \| & \le \|\bar \lambda_K - \lambda(x_K) \| + \|\lambda(x_K) - \lambda_* \| \\
+				& \le \kappa_2 \omega_K + \kappa_3 \|x_K-x_*\|,
 			\end{split}
 		\end{equation*}
 		which is inequality~\eqref{eq:bound_1st_order_mult}. 
-		Next, by expression~\eqref{eq:1st_order_mult}, we have $c(x_k) = (\bar \lambda_k - \lambda_k) / \mu_k$, which leads to
+		Next, by expression~\eqref{eq:1st_order_mult}, we have $c(x_K) = (\bar \lambda_K - \lambda_K) / \mu_K$, which leads to
 		\begin{equation*}
 			\begin{split}
-				\|c(x_k) \| & \le \frac{\|\bar \lambda_k - \lambda_* \|}{\mu_k} + \frac{\|\lambda_k - \lambda_* \|}{\mu_k} \\
-				& \le \kappa_2 \frac{\omega_k}{\mu_k} + \kappa_3 \frac{\|x_k-x_*\|}{\mu_k} + \frac{\|\lambda_k - \lambda_* \|}{\mu_k},
+				\|c(x_K) \| & \le \frac{\|\bar \lambda_K - \lambda_* \|}{\mu_K} + \frac{\|\lambda_K - \lambda_* \|}{\mu_K} \\
+				& \le \kappa_2 \frac{\omega_K}{\mu_K} + \kappa_3 \frac{\|x_K-x_*\|}{\mu_K} + \frac{\|\lambda_K - \lambda_* \|}{\mu_K},
 			\end{split}
 		\end{equation*}
 		where we have used~\eqref{eq:bound_1st_order_mult}.
 		This concludes the first part of the lemma. 
 		
-		Since $(\omega_k)_k$ tends to $0$ and $(x_k)_{k\in \calK}$ converges to $x_*$ by assumption, inequalities~\eqref{eq:bound_1st_order_mult} and~\eqref{eq:bound_ls_mult} imply that both sequences $(\bar \lambda_k)_k$ and $(\lambda(x_k))_k$ converge to $\lambda_*$ for $k \in \calK$. Therefore, from identity~\eqref{eq:identity_al_lag_grad}, we obtain that the sequence of gradients $\nabla_x \Phi_k$ converges to $\nabla_x \calL(x_*,\lambda_*)$. 
+		Since $(\omega_K)_K$ tends to $0$ and $(x_K)_{K\in \calK}$ converges to $x_*$ by assumption, inequalities~\eqref{eq:bound_1st_order_mult} and~\eqref{eq:bound_ls_mult} imply that both sequences $(\bar \lambda_K)_K$ and $(\lambda(x_K))_K$ converge to $\lambda_*$ for $K \in \calK$. Therefore, from identity~\eqref{eq:identity_al_lag_grad}, we obtain that the sequence of gradients $\nabla_x \Phi_K$ converges to $\nabla_x \calL(x_*,\lambda_*)$. 
 		
 		Finally, assume that $c(x_*) = 0$. Because~\eqref{eq:algo_traulls_criticality_test} holds, we have on the one hand that 
 		\begin{equation}\label{eq:norm_proj_grad_to_0}
-			\lim\limits_{k \in \calK} \|\proj{\Omega}{x_k-\nabla_x \Phi_k} - x_k\|= 0.
+			\lim\limits_{K \in \calK} \|\proj{\Omega}{x_K-\nabla_x \Phi_K} - x_K\|= 0.
 		\end{equation}
-		On the other hand, the set $\Omega$ being closed and convex, the projection mapping $\proj{\Omega}{\cdot}$ is continuous, so $\proj{\Omega}{x_k-\nabla_x \Phi_k} \to \proj{\Omega}{x_*-\nabla_x \calL(x_*,\lambda_*)}$ as $k \in \calK$ increases. With~\eqref{eq:norm_proj_grad_to_0}, we obtain
+		On the other hand, the set $\Omega$ being closed and convex, the projection mapping $\proj{\Omega}{\cdot}$ is continuous, so $\proj{\Omega}{x_K-\nabla_x \Phi_K} \to \proj{\Omega}{x_*-\nabla_x \calL(x_*,\lambda_*)}$ as $K \in \calK$ increases. With~\eqref{eq:norm_proj_grad_to_0}, we obtain
 		\[\proj{\Omega}{x_*-\nabla_x \calL(x_*,\lambda_*)} = x_*.\]
 		Therefore, we have established that $(x_*,\lambda_*)$ is a KKT point and the lemma is proved.
 	\end{proof}
 	
 	We can now establish the global convergence of Algorithm~\ref{algo:traulls}.
 	\begin{theorem}\label{theo:global_convergence_traulls}
-		Suppose that Assumptions~\ref{assumption:functions_C2},~\ref{assumption:feasible_linear_cons} hold. Let $\left(x_k\right)_{k}$ be a sequence of iterates generated by Algorithm~\ref{algo:traulls} satisfying Assumption~\ref{assumption:iterates_domain_bounded}. Further assume that there is a subsequence $(x_k)_{k \in \calK}$ converging to $x_*$, for which Assumption~\ref{assumption:cq_null_space_jacobian} holds and let $\lambda_* = \lambda(x_*)$.
+		Suppose that Assumptions~\ref{assumption:functions_C2},~\ref{assumption:feasible_linear_cons} hold. Let $\left(x_K\right)_{K}$ be a sequence of iterates generated by Algorithm~\ref{algo:traulls} satisfying Assumption~\ref{assumption:iterates_domain_bounded}. Further assume that there is a subsequence $(x_K)_{K \in \calK}$ converging to $x_*$, for which Assumption~\ref{assumption:cq_null_space_jacobian} holds and let $\lambda_* = \lambda(x_*)$.
 		Then, conclusions of Lemma~\ref{lemma:key_lemma} hold.
 	\end{theorem}
 	\begin{proof}
 		As in the proof of Lemma~\ref{lemma:key_lemma}, the inequalities~\eqref{eq:bound_1st_order_mult},~\eqref{eq:bound_ls_mult},~\eqref{eq:bound_norm_cons} can be derived from the assumptions. All that remains is to show that $c(x_*) = 0$. There are two cases to distinguish. 
 		
-		First, if the sequence of penalty parameters is bounded above, then there is $k$ sufficiently large such that $\|c(x_k)\| \le \eta_k$ for all $k$. Since $\eta_k \to 0$, we get that $c(x_*) = 0$.
+		First, if the sequence of penalty parameters is bounded above, then there is $K$ sufficiently large such that $\|c(x_K)\| \le \eta_K$ for all $K$. Since $\eta_K \to 0$, we get that $c(x_*) = 0$.
 		
-		Next, if the sequence of penalty parameters is unbounded, then by the update rule, we have that $(\mu_k)_k$ grows to $\infty$. Hence, by Lemma~\ref{lemma:behavior_multipliers}, the ratio $\lambda_k /\mu_k$ converges to zero. Therefore, by inequality~\eqref{eq:bound_norm_cons}, we also obtain that $c(x_*) = 0$. 
+		Next, if the sequence of penalty parameters is unbounded, then by the update rule, we have that $(\mu_K)_K$ grows to $\infty$. Hence, by Lemma~\ref{lemma:behavior_multipliers}, the ratio $\lambda_K /\mu_K$ converges to zero. Therefore, by inequality~\eqref{eq:bound_norm_cons}, we also obtain that $c(x_*) = 0$. 
 		In both cases, $x_*$ is feasible with respect to the nonlinear constraints and the remaining conclusions of Lemma~\ref{lemma:key_lemma} hold.
 	\end{proof}
-	Our convergence analysis is based on the criticality measure~\eqref{eq:algo_traulls_criticality_test} but, as we already mentioned in Section~\ref{sec:algorithm}, the latter is not available in closed form for a general polyhedron such as~\eqref{eq:linear_constraints}. This is what justified our choice to monitor criticality in our algorithm through the reduced gradient norm $\|P_{T(x_k)}[\nabla_x\Phi_k]\|$, which only involves the projection onto the tangent space of the currently active bounds. The two measures are linked through the tangent cone $\calT_\Omega(x_k)$, which is the dual cone of $\calN_\Omega(x_k)$. Indeed, one always has \[\|\proj{\Omega}{x_k-\nabla_x\Phi_k}-x_k\|\le\|P_{\calT_\Omega(x_k)}[-\nabla_x\Phi_k]\|\] 
-	and whenever the multipliers associated with the bounds active at $x_k$ are of the correct sign the projection onto the cone reduces to the projection onto $T(x_k)$, so that~\cite[Section 7.2]{conn-etal:1996b}
-	\[\|P_{\calT_\Omega(x_k)}[-\nabla_x\Phi_k]\|=\|P_{T(x_k)}[\nabla_x\Phi_k]\|.\] 
+	Our convergence analysis is based on the criticality measure~\eqref{eq:algo_traulls_criticality_test} but, as we already mentioned in Section~\ref{sec:algorithm}, the latter is not available in closed form for a general polyhedron such as~\eqref{eq:linear_constraints}. This is what justified our choice to monitor criticality in our algorithm through the reduced gradient norm $\|P_{T(x_K)}[\nabla_x\Phi_K]\|$, which only involves the projection onto the tangent space of the currently active bounds. The two measures are linked through the tangent cone $\calT_\Omega(x_K)$, which is the dual cone of $\calN_\Omega(x_K)$. Indeed, one always has \[\|\proj{\Omega}{x_K-\nabla_x\Phi_K}-x_K\|\le\|P_{\calT_\Omega(x_K)}[-\nabla_x\Phi_K]\|\] 
+	and whenever the multipliers associated with the bounds active at $x_K$ are of the correct sign the projection onto the cone reduces to the projection onto $T(x_K)$, so that~\cite[Section 7.2]{conn-etal:1996b}
+	\[\|P_{\calT_\Omega(x_K)}[-\nabla_x\Phi_K]\|=\|P_{T(x_K)}[\nabla_x\Phi_K]\|.\] 
 	Consequently, under the assumption that these sign conditions hold at every outer iterate, the reduced-gradient rule~\eqref{eq:criticality_cond_reduced_grad} certifies the criticality test~\eqref{eq:algo_traulls_criticality_test}, and Theorem~\ref{theo:global_convergence_traulls} applies to the iterates the implementation produces. Without this assumption the reduced gradient controls only the tangential component of $\nabla_x\Phi_*$, and the limit point may not be critical.
 	
 	\section{Numerical experiments}\label{sec:numerical_experiments}
 	
-	In this section, we report numerical experiments conducted with the Julia implementation of our algorithm, named TRAULLS\footnote{Trust Region AUgmented nonLinear Least-squares Solver} on a Mac mini with an M4 processor and 24 GB of RAM. Our solver is open-source and can be downloaded from \url{https://github.com/UncertainLab/Traulls.jl}. All the benchmarks we present here are also accessible in the \texttt{benchmark} folder of the linked GitHub repository.
-	The tests were carried out on a set of 49 constrained NLS problems from collections~\cite{hockschittkowski:1980, schittkowski:1987, lucksanvlcek:1999} and problems 2 and 3 referenced in~\cite{biegler-etal2000}. For problems with variable dimensions, we set the number of variables to $n \in \{100, 500, 1000\}$. Thus, we have a total of 79 problem instances ranging from 2 to 1000 variables, with up to 2500 residuals and 1000 constraints. Problems with inequality constraints were converted to the form~\eqref{pb:cnls} by adding slack variables. For our tests, we set the criticality tolerance to $\omega_* = 10^{-5}$, the feasibility tolerance to $\eta_* = 10^{-6}$, the maximum number of outer iterations to 500 and the maximum number of inner iterations to 1000. We leave the other parameters of the algorithm at the values given in Section~\ref{subsec:implementation_details}. We present our results with performance profiles of type Dolan--Mor\'e~\cite{dolanmore:2002} produced with the \texttt{BenchmarkProfiles.jl} package~\cite{benchmark-profiles-julia}.
+	In this section, we report numerical experiments conducted with the Julia implementation of our algorithm, named TRAULLS\footnote{Trust Region AUgmented nonLinear Least-squares Solver} on a Mac mini with an M4 processor and 24 GB of RAM. All the benchmarks we present here are also accessible in the \texttt{benchmark} folder of the GitHub repository.
+	The tests were carried out on a set of 49 constrained NLS problems from collections~\cite{hockschittkowski:1980, schittkowski:1987, lucksanvlcek:1999} and problems 2 and 3 referenced in~\cite{biegler-etal2000}. For problems with variable dimensions, we set the number of variables to $n \in \{100, 500, 1000\}$. Thus, we have a total of 79 problem instances ranging from 2 to 1000 variables, with up to 2500 residuals and 1000 constraints. Problems with inequality constraints were converted to the form~\eqref{pb:cnls} by adding slack variables. For our tests, we set the criticality tolerance to $\omega_* = 10^{-5}$, the feasibility tolerance to $\eta_* = 10^{-6}$, the maximum number of outer iterations to 500 and the maximum number of inner iterations to 1000. The remaining parameters are set to $\mu_0 = 10$, $\tau = 100$, $\kappa_\omega = \beta_\omega = \eta = \omega = 1$, $\kappa_\eta = 0.1$, $\beta_\eta = 0.9$, $\kappa_{hyb} = 0.1$, $\delta_0 = 0.1$, and the trust-region constants $\alpha_1 = 0.25$, $\alpha_2 = 2.5$, $\eta_1 = 0.25$, $\eta_2 = 0.75$, $\gamma_1 = 0.0625$, in accordance with the conditions of Section~\ref{subsec:implementation_details}. We present our results with performance profiles of type Dolan--Mor\'e~\cite{dolanmore:2002} produced with the \texttt{BenchmarkProfiles.jl} package~\cite{benchmark-profiles-julia}.
 	
 	\subsection{Comparison of Hessian approximations}
 	
@@ -1166,7 +1157,7 @@
 	\end{figure}
 	All five variants successfully solved all but one problem: the plain SR1 variant reaches the maximum number of iterations on the HS373 problem.
 	In terms of computation time, the GN approximation is the fastest: since it requires no	additional storage or update computation, it is the cheapest per iteration as our method mainly involves matrix-vector products. The GN approximation especially dominates on problems having sparse Jacobians and small residuals at the solution, since the second-order terms are still stored as a dense matrix. When measured by the number of inner iterations, the hybrid variants prove more efficient than their plain counterparts for both formulas. These observations are consistent with the discussion about the hybrid switching rule~\eqref{eq:hybrid_update_strategy} which -- as in the unconstrained case -- correctly identifies situations where the Gauss--Newton approximation must be corrected and activates the structured quasi-Newton correction accordingly. All approximation approaches are closer in terms of outer iterations, with plain BFGS a little bit behind, but overall, the Hybrid SR1 appears to be the most robust. To confirm these observations, we have focused our attention on a comparison of GN with Hybrid approximations, the latter appearing to be the most efficient. Profiles in Figure~\ref{fig:gn_vs_hybrid} compare the three approaches against the number of residual and gradient evaluations. The latter are similar to the inner iterations profile previously shown, as we evaluate the residuals one time per inner iteration and evaluate the gradient at every accepted step.
-	Nevertheless, Hybrid-SR1 exhibits the best efficiency and robustness. This also indicates that the SR1 approximation is well suited the negative curvature handling in the trust region setting. 
+	Nevertheless, Hybrid-SR1 exhibits the best efficiency and robustness. This also indicates that the SR1 approximation is well suited to handling negative curvature in the trust region setting. 
 	\begin{figure}[htbp]
 		\centering
 		\begin{subfigure}[b]{0.45\textwidth}
@@ -1226,7 +1217,7 @@
 	In this paper, we have presented an algorithm able to solve NLS problems subject to constraints of general form. Our method fully exploits the structure of the problem through the AL reformulation and a structured Hessian approximation. 
 	Although our implementation exhibits promising performance, its limitation for large-scale applications lies in the Hessian approximation: the dense storage of the structured second-order correction and the associated computations become prohibitive as the number of variables grows. A limited-memory variant of the structured update, following~\cite{byrd-etal:1994}, would be a natural extension to address this bottleneck. To tackle problems with a large number of residuals, another avenue of research could be to combine the AL framework with an adaptive sampling strategy applied to the residuals, lowering the dimensions of the inner minimization subproblems. This would extend to the constrained case techniques currently investigated for unconstrained problems~\cite{bellavia-etal:2026}.
 	
-	\vspace{1em}\noindent\textbf{Acknowledgments:} The first author is supported by Mitacs and  Hydro-Qu\'ebec through grants IT40867 and IT38322. The authors would also like to thank the Natural Sciences and Engineering Research Council of Canada (NSERC) and the Institute for Data Valorization (IVADO).
+	\vspace{1em}\noindent\textbf{Acknowledgments:} The first author is supported by Mitacs and  Hydro-Qu\'ebec through grants IT40867 and IT38322. The authors would also like to thank the Natural Sciences and Engineering Research Council of Canada (NSERC), which supports the second author through a Discovery Grant, and the Institute for Data Valorization (IVADO).
 	
 	\clearpage
 	
@@ -1298,13 +1289,10 @@
 				For the sake of clarity, we omit the iteration index during the rest of this appendix. 
 				We describe the procedure used to compute the first local minimizer of the quadratic $q(s) = \frac{1}{2} \inner{s}{Hs} + \inner{g}{s}$ along the projected gradient path $s(t) = \proj{\Omega}{x-tg}-x$ with $t \ge 0$. This is an adaptation of~\cite[Algorithm 17.3.1]{conn-etal:2000} to the case where linear equalities are present. 
 				For each $t \ge 0$, the projected step $s(t)$ satisfies the constraints
-				\begin{itemize}
-					\item $As(t) = 0$
-					\item $s^{(l)} \le s(t) \le s^{(u)}$,
-				\end{itemize}
+				$As(t) = 0$ and $s^{(l)} \le s(t) \le s^{(u)}$,
 				where $s^{(l)}$ and $s^{(u)}$ are iteration-dependent bounds.
 				
-				The following breakpoints:
+				The breakpoints
 				\begin{equation*}
 					0=t_0 < t_1 < \ldots < t_p,
 				\end{equation*} 
@@ -1318,11 +1306,7 @@
 					\psi(t) = \dfrac{\psi_i''}{2}(\Delta t)^2 + \psi_i'\Delta t
 				\end{equation}
 				with
-				\begin{itemize}
-					\item $\psi_i'' = \inner{z_i}{Hz_i}$
-					\item $\psi_i' = -\inner{s(t_i)}{Hz_i} - \inner{g}{z_i}$
-					\item $\Delta t = t-t_i$
-				\end{itemize}
+				$\psi_i'' = \inner{z_i}{Hz_i}$, $\psi_i' = -\inner{s(t_i)}{Hz_i} - \inner{g}{z_i}$ and $\Delta t = t-t_i$.
 				Different cases can occur depending on the values of the slope $\psi_i'$ and the curvature $\psi_i''$. 
 				Firstly, if
 				\begin{align*}
