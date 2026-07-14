@@ -3,9 +3,11 @@
 [![Build Status](https://github.com/UncertainLab/Traulls.jl/actions/workflows/CI.yml/badge.svg?branch=main)](https://github.com/UncertainLab/Traulls.jl/actions/workflows/CI.yml?query=branch%3Amain)
 [![Coverage](https://codecov.io/gh/UncertainLab/Traulls.jl/branch/main/graph/badge.svg)](https://codecov.io/gh/UncertainLab/Traulls.jl)
 
-Traulls is a Julia solver for constrained nonlinear least-squares problems. It uses an
+`Traulls.jl` is a Julia solver for constrained nonlinear least-squares problems. It uses an
 Augmented Lagrangian outer loop combined with an inner trust-region gradient-projection
 method.
+
+A theoritical description of the method, together with a convergence analysis and numerical experiments, are given in the following [preprint](https://arxiv.org/abs/2607.11239) available on arXiv.
 
 ## Installation
 
@@ -78,7 +80,6 @@ results = traulls(model; verbose=true)
 Benchmarks comparing Traulls to other solvers can be found in the `benchmark` folder. Other
 examples of model implementations are provided in the `benchmark/traulls_models` folder.
 
-## Method
 
-A more theoretical description of the method is given in the paper located in the `draft`
-folder.
+
+
