@@ -27,8 +27,8 @@
 ## Auxiliary bibtex files
 *.bbl
 *.blg
-draft/draft.synctex.gz
-draft/draft.fdb_latexmk
+main.synctex.gz
+main.fdb_latexmk
 
 ## Claude files
 *CLAUDE.md
