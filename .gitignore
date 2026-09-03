@@ -32,3 +32,6 @@ draft/draft.fdb_latexmk
 
 ## Claude files
 *CLAUDE.md
+
+## Notebook checkpoint folders
+.ipynb_checkpoints
