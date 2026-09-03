@@ -150,7 +150,7 @@ end
 """
     initial_tolerances(μ,ω₀,η₀,κᵪ,κₑ)
 
-Computes and returns `ω` and `η`, the respective optimality and feasibility tolerances for the first outer iteration of the Augmented Lagrangian algorithm [`boconls`](@ref).
+Computes and returns `ω` and `η`, the respective optimality and feasibility tolerances for the first outer iteration of the algorithm
 
 # Arguments 
 

@@ -40,7 +40,7 @@ a higher penalty parameter `μₖ₊₁ = τμₖ`, with `τ > 1`. The tolerance
 `ηₖ` are still reduced but in a weaker maner.
 
 Subproblems are solved by the gradient projection method
-see [`projected_gradient`](@ref)).
+see [`projected_gradient!`](@ref)).
 
 # Arguments
 
