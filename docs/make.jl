@@ -7,6 +7,8 @@ makedocs(
     modules = [Traulls],
     pages = [
         "Home" => "index.md",
+        "Method" => "method.md",
+        "Tutorials" => "tutorials.md",
         "Reference" => "reference.md"
     ],
     warnonly = [:missing_docs]

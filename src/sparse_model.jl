@@ -1,3 +1,5 @@
+export SparseCnlsModel, SparseCnlsModel!
+
 # Mutable struct to encode a nonlinear least-squares problem subject to nonlinear
 # constraints for which the jacobian are sparse
 # When initializing a model wit the different constructors, make sure that the functions
@@ -78,7 +80,7 @@ function SparseCnlsModel!(
     ncons = neq + nineq
 
     # Adjust linear constraints
-    xlow = vcat(low, zeros(nslack))
+    xlow = vcat(low, zeros(T, nslack))
     xupp = vcat(upp, fill(Inf, nslack))
     nlincons = size(A,1)
     lincons = hcat(A, zeros(nlincons, nslack))

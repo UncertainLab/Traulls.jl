@@ -1,3 +1,5 @@
+export CnlsModel, CnlsModel!
+
 """
     CnlsModel{T} <: AbstractCnlsModel{T}
 

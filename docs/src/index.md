@@ -13,5 +13,22 @@
 \end{aligned}
 ```
 
-where the residuals  $r$ and the constraints $c$ are two time continuously differentiable, equality constraint matrix $A$ is full row rank and $\ell, u$ are bounds 
-on the variables. 
+where the residuals  $r \colon \mathbb{R}^n \to \mathbb{R^{n_r}}$ and the constraints $c \colon \mathbb{R}^n \to \mathbb{R}^{n_c}$ are two time continuously differentiable, the $m \times n$ equality constraint matrix $A$ (with $m < n$) is full row rank, vectors $\ell, u$ are bounds 
+on the variables with components in $\mathbb{R} \cup \pm \infty$, and $\|\cdot\|$ denotes the euclidean norm. 
+
+## Installation
+
+To install the package from the Github repository, open the Julia REPL and type the following command:
+
+```julia
+julia> using Pkg
+julia> Pkg.add(url="https://github.com/UncertainLab/Traulls.jl")
+```
+
+## Basic usage
+
+
+
+## Bug reports and contributions
+
+If you encountered a bug while using the package, you can open an [issue](https://github.com/UncertainLab/Traulls.jl/issues) to report it. Issues can also be opened to discuss about suggestions of improvements.

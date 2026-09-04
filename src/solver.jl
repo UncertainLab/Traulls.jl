@@ -1,7 +1,7 @@
 export traulls
 
 """
-    solve(model; kwargs...)
+    traulls(model; kwargs...)
 
 Solve a bound-constrained nonlinear least-squares problem with equality
 constraints of the form
