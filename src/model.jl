@@ -23,10 +23,8 @@ Functions `r`, `h` and `g` are two time continuously differentiable.
 * `nleq!`: Function evaluating the nonlinear equality constraints
 * `nlineq!`: Function evaluating the nonlinear inequality constraints
 * `jac_res!`: Function evaluating the Jacobian of the residuals
-* `jac_nleq!`: Function evaluating the Jacobian of the nonlinear equality
-constraints
-* `jac_nlineq!`: Function evaluating the Jacobian of the nonlinear inequality
-constraints
+* `jac_nleq!`: Function evaluating the Jacobian of the nonlinear equality constraints
+* `jac_nlineq!`: Function evaluating the Jacobian of the nonlinear inequality constraints
 * `linmat`: Matrix of the linear equality constraints
 * `linrhs`: Right handside of the linear equality constraints
 * `xlow`: Lower bounds on the variables
@@ -38,16 +36,56 @@ constraints
 * `nlincons`: Total number of linear equality constraints, i.e. number of rows of `linmat`
 * `x`: Initial guess for solution
 
-Nonlinear inequality constraints are converted as equality constraints by
-adding slack variables`g(x) - u = 0` with `u ≥ 0`.
+The solver treats nonlinear inequality constraints as equalities by nonlinear inequality 
+constraints are converted as equality constraints by adding slack variables. Linear 
+constraints must be provided as equalities.
 
-Constructors are available for both in-place out out of place functions.
+Constructors are available for both in-place out out of place functions. 
 
-For the in-place versions, evaluation functions must return nothing and have the
-signature `f!(fx, x)`, with input `x` and the result being stored in `fx`.
+For the out-of-place version, evaluation functions must return an output vector of 
+appropriate dimension and have the signature `f(x)`. The default constructor method has 
+signature
 
-For the out-of-place version, evaluation functions must return an output vector of
-appropriate dimension and have the signature `f(x)`.
+`CnlsModel(r, h, g, jac_r, jac_h, jac_g, A, b, ℓ, u x0, nvar, nres, neq, nineq)`
+
+and requires
+
+* evaluation functions of the residuals `r` and constraints `h`, `g`
+* `jac_r, jac_h, jac_g`: respective jacobians of `r`, `h`, `g`
+* `A`, `b`: matrix coefficients and right handside of the linear equality constraints 
+* `ℓ`, `u`: bounds on the decision variables (set components of unbounded variables to `±Inf`)
+* `nvar` the number of decision variables `nvar`
+* `nres`: the number of residuals 
+* `neq`: the number of nonlinear equality constraints 
+* `nineq`: the number of nonlinear inequality constraints
+
+The following methods are availavble variants of this constructor for problems without 
+linear equality constraints or with one type of nonlinear constraints.
+
+`CnlsModel(r, h, g, jac_r, jac_h, jac_g, ℓ, u x0, nvar, nres, neq, nineq)`
+
+`CnlsModel(r, h, g, jac_r, jac_c, A, b, ℓ, u x0, nvar, nres, ncons, Val(:only_equalities))`
+
+`CnlsModel(r, h, g, jac_r, jac_c, A, b, ℓ, u x0, nvar, nres, ncons, Val(:only_inequalities))`
+
+`CnlsModel(r, h, g, jac_r, jac_c, ℓ, u x0, nvar, nres, ncons, Val(:only_equalities))`
+
+`CnlsModel(r, h, g, jac_r, jac_c, ℓ, u x0, nvar, nres, ncons, Val(:only_inequalities))`
+
+For the in-place versions of these constructors, evaluation functions must return nothing 
+and have the signature `f!(fx, x)`, with input `x` and the result being stored in `fx`.
+
+`CnlsModel!(r!, h!, g!, jac_r!, jac_h!, jac_g!, A, b, ℓ, u x0, nvar, nres, neq, nineq)`
+
+`CnlsModel!(r!, h!, g!, jac_r!, jac_h!, jac_g!, ℓ, u x0, nvar, nres, neq, nineq)`
+
+`CnlsModel!(r!, h!, g!, jac_r!, jac_c!, A, b, ℓ, u x0, nvar, nres, ncons, Val(:only_equalities))`
+
+`CnlsModel!(r!, h!, g!, jac_r!, jac_c!, A, b, ℓ, u x0, nvar, nres, ncons, Val(:only_inequalities))`
+
+`CnlsModel!(r!, h!, g!, jac_r!, jac_c!, ℓ, u x0, nvar, nres, ncons, Val(:only_equalities))`
+
+`CnlsModel!(r!, h!, g!, jac_r!, jac_c!, ℓ, u x0, nvar, nres, ncons, Val(:only_inequalities))`
 """
 mutable struct CnlsModel{T<:Real} <: AbstractCnlsModel{T}
     # In-place evaluation functions

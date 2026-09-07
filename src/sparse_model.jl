@@ -109,8 +109,8 @@ function SparseCnlsModel!(
     jc_nzcols::Vector{Ti},
     A::Matrix{T},
     b::Vector{T},
-    low::Vector{T},
-    upp::Vector{T},
+    xlow::Vector{T},
+    xupp::Vector{T},
     x0::Vector{T},
     nvar::Ti,
     nres::Ti,
@@ -120,7 +120,7 @@ function SparseCnlsModel!(
     empty_intvec = Vector{Ti}([])
 
     SparseCnlsModel(r!, c!, nothing, jr!, jc!, nothing, jr_nzrows, jr_nzcols, jc_nzrows,
-                    jc_nzcols, empty_intvec, empty_intvec, A, b, xlow, xupp, n, nslack, nres,
+                    jc_nzcols, empty_intvec, empty_intvec, A, b, xlow, xupp, nvar, nslack, nres,
                     ncons, size(A, 1), x0, TraullsCounters())
 end
 
@@ -150,12 +150,9 @@ function SparseCnlsModel!(
                     xupp, nvar, 0, nres, ncons, 0, x0, TraullsCounters())
 end
 
-"""
-    residuals!(model, rx, x)
+# Sparse versions of the evaluations functions 
 
-Evaluates the residuals for the given `model` at input vector `x`, storing the
-result in `res`.
-"""
+# Out-of-place residuals
 function residuals!(
     model::SparseCnlsModel{T, Ti},
     rx::AbstractVector{T},
@@ -167,11 +164,7 @@ function residuals!(
     return
 end
 
-"""
-    residuals(model, x)
-
-Returns the residuals for the given `model` evaluated at input vector `x`.
-"""
+# In-place residuals
 function residuals(
     model::SparseCnlsModel{T, Ti},
     x::AbstractVector{T}) where {T, Ti}
@@ -181,12 +174,7 @@ function residuals(
     return rx
 end
 
-"""
-    nlconstraints!(model, cx, x)
-
-Evaluate the nonlinear constraints for the given `model` at input vector `x`,
-storing the result in `cx`.
-"""
+# In-place nonlinear constraints 
 function nlconstraints!(model::SparseCnlsModel{T, Ti},
                         cx::AbstractVector{T},
                         x::AbstractVector{T}) where {T, Ti}
@@ -217,12 +205,7 @@ function nlconstraints!(model::SparseCnlsModel{T, Ti},
     return
 end
 
-"""
-    nlconstraints(model, x)
-
-Returns the nonlinear constraints for the given `model` evaluated at input vector
-`x`.
-"""
+# Out-of-place nonlinear constraints
 function nlconstraints(
     model::SparseCnlsModel{T, Ti},
     x::AbstractVector{T}) where {T, Ti}
@@ -232,12 +215,7 @@ function nlconstraints(
     return cx
 end
 
-"""
-    jac_residuals!(model, J, x)
-
-Evaluates the Jacobian of the residuals for the given `model` at input vector `x`,
-storing the result in matrix `J`.
-"""
+# In-place residuals jacobian
 function jac_residuals!(
     model::SparseCnlsModel{T, Ti},
     J::AbstractSparseMatrix{T, Ti},
@@ -255,11 +233,7 @@ function jac_residuals!(
     return
 end
 
-"""
-    jac_residuals(model, x)
-
-Returns the Jacobian of the residuals for the given `model` evaluated at input vector `x`.
-"""
+# Out-of-place residuals jacobian 
 function jac_residuals(
     model::SparseCnlsModel{T, Ti},
     x::AbstractVector{T}) where {T, Ti}
@@ -271,15 +245,7 @@ function jac_residuals(
     return Jx
 end
 
-
-"""
-    jac_nlconstraints!(model, C, x)
-
-Evaluate the Jacobian of the nonlinear constraints for the given `model` at input
-vector `x`, storing the result in matrix `C`.
-Assumes that the block corresponding to the slack variables is already set to minus the
-identity matrix.
-"""
+# In-place constraints jacobian
 function jac_nlconstraints!(model::SparseCnlsModel{T, Ti},
                             C::AbstractSparseMatrix{T, Ti},
                             x::AbstractVector{T}) where {T, Ti}
@@ -317,12 +283,7 @@ function jac_nlconstraints!(model::SparseCnlsModel{T, Ti},
     return
 end
 
-"""
-    jac_nlconstraints(model, x)
-
-Returns the Jacobian of the nonlinear constraints for the given `model` at input
-vector `x`.
-"""
+# Out-of-place constraints jacobian
 function jac_nlconstraints(model::SparseCnlsModel{T, Ti},
                            x::AbstractVector{T}) where {T, Ti}
 
@@ -363,6 +324,11 @@ function jac_nlconstraints(model::SparseCnlsModel{T, Ti},
     return Cx
 end
 
+""" 
+    print(io::IO, model::SparseCnlsModel)
+
+Overloaded `print` method for a `SparseCnlsModel`.
+"""
 function print(io::IO, model::SparseCnlsModel)
 
     n, nslack, nres, ncons = model.n, model.nslack, model.nres, model.ncons
