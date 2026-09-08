@@ -14,10 +14,11 @@ using NLPModelsIpopt, Percival, SolverBenchmark, NLSProblems
 # Set up problem headers
 
 # Hock Schittlowski collection
-fixed_dimensions_pb = ["hs6", "hs13", "hs14", "hs16", "hs17", "hs18", "hs20", "hs22", 
-"hs23", "hs26", "hs27", "hs30", "hs31", "hs32", "hs42", "hs43","hs57", "hs60", "hs61", 
-"hs65", "hs70", "hs77", "hs79", "hs216", "hs227", "hs264", "hs316", "hs323", "hs337", "hs344", 
-"hs345", "hs354", "hs355", "hs372", "hs373", "hs394", "hs395"]
+fixed_dimensions_pb = ["hs6", "hs13", "hs14", "hs15", "hs16", "hs17", "hs18", "hs20", 
+"hs22", "hs23", "hs26", "hs27", "hs30", "hs31", "hs32", "hs42", "hs43", "hs46", "hs49", 
+"hs50", "hs57", "hs60", "hs61", "hs65", "hs70", "hs77", "hs79", "hs216", "hs227", "hs264", 
+"hs316", "hs323", "hs337", "hs344", "hs345", "hs354", "hs355", "hs372", "hs373", "hs394", 
+"hs395"]
 
 # Luksan Vlcek
 lv_dim = [100, 500, 1000]

@@ -1,12 +1,18 @@
 # Running Percival.jl and Ipopt.jl
 using NLPModelsIpopt, Percival, SolverBenchmark, NLSProblems
 
-problems = [NLSProblems.hs06(), NLSProblems.hs13(), NLSProblems.hs14(), NLSProblems.hs16(), NLSProblems.hs17(), NLSProblems.hs18(),
-    NLSProblems.hs20(), NLSProblems.hs22(), NLSProblems.hs23(), NLSProblems.hs26(), NLSProblems.hs27(), NLSProblems.hs30(), 
-    NLSProblems.hs31(), NLSProblems.hs32(), NLSProblems.hs42(), NLSProblems.hs43(), NLSProblems.hs57(), NLSProblems.hs60(), 
-    NLSProblems.hs61(), NLSProblems.hs65(), NLSProblems.hs70(), NLSProblems.hs77(), NLSProblems.hs79(), 
-    tp216(), tp227(), tp264(), tp316(), tp323(), tp337(), tp344(),
-    tp345(), tp354(), tp355(), tp372(), tp373(), tp394(), tp395(),
+include("corrected_hs65_nls_problems.jl")
+
+problems = [
+    NLSProblems.hs06(), NLSProblems.hs13(), NLSProblems.hs14(), NLSProblems.hs15(),
+    NLSProblems.hs16(), NLSProblems.hs17(), NLSProblems.hs18(), NLSProblems.hs20(), 
+    NLSProblems.hs22(), NLSProblems.hs23(), NLSProblems.hs26(), NLSProblems.hs27(), 
+    NLSProblems.hs30(), NLSProblems.hs31(), NLSProblems.hs32(), NLSProblems.hs42(), 
+    NLSProblems.hs43(), NLSProblems.hs46(), NLSProblems.hs49(), NLSProblems.hs50(),
+    NLSProblems.hs57(), NLSProblems.hs60(), NLSProblems.hs61(), corrected_hs65(), 
+    NLSProblems.hs70(), NLSProblems.hs77(), NLSProblems.hs79(), tp216(), tp227(), tp264(),
+    tp316(), tp323(), tp337(), tp344(), tp345(), tp354(), tp355(), tp372(), tp373(), 
+    tp394(), tp395(),
     NLSProblems.BNST2(100), NLSProblems.BNST2(500), NLSProblems.BNST2(1000),
     NLSProblems.BNST3(100), NLSProblems.BNST3(500), NLSProblems.BNST3(1000),
     LVcon501(100), LVcon501(500), LVcon501(1000),

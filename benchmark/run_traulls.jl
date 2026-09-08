@@ -62,7 +62,7 @@ end
 res_to_df(results) = DataFrame(name = name_instances,
     n = [size(results[pb].solution, 1) for pb in name_instances],
     elapsed_time = [results[pb].elapsed_time for pb in name_instances],
-    objective = [results[pb].objective for pb in name_instances],
+    objective = [results[pb].objective * (1/2) for pb in name_instances],
     neval_grad = [results[pb].counters.nalgrad_eval for pb in name_instances],
     neval_residual = [results[pb].counters.nres_eval for pb in name_instances],
     neval_jac_residual = [results[pb].counters.njacres_eval for pb in name_instances],
