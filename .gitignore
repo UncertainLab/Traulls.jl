@@ -35,3 +35,4 @@ main.fdb_latexmk
 
 ## Notebook checkpoint folders
 .ipynb_checkpoints
+benchmark/.ipynb_checkpoints/profiles-checkpoint.ipynb
