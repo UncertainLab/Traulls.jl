@@ -1,10 +1,12 @@
-# Running Percival.jl and Ipopt.jl
+# Running Percival.jl and Ipopt.jl, with JIT-free timings
+# (see run_experiments_timed.jl)
 using NLPModelsIpopt, Percival, SolverBenchmark, NLSProblems
 
-problems = [
+# Rebuilt for every pass so that the warm-up leaves no state behind
+make_problems() = [
     NLSProblems.hs06(), NLSProblems.hs13(), NLSProblems.hs14(), NLSProblems.hs16(), NLSProblems.hs17(),
     NLSProblems.hs18(), NLSProblems.hs20(), NLSProblems.hs22(), NLSProblems.hs23(), NLSProblems.hs26(),
-    NLSProblems.hs27(), NLSProblems.hs30(), NLSProblems.hs31(), NLSProblems.hs32(), NLSProblems.hs42(), 
+    NLSProblems.hs27(), NLSProblems.hs30(), NLSProblems.hs31(), NLSProblems.hs32(), NLSProblems.hs42(),
     NLSProblems.hs43(), NLSProblems.hs46(), NLSProblems.hs49(), NLSProblems.hs50(), NLSProblems.hs57(),
     NLSProblems.hs60(), NLSProblems.hs61(), NLSProblems.hs65(), NLSProblems.hs70(), NLSProblems.hs77(),
     NLSProblems.hs79(), tp216(), tp227(), tp264(), tp316(), tp323(), tp337(), tp344(), tp345(), tp354(),
@@ -12,7 +14,7 @@ problems = [
     NLSProblems.BNST2(100), NLSProblems.BNST2(500), NLSProblems.BNST2(1000),
     NLSProblems.BNST3(100), NLSProblems.BNST3(500), NLSProblems.BNST3(1000),
     LVcon501(100), LVcon501(500), LVcon501(1000),
-    LVcon502(100), LVcon502(500), LVcon502(1000), 
+    LVcon502(100), LVcon502(500), LVcon502(1000),
     LVcon503(100), LVcon503(500), LVcon503(1000),
     LVcon504(100), LVcon504(500), LVcon504(1000),
     LVcon511(100), LVcon511(500), LVcon511(1000),
@@ -25,13 +27,13 @@ problems = [
     LVcon518(100), LVcon518(500), LVcon518(1000)]
 
 
-@assert length(problems) == length(name_instances) "problem mismatch"
+@assert length(make_problems()) == length(name_instances) "problem mismatch"
 
 # Ipopt keyword arguments
 common = (tol=1e-5, max_iter = 1000, nlp_scaling_method="none",
         dual_inf_tol = Inf, constr_viol_tol = Inf,
 	compl_inf_tol = Inf, acceptable_iter = 0, print_level=0)
-	
+
 solvers = Dict(:percival => model -> percival(model; inity = true,
                                               atol=1e-5,
 					      rtol = 1e-5,
@@ -42,7 +44,52 @@ solvers = Dict(:percival => model -> percival(model; inity = true,
                :ipopt => model -> ipopt(model; common...),
 	       :ipopt_lbfgs => model -> ipopt(model; common..., hessian_approximation = "limited-memory")
 	       )
-stats = bmark_solvers(solvers, problems)
+
+"""
+    bmark_solvers_timed(solvers, make_problems)
+
+Run `bmark_solvers` once as a warm-up, discard that pass, then run it
+`N_REPEAT` more times and keep, for each solver and each problem, the smallest
+`elapsed_time` observed. Every other column comes from the first timed pass;
+a disagreement in `status` between passes is recorded as a diagnostic.
+"""
+function bmark_solvers_timed(solvers, make_problems)
+
+    # Warm-up: identical pass, results discarded
+    bmark_solvers(solvers, make_problems())
+
+    stats = nothing
+
+    for k in 1:N_REPEAT
+        GC.gc()
+        timing = @timed bmark_solvers(solvers, make_problems())
+        record_compile!("bmark_solvers pass", k, timing.compile_time)
+        pass = timing.value
+
+        if stats === nothing
+            stats = pass
+        else
+            for solver in keys(solvers)
+                ref, new = stats[solver], pass[solver]
+
+                for i in 1:nrow(ref)
+                    if ref[i, :status] != new[i, :status]
+                        push!(NONDET_WARNINGS,
+                              "$(solver) / $(ref[i, :name]) : status $(ref[i, :status])"
+                              * " then $(new[i, :status])")
+                    end
+                end
+
+                ref[!, :elapsed_time] .= min.(ref[!, :elapsed_time],
+                                              new[!, :elapsed_time])
+            end
+        end
+    end
+
+    return stats
+end
+
+stats = bmark_solvers_timed(solvers, make_problems)
 
 # Insert number of gradient evaluations for Ipopt
 # Equals the number of jacobian evaluation minus 1
@@ -55,8 +102,8 @@ for solver in keys(solvers)
     stats[solver][!, :name] .= name_instances
 end
 
-# Write results into CSV files 
+# Write results into CSV files
 
-CSV.write("results/ipopt.csv", stats[:ipopt])
-CSV.write("results/ipopt-lbfgs.csv", stats[:ipopt_lbfgs])
-CSV.write("results/percival.csv", stats[:percival])
+CSV.write(joinpath(RESULTS_DIR, "ipopt.csv"), stats[:ipopt])
+CSV.write(joinpath(RESULTS_DIR, "ipopt-lbfgs.csv"), stats[:ipopt_lbfgs])
+CSV.write(joinpath(RESULTS_DIR, "percival.csv"), stats[:percival])
