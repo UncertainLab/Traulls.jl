@@ -216,11 +216,11 @@
 	\end{equation}
 	The Hessian is given by
 	\begin{equation*}
-		\nabla^2_{xx} \Phi(x,\lambda,\mu) = J(x)^\top J(x) + \mu C(x)^\top C(x) +  S(x) 
+		\nabla^2_{xx} \Phi(x,\lambda,\mu) = J(x)^\top J(x) + \mu C(x)^\top C(x) +  S(x,\lambda,\mu) 
 	\end{equation*}
 	with the second-order terms explicitly given by
 	\begin{equation}\label{eq:al_hessian_2nd_terms}
-		S(x) =\sum_{i=1}^{n_r} r_i(x) \nabla^2r_i(x) + \sum_{i=1}^{n_c} \nabla^2 c_i(x) \bar{\lambda}_i(x,\lambda,\mu).
+		S(x,\lambda,\mu) =\sum_{i=1}^{n_r} r_i(x) \nabla^2r_i(x) + \sum_{i=1}^{n_c} \nabla^2 c_i(x) \bar{\lambda}_i(x,\lambda,\mu).
 	\end{equation}
 	For fixed $\lambda$ and $\mu$, reformulating problem~\eqref{pb:cnls} with function~\eqref{eq:al} gives the linearly constrained problem
 	\begin{equation}\label{pb:cnls_al_reformulation} 
@@ -438,8 +438,7 @@
 			\State Set tolerance $\varepsilon_{\mathrm{cg}} \gets \kappa_{\mathrm{cg}}\|v\|$
 			\Repeat
 			\If{$\inner{p}{H_kp}\le 0$}
-			\State Set $w^+ \gets w + \gamma p$ where $\gamma$ is the smallest factor such that $w^+_i \in \{l^{(k,j)}_i,u^{(k,j)}_i\}$ 
-			\State for $i \in \calF(x_{k,j})$
+			\State Set $w^+ \gets w + \gamma p$ where $\gamma$ is the smallest factor such that $w^+_i \in \{l^{(k,j)}_i,u^{(k,j)}_i\}$ for $i \in \calF(x_{k,j})$
 			\State \textbf{STOP}
 			\EndIf
 			\State Set $\alpha \gets \inner{r}{v} / \inner{p}{H_kp}$
@@ -506,7 +505,7 @@
 	\[B^{\mathrm{GN}}_ks_k + \tilde{y}_k = y_k,\]
 	so the resulting approximation satisfies the standard secant equation $H_ks_k = y_k$.
 
-	It is worth making precise how the approximation~\eqref{eq:structured_secant_eq} differs from the one of~\cite{li-etal:2002}, which is the closest existing proposal. The two works differ in three respects. First, the algorithmic frameworks are distinct: the authors of~\cite{li-etal:2002} operate within an SQP method, so their approximation targets the Hessian of the Lagrangian and is used to build a quadratic subproblem in which the constraints appear linearized, whereas ours targets the Hessian of the AL and is used within a minimization over a fixed polyhedron. In particular, the curvature contributed by the nonlinear constraints enters our secant equation through the shifted multipliers $\bar{\lambda}_{k+1}$, which are updated by the penalty mechanism at every inner iteration, and not through Lagrange multiplier estimates obtained from the subproblem. Second, the secant equations themselves are not of the same nature. The one of~\cite{li-etal:2002} follows the heuristic of Biggs~\cite{biggs:1977}, in which the second-order term is approximated by a single matrix scaled by the residual values, while~\eqref{eq:structured_secant_eq} is assembled from the individual secant equations~\eqref{eq:components_secant_equations} of the residual and constraint Hessians, and therefore reproduces the exact structure of $S_k$. This is what allows the identity $B^{\mathrm{GN}}_ks_k+\tilde{y}_k=y_k$, which has no counterpart in the Biggs-based construction. Third, the class of problems addressed is larger here, since bounds and linear equalities are kept explicit in the subproblems rather than being penalized or linearized, and the method is supported by a global convergence analysis, whereas~\cite{li-etal:2002} is presented without one.
+	The closest existing proposal from the approximation~\eqref{eq:structured_secant_eq}  is the one in~\cite{li-etal:2002}. However, the two works differ in the algorithmic framework within which the approximation is used. In~\cite{li-etal:2002}, the authors operate within an SQP method, so their approximation targets the Hessian of the Lagrangian and is used to build a quadratic subproblem in which the constraints appear linearized, whereas ours targets the Hessian of the AL and is used within a minimization over a fixed polyhedron. In particular, the curvature contributed by the nonlinear constraints enters our secant equation through the shifted multipliers $\bar{\lambda}_{k+1}$, which are fixed during the inner minimization, and not through Lagrange multiplier estimates updated after every iteration.
 
 	
 	We can now derive an update formula from equation~\eqref{eq:structured_secant_eq}. In our implementation, we apply the SR1 update
@@ -936,7 +935,7 @@
 		for $t \in [0,t_k^{(5)}]$ with \[t_k^{(5)} := \min\left(t_k^{(1)},\dfrac{h_k^2}{8\kappa_{\mathrm{ubg}}^2 (\|H_k\|+1)}\right) = \dfrac{h_k^2}{8\kappa_{\mathrm{ubg}}^2 (\|H_k\|+1)}.\]
 		We will bound the decrease obtained with the step depending on where the point associated with $t_k^{(5)}$ lies with respect to the trust-region boundary.
 		
-		First, assume that $\|s_k(t_k^{(5)})\|_\infty \le \Delta_k$. By~\eqref{eq:model_bound_t1}, one has $\psi^\prime(t) < -h_k^2 /8 < 0$ for all $t \in  [0,t_k^{(5)}]$, so $\psi$ is strictly decreasing on this segment. Because the Cauchy point is the first local minimizer of $\psi$ subject to the trust region and the trust region is not violated at $t_k^{(5)}$, we must have $t_k^C \ge t_k^{(5)}$. Therefore, 
+		First, assume that $\|s_k(t_k^{(5)})\|_\infty \le \Delta_k$. By~\eqref{eq:model_bound_t1} and Lemma~\ref{lemma:bound_model_proj_grad_path}, one has $\psi^\prime(t) < -h_k^2 /8 < 0$ for all $t \in  [0,t_k^{(5)}]$, so $\psi$ is strictly decreasing on this segment. Because the Cauchy point is the first local minimizer of $\psi$ subject to the trust region and the trust region is not violated at $t_k^{(5)}$, we must have $t_k^C \ge t_k^{(5)}$. Therefore, 
 		\[\psi(t_k^C) \le \psi(t_k^{(5)}) \le -\dfrac{h_k^2}{8} t_k^{(5)}. \]
 		
 		Then, by~\eqref{eq:step_drecrease_wrt_cauchy}, $q_k(s_k) \le \kappa_{\mathrm{fcd}} q_k(s_k^C)$ and it follows that
@@ -962,7 +961,7 @@
 	\end{proof}
 	
 	Once we have established the guaranteed decrease inequality~\eqref{eq:bound_step_decrease}, the rest of the proof does not involve the polyhedral structure of the constraints and we can fall back on the standard convergence theory of trust-region methods. We state the main convergence theorem, whose proof and intermediate developments can be found in~\cite{conn-etal:1988a}.
-	\begin{theorem}[Theorem 11 from~\cite{conn-etal:1988a}]
+	\begin{theorem}[\cite{conn-etal:1988a} Theorem 11]
 		If Assumptions~\ref{assumption:inner_iterates_compact},~\ref{assumption:model_hessian} and~\ref{assumption:hessian_norm_compared_convergence_speed} hold, then
 		\[\lim\limits_{k\to \infty} h_k = 0.\]
 	\end{theorem}
@@ -1049,7 +1048,7 @@
 	\end{proof}
 	
 	The next lemma is a standard result about the behavior of the Lagrange multipliers in AL methods.
-	\begin{lemma}[Lemma 14.4.1 from~\cite{conn-etal:2000}]\label{lemma:behavior_multipliers}
+	\begin{lemma}[\cite{conn-etal:2000}, Lemma 14.4.1]\label{lemma:behavior_multipliers}
 		Assume that $\lim\limits_{K\to \infty} \mu_K = \infty$ when Algorithm~\ref{algo:traulls} is executed. Then 
 		\begin{equation*}
 			\lim\limits_{K\to \infty} \frac{\|\lambda_K\|}{\mu_K} = 0.
@@ -1387,7 +1386,7 @@
 	If the latter belongs to the interval of interest, i.e.,
 	\[t_i-\psi_i'/\psi_i'' < t_{i+1},\]
 	then it is the required minimizer. In other cases, the minimizer is at or beyond $t_{i+1}$. To prepare for the study of the next interval, we first need to find the next breakpoint, given by the smallest scalar $t_{i+1}>t_i$ such that, at $s(t_{i+1})$, one of the free components hits one of its bounds. By introducing
-	\[\delta_i^- = \min_{(z_i)_j > 0} \left\{\left((s(t_i))_j - s^{(l)}_j\right)/(z_i)_j\right\}, \qquad \delta_i^+ = \min_{(z_i)_j < 0} \left\{\left((s(t_i))_j - s^{(u)}_j\right)/(z_i)_j\right\},\]
+	\[\delta_i^- = \min_{(z_i)_j > 0} \left\{ \dfrac{(s(t_i))_j - s^{(l)}_j}{(z_i)_j}\right\}, \qquad \delta_i^+ = \min_{(z_i)_j < 0} \left\{ \dfrac{(s(t_i))_j - s^{(u)}_j}{(z_i)_j}\right\},\]
 	the next breakpoint is given by 
 	\begin{equation}\label{eq:next_breakpoint}
 		t_{i+1} = t_i + \delta_i,
