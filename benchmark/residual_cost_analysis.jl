@@ -24,7 +24,7 @@
 
 using CSV, DataFrames, Printf, Plots
 
-const RESULTS_DIR = joinpath(@__DIR__, "results_timed")
+const RESULTS_DIR = joinpath(@__DIR__, "results")
 const FIGURE_PATH = joinpath(@__DIR__, "..", "preprint", "figures",
                              "fig15_breakeven_residual_cost.pdf")
 
@@ -162,8 +162,8 @@ function main()
                label = "Hybrid-SR1 faster",
                xlabel = "extra cost per residual evaluation (ms)",
                ylabel = "instances (%)", ylims = (0, 100))
-    vline!(plt, [1e3 * quantile_sorted(current, 0.5)], linestyle = :dot,
-           linewidth = 2, label = "cost in the test set")
+    # vline!(plt, [1e3 * quantile_sorted(current, 0.5)], linestyle = :dot,
+    #        linewidth = 2, label = "cost in the test set")
     vline!(plt, [1e3 * median_cost], linestyle = :dash, linewidth = 2,
            label = "median break-even cost")
     hline!(plt, [100 * win_fraction(nonzero, 0.0)], linestyle = :dashdot,
