@@ -1,23 +1,9 @@
 # Break-even analysis on the cost of a residual evaluation.
 #
-# The benchmarks of Section 5 are built on problems whose residuals are
-# available by direct computation and are therefore very cheap to evaluate.
-# This script quantifies what happens when they are not, by asking at which
-# per-evaluation cost the structured correction starts to pay off in total
-# time.
-#
 # Model: if one residual evaluation cost c more than it does in the test set,
 # the total time of a solver would be
 #
 #     T(c) = elapsed_time + c * neval_residual,
-#
-# holding the iteration counts fixed. Comparing the Gauss-Newton variant with
-# Hybrid-SR1 gives the break-even cost
-#
-#     c* = (t_hyb - t_gn) / (n_gn - n_hyb),
-#
-# defined when the hybrid variant performs fewer residual evaluations but is
-# slower, which is the only regime in which a crossover exists.
 #
 # Usage, from the benchmark folder:
 #     julia --project=. residual_cost_analysis.jl
