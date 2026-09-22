@@ -806,8 +806,6 @@ Also forms the projector operator used to compute projections onto null spaces.
 
 - `initial_point_and_projector!(model, x, Val(true))`
 """
-# Modifies the initial guess for the solution such that it is feasible to the bounds
-# Forms and returns the operator computing projections on coordinate subspaces
 function initial_point_and_projector!(
     model::AbstractCnlsModel{T},
     x::AbstractVector{T},

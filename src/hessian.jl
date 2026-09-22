@@ -85,7 +85,6 @@ end
 Overload the 3-argument `mul!` method to the type [`GN`](@ref) to compute
 Hessian-vector without doing matrix-matrix multiplications.
 """
-
 function mul!(Hv::Vector{T}, gn_op::GN{T}, v::Vector{T}) where T
 
     m = size(gn_op.J,1)

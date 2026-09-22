@@ -208,7 +208,6 @@ Updates the second order terms of the Hessian approximation `H`.
 Applies a structured SR1 update, with a safeguard check to prevent
 the approximation to break down.
 """
-
 function second_order_secant_update!(sr1_op::SR1{T}) where T
 
     # Tolerance for the skipping update safeguard
