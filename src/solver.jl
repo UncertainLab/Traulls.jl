@@ -666,9 +666,7 @@ Approximately solves the quadratic program
 
 `xₗ ≤ x + s ≤ xᵤ`
 
-`||s|| ≤ Δ`
-
-by the gradient projection method.
+`||s|| ≤ Δ`.
 
 In the QP model, `||.||` denotes the `∞`-norm `||s|| = maxᵢ |sᵢ|`.
 
@@ -690,9 +688,10 @@ relative of the gradient projection method
 the conjugate gradient method
 - `workspace`: Instance of `Workspace` whose fields contain pre-allocated memory for vectors
 involed in linear algebra computations
+
 # On return
 
-- `s`: This argument is modified in place and contains the trial step
+- `s`: modified in-place, stores the trial step 
 - `pred`: Reduction of the quadratic model after taking step `s`
 """
 function projected_gradient!(
@@ -802,9 +801,9 @@ Also forms the projector operator used to compute projections onto null spaces.
 
 # Methods
 
-- `initial_point_and_projector!(model, x, Val(false))`
+- `initial_point_and_projector!(model, x, Val(false))` for models without linear equality constraints
 
-- `initial_point_and_projector!(model, x, Val(true))`
+- `initial_point_and_projector!(model, x, Val(true))` for models with linear equality constraints
 """
 function initial_point_and_projector!(
     model::AbstractCnlsModel{T},
@@ -817,9 +816,7 @@ function initial_point_and_projector!(
     CoordinateSubspaceProjector(model.n; T=T)
 end
 
-# Modifies the initial guess for the solution to make it linear feasible
-# Identifies the bounds active at the initial point found and forms the associate `Projector
-# operator computing projections on reduced subspaces
+
 function initial_point_and_projector!(
     model::AbstractCnlsModel{T},
     x::AbstractVector{T},
@@ -848,10 +845,24 @@ function initial_point_and_projector!(
     SubspaceProjector(A, initial_active, chol_aat)
 end
 
-# Solves w.r.t. x and auxiliary variables r the linear feasibility problem
-# `min ||r||₁ s.t. Ax + r = b, ℓ ≤ x ≤ u`
-# Modifies in place argument x0 with the value at optimal solution
-# Triggers a warning if the solution found is not feasible
+
+"""
+    solve_linfeas_pb(A, x₀, b, ℓ, u, m, n)
+
+Starting from `x₀`, solves the linear feasibility problem 
+
+`minₓᵣ ||r||₁`
+
+`s.t. Ax + r = b`
+
+`ℓ ≤ x ≤ u,`
+
+with auxiliary variables `r`. Matrix `A` is of size `m × n` with `m < n`.
+
+# On return 
+- The found solution `x` is stored in `x0`.
+- A warning is triggered if the `x` solution is not feasible
+"""
 function solve_linfeas_pb!(
     A::AbstractMatrix{T},
     x0::AbstractVector{T},

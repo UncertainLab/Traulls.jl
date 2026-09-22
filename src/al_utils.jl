@@ -1,5 +1,10 @@
-# Function and derivatives evaluation for the augmented Lagrangian 
+#=
+    al_utils.jl
 
+Utils functions related to the augmented Lagrangian function manipulation
+
+Author(s): Pierre Borie
+=#
 """
     al_obj(rx, cx, y, mu)
 
@@ -12,7 +17,7 @@ Compute the augmented Lagrangian objective function value.
 - `mu`: Penalty parameter.
 
 # Returns
-- The value of the augmented Lagrangian objective.
+- `mx`: value of the augmented Lagrangian objective.
 """
 function al_obj(
     rx::AbstractVector{T},
@@ -26,7 +31,7 @@ end
 """
     al_grad!(rx, cx, y, mu, J, C, g)
 
-Compute the gradient of the augmented Lagrangian objective and store it in `g`.
+Computes the gradient of the augmented Lagrangian and stores the result in `g`.
 
 # Arguments
 - `rx::AbstractVector{T}`: Residual vector.
@@ -36,9 +41,6 @@ Compute the gradient of the augmented Lagrangian objective and store it in `g`.
 - `J::AbstractMatrix`: Jacobian matrix of the residuals.
 - `C::AbstractMatrix`: Jacobian matrix of the constraints.
 - `g::AbstractVector{T}`: Output vector to store the computed gradient (modified in-place).
-
-# Returns
-- `Nothing`: The result is stored in `g`.
 """
 function al_grad!(
     rx::AbstractVector{T},
@@ -56,7 +58,7 @@ end
 """
     al_grad(rx, cx, y, mu, J, C)
 
-Compute and return the gradient of the augmented Lagrangian objective.
+Compute and return the gradient of the augmented Lagrangian.
 
 # Arguments
 - `rx::AbstractVector{T}`: Residual vector.
@@ -86,7 +88,7 @@ end
 """
     al_objgrad!(rx, cx, y, mu, J, C, g)
 
-Compute both the augmented Lagrangian objective value and its gradient, storing the gradient in `g`.
+Compute both the augmented Lagrangian objective value and its gradient, storing the latter in `g`.
 
 # Arguments
 - `rx::AbstractVector{T}`: Residual vector.
@@ -98,7 +100,7 @@ Compute both the augmented Lagrangian objective value and its gradient, storing 
 - `g::AbstractVector{T}`: Output vector to store the computed gradient (modified in-place).
 
 # Returns
-- Value of the augmented Lagrangian objective.
+- `mx` value of the augmented Lagrangian objective
 """
 function al_objgrad!(
     rx::AbstractVector{T},
@@ -155,7 +157,7 @@ Computes and returns `ω` and `η`, the respective optimality and feasibility to
 # Arguments 
 
 - `μ::T`: intitial penalty paramerer associated to the Augmented Lagrangian function
-- `ω₀,η₀,κᵪ,κₑ`: positive constants 
+- `ω₀,η₀,κᵪ,κₑ`: positive constants that determine the initial tolerance values
 """
 function initial_tolerances(
     mu::T,
@@ -172,7 +174,11 @@ end
 """
     least_squares_multipliers(rx, J, C)
 
-Computes the least-squares multipliers estimates by solving the linear least-squares `minᵥ ||Jᵀrx + Cᵀv||₂` derived from the KKT system.
+Computes the least-squares multipliers estimates by solving the linear least-squares 
+
+`minᵥ ||Jᵀrx + Cᵀv||₂` 
+
+derived from the KKT system.
 
 This problem is solved by the normal equations approach, so matrix `C` must be full rank.
 

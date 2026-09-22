@@ -1,3 +1,11 @@
+#=
+    trust_region.jl 
+
+Structure and methods for the handeling of a basic trust region.
+
+Author(s): Pierre Borie 
+=#
+
 
 """
     TrustRegion{T}
@@ -199,18 +207,70 @@ function factor_to_boundary(
     return alpha
 end
 
-# Returns `true` if the step `s` lies on the boundary of an infinite norm trust region,
-# `false` if not
+"""
+    step_on_region(s, Δ)
 
+Asserts if the step `s` lies on the boundary of the `∞`-norm trust region of radius `Δ`,
+i.e. if `||s||∞ ≥ Δ` up to a relative tolerance of `sqrt(eps(T))`.
+
+# Arguments
+
+- `s`: step computed in the trust region
+- `radius`: radius `Δ` of the trust region
+
+# On return
+
+- `true` if the step lies on the boundary of the trust region, `false` if not
+"""
 step_on_region(s::AbstractVector{T}, radius::T) where T =
     norm(s, Inf) + radius * sqrt(eps(T)) >= radius
 
-# Returns true if the trust region radius is too small to make relevant progress
+"""
+    small_radius(x, Δ)
+
+Asserts if the trust region radius `Δ` has shrinked too much to allow any relevant progress
+from the current point `x`, i.e. if `Δ ≤ 10*eps(T)*(1 + ||x||∞)`.
+
+Any step computed in such a trust region is undistinguishable from zero at the scale of `x`,
+which indicates that the optimization process should be stopped.
+
+# Arguments
+
+- `x`: current point
+- `radius`: radius `Δ` of the trust region
+
+# On return
+
+- `true` if the radius is too small to make relevant progress, `false` if not
+"""
 small_radius(x::AbstractVector{T}, radius::T) where T =
     radius <= 10 * eps(T) * (1 + norm(x, Inf))
 
-# Returns `true` if two consecutive iterates have similar components and value of objective
-# function, up to given relative tolerances
+"""
+    check_stalling(s, x, fx, fx_next, accepted)
+
+Asserts if the optimization process is stalling at the current accepted step, i.e. if two
+consecutive iterates have similar components and similar objective function values, up to
+given relative tolerances.
+
+The step is considered as stalling if all the following conditions hold:
+
+- the step was accepted (`accepted` is `true`)
+- `|sᵢ| ≤ 10⁻⁷*(1 + |xᵢ|)` for every component `i` of the step
+- `|fx_next - fx| ≤ 10⁻¹⁰*max(1, |fx|)`
+
+# Arguments
+
+- `s`: step computed at the current iteration
+- `x`: current point (the iterate before the step is applied)
+- `fx`: value of the objective function at `x`
+- `fx_next`: value of the objective function at the next iterate
+- `accepted`: indicates if the step was accepted by the trust region
+
+# On return
+
+- `true` if the process is stalling at the current step, `false` if not
+"""
 function check_stalling(
     s::Vector{T},
     x::Vector{T},
