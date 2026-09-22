@@ -13,7 +13,7 @@ using NLPModelsIpopt, Percival, SolverBenchmark, NLSProblems
 
 
 const N_REPEAT = 3
-const RESULTS_DIR = "results"
+const RESULTS_DIR = "new_results"
 
 mkpath(RESULTS_DIR)
 

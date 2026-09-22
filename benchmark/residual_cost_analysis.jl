@@ -1,14 +1,18 @@
-# Break-even analysis on the cost of a residual evaluation.
+# Break-even analysis on the cost of a residual evaluation based on the following model 
+# of the total computation time
 #
-# Model: if one residual evaluation cost c more than it does in the test set,
-# the total time of a solver would be
-#
-#     T(c) = elapsed_time + c * neval_residual,
+#     T(c) = elapsed_time + c * neval_residual
+# 
+# where `elasped_time` is the reported computation time and `c` is the additional cost of 
+# a residual evaluation
 #
 # Usage, from the benchmark folder:
 #     julia --project=. residual_cost_analysis.jl
 
 using CSV, DataFrames, Printf, Plots
+
+# Display the plot after runnign the file
+const show_plot = false
 
 const RESULTS_DIR = joinpath(@__DIR__, "results")
 const FIGURE_PATH = joinpath(@__DIR__, "..", "preprint", "figures",
@@ -116,8 +120,7 @@ function main()
                 r.residual, r.jacobian, r.gradient)
     end
 
-    # The crossover is only meaningful where the correction is active, that is
-    # on the instances whose residuals do not vanish at the solution.
+    # Comparison on medium and large residuals instances
     nonzero = df[(df.stratum .== "medium") .| (df.stratum .== "large"), :]
     @printf("\nNonzero-residual instances (medium and large): %d\n", nrow(nonzero))
 
@@ -138,7 +141,7 @@ function main()
         @printf("  c = %8.3f ms : %5.1f %%\n", 1e3 * c, 100 * win_fraction(nonzero, c))
     end
 
-    # Figure: win fraction as a function of the per-evaluation cost.
+    # Figure showing win fraction as a function of the per-evaluation cost
     cgrid = vcat(0.0, exp10.(range(-6, 0, length = 200)))
     fractions = [100 * win_fraction(nonzero, c) for c in cgrid]
     median_cost = quantile_sorted(costs, 0.5)
@@ -154,9 +157,7 @@ function main()
     hline!(plt, [100 * win_fraction(nonzero, 0.0)], linestyle = :dashdot,
            linewidth = 1, color = :gray, label = "measured times")
 
-    mkpath(dirname(FIGURE_PATH))
-    savefig(plt, FIGURE_PATH)
-    @printf("\nFigure written to %s\n", FIGURE_PATH)
+    show_fig && display(plt)
 end
 
 main()
