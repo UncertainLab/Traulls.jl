@@ -34,4 +34,7 @@ main.fdb_latexmk
 *CLAUDE.md
 
 ## Notebook checkpoint folders
-.ipynb_checkpoints
+.ipynb_checkpoints/
+
+## Temporary files
+tmp/
