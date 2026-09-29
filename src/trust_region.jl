@@ -167,9 +167,9 @@ function update_radius!(
     rho::T,
     norm_step::T) where T
 
-    tr.radius = if rho > tr.increase_threshold   # very successful step
+    tr.radius = if rho > tr.increase_threshold  # very successful step
         max(tr.increase_factor * norm_step, tr.radius)
-    elseif 0 < rho < tr.accept_threshold         # bad step
+    elseif 0 < rho < tr.accept_threshold        # bad step
         tr.decrease_factor * norm_step
     elseif rho < 0                              # Very bad step
         min(tr.decrease_factor * norm_step, tr.neg_ratio_factor * tr.radius)

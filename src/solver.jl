@@ -14,33 +14,13 @@ constraints of the form
 
 `ℓ ≤ x ≤ u,`
 
-with an iterative Augmented Lagrangian method.
+with an Augmented Lagrangian method.
 
-Starting from an initial guess `x₀` and an initial estimate of the vector of
-Lagrange multipliers associated to the equality constraints `y₀`,
-each new iterate `xₖ₊₁` is an approximate solution, with respect to a tolerance
-`ωₖ > 0`, of the subproblem
-
-`minₓ Lₐ(x,yₖ,μₖ) = 1/2 * r(xₖ)ᵀr(xₖ) + c(xₖ)ᵀ[yₖ + μₖ/2 * c(xₖ)]`
-
-`s.t. Ax = b`
-
-`ℓ ≤ x ≤ u,`
-
-using `xₖ` as a starting point with fixed penalty parameter `μₖ > 0` and current estimate of
-the Lagrange multipliers `yₖ`
-
-If the new iterate satisfies `||c(xₖ₊₁)||₂ ≤ ηₖ`, for some `ηₖ > 0`, then the
-Lagrange multipliers are updated by `yₖ₊₁ = yₖ + μₖc(xₖ)` and the tolerances `ωₖ` and `ηₖ` are tightened.
-
-On the contrary, if xₖ₊₁ fails to satisfies the feasibility inequality, the
-iterate is unchanged, i.e. `(xₖ₊₁,yₖ₊₁) = (xₖ,yₖ)` and the minimization of the
-subproblem is restarted with
-a higher penalty parameter `μₖ₊₁ = τμₖ`, with `τ > 1`. The tolerances `ωₖ` and
-`ηₖ` are still reduced but in a weaker maner.
-
-Subproblems are solved by the gradient projection method
-see [`projected_gradient!`](@ref)).
+The nonlinear constraints `c(x) = 0` are handled by the Augmented Lagrangian outer loop,
+while the linear constraints are kept explicitly in the subproblems, which are solved by a
+trust-region gradient projection method (see [`solve_subproblem!`](@ref)).
+A detailed description of the method is given in the [Method](@ref Method) page of the
+documentation.
 
 # Arguments
 
@@ -57,8 +37,8 @@ see [`projected_gradient!`](@ref)).
 - `eta0`: Constant to set the initial feasibility tolerance
 (default: `1`)
 - `min_tol_feas`: Absolute tolerance for feasibility of nonlinear constraints
-(default: `1e-6`)
-- `crit_tol`: Relative tolerance for criticality (default: `1e-7`)
+(default: `1e-7`)
+- `min_reltol_crit`: Relative tolerance for criticality (default: `1e-7`)
 - `k_crit`: Positive constant used to initialize and update the
 subproblem criticality tolerance in the case of poor improvement of the
 feasibility (default: `1.0`)
@@ -75,8 +55,8 @@ least-squares estimate.
 
 ## Trust region parameters
 
-- `accept_treshold`: Threshold for accepting a step (default: `0.05`)
-- `increase_treshold`: Threshold for very successful steps to extend the trust region
+- `accept_threshold`: Threshold for accepting a step (default: `0.05`)
+- `increase_threshold`: Threshold for very successful steps to extend the trust region
 (default: `0.9`)
 - `decrease_factor`: Reducing factor of the trust region (default: `0.25`)
 - `increase_factor`: Extension factor of the trust region (default: `2.5`)
@@ -87,7 +67,7 @@ ratio (default: `0.0625`)
 
 - `mu_max`: maximum value of the penalty parameter (default: `1/ϵ` with `ϵ` is the relative
 machine precision)
-- `max_outer_iter`: Maximum number of outer iterations (default: `200`)
+- `max_iter`: Maximum number of outer iterations (default: `200`)
 - `max_inner_iter`: Maximum number of iterations for the inner minimization phase
 (default: `1000`)
 - `max_cg_iter`: Maximum number of minor iterates for the gradient projection loop
@@ -146,6 +126,10 @@ function traulls(
     proj_op = initial_point_and_projector!(model, x, Val(lincons_present))
     xlow, xupp = model.xlow, model.xupp
 
+    # Buffer to save inner minimization starting point
+    x_start = similar(x) 
+    x_start .= x
+
      # Allocate memory for buffer vectors involved in inner minimization
     inner_workspace = Workspace(T, n, nres ,ncons)
 
@@ -158,8 +142,8 @@ function traulls(
     # Initial Lagrange mutipliers
     y = init_mult ? least_squares_multipliers(rx, J, C) : zeros(T, ncons)
 
-    # Al gradient
-    g = al_grad(rx, cx, y, mu, J, C)        # Gradient of the AL
+    # AL gradient
+    g = al_grad(rx, cx, y, mu, J, C)
     model.counters.nalgrad_eval += 1
 
     # Ininitialize Hessian approximation
@@ -195,10 +179,7 @@ function traulls(
         criticality_measure(x, g, gproj, proj_op) :
         criticality_measure(x, g, gproj, xlow, xupp)
 
-    # tol_scale_factor = max(1, norm(g, Inf))
-    tol_crit = lincons_present ?
-        min_reltol_crit :
-        min_reltol_crit * (1 + pix)
+    tol_crit = min_reltol_crit * (1 + pix)
 
     solved = feas_measure <= min_tol_feas && pix <= tol_crit
 
@@ -241,7 +222,7 @@ function traulls(
 
         # Evaluate feasibility and objective
         feas_measure = norm(cx, Inf)
-        fx  = dot(rx,rx)
+        fx  = dot(rx, rx)
 
         update_multipliers = feas_measure <= tol_feas
 
@@ -264,7 +245,8 @@ function traulls(
         end
 
         # Evaluate termination status
-        g .= J'*rx + C'*y # Lagrangian gradient
+        # g .= J'*rx + C'*y 
+        g .-= 0.5 * mu * dot(cx, cx) # Lagrangian gradient
 
         norm_proj_gradlag = if lincons_present
             identify_active_set!(x, xlow, xupp, proj_op)
@@ -331,92 +313,15 @@ Solves the outer iteration subproblem
 
 `ℓ ≤ x ≤ u,`
 
-using the gradient projection method with trust region.
+using a trust-region gradient projection method, starting from `x` with fixed Lagrange
+multipliers `y` and penalty parameter `μ`. The trial steps are computed by
+[`projected_gradient!`](@ref).
 
-The starting point `x₀` and optimality tolerance `ω` are given. The Lagrange
-multipliers `y` and penalty parameter `μ` are fixed.
+The inner iterations stop once the criticality measure is reduced below a threshold relative
+to `reltol_crit`, or earlier if the iterations stall or the trust region becomes too small.
+A detailed description of the method is given in the [Method](@ref Method) page of the
+documentation.
 
-At iteration `k`, a quadratic model of the objective function around `xₖ` is
-formed by
-
-`qₖ(s) = 1/2 sᵀHₖs + sᵀgₖ,`
-
-with `gₖ = ∇ₓLₐ(xₖ,y,μ)` and `Hₖ ≈ ∇²ₓₓ Lₐ(xₖ,y,μ)`.
-
-The step computation consists into approximately solving the quadratic program
-
-`minₛ qₖ(s)`
-
-`s.t. A(x + s) = b`
-
-`ℓ ≤ xₖ + s ≤ u`
-
-`||s|| ≤ Δₖ,`
-
-where `Δₖ` is the trust region radius and `||.||` denotes the `∞`-norm
-`||x|| = maxᵢ |xᵢ|`. Because `||x|| ≤ Δₖ ⟺ -Δₖ ≤ xᵢ ≤ Δₖ` for all `i`,
-the feasible domain for the step can actually be formulated as the box
-
-`Bₖ = [max(-Δₖe, ℓ-x), min(Δₖe, u-x)]`, with `e = (1,...,1)`.
-
-# Solving the QP
-
-## Cauchy point
-
-We start by finding the first local minimizer of the model along the projected
-gradient path
-
-`s(t) = Pₖ[xₖ - tgₖ] - xₖ` for  `t ≥ 0,`
-
-`Pₖ` denoting the projection over the feasible domain.
-The corresponding scalar defines a Cauchy step that ensures a sufficient
-reduction of the objective function. This means that taking the Cauchy step at
-every iteration is enough to solve the subproblem.
-
-## Beyond the Cauchy point
-
-In order to provide a better reduction, we then apply the conjugate gradient
-method to the subspace where the components corresponding to bounds active at
-the Cauchy point are fixed.
-
-The resulting `sₖ` step is then accepted or rejected depending on the value of
- the ratio of the actual reduction over the reduction predicted by the model
-
-`ρ = (Lₐ(xₖ+sₖ,y,μ) - Lₐ(xₖ,y,μ)) / qₖ(sₖ) - qₖ(0)`.
-
-If `ρ ≥ η₁`, where `η₁ ∈ (0,1)` is a given parameter, then the step is accepted
-and the radius `Δₖ` is eventually increased.
-This translates the fact that there is a good agreement between the objective
-function and the model.
-
-If `ρ < η₁` (poor agreement), the step is rejected and the minimization is
-restarted with a smaller trust region.
-
-## Trust region update
-
-The scalars `η₁, η₂, α₁, α₂, γᵦ` are constant chosen such that
-
-`0 < η₁ ≤ η₂ < 1`, `0 < α₁ < 1 < α₂` and `0 < γᵦ < 1`.
-
-The radius is updated as follows:
-- if `ρ ≥ η₂` (very good step), `Δₖ₊₁ = max(α₂*||sₖ||, Δₖ)`
-- if `η₁ ≤ ρ < η₂` (good step), `Δₖ₊₁ = Δₖ`
-- if `0 < ρ < η₁` (bad step), `Δₖ₊₁ = α₁*||sₖ||`
-- if `ρ ≤ 0` (very bad step), `Δₖ₊₁ = min(α₂*||sₖ||, γᵦ*Δₖ)`
-
-Here, `||.||` denotes the ∞-norm.
-
-## Stopping criteria
-
-The minimization process is stopped once there is an iterate `xₖ` such that
-
-`|| P[xₖ - gₖ] - xₖ || ≤ ω * || P[x₀ - g₀] - x₀ ||`,
-
-where `P` here denotes the projection operator onto the tangent space of feasible directions
- at `x`, i.e. the norm of the reduced gradient.
-
-The algorithm also stops if there are consecutive iterations provide a relatively small
-change in both the objective and the iterate or if the trust region radius is too small.
 # Arguments
 
 - `model`: `CnlsModel` encoding the original problem to be solved
@@ -503,8 +408,6 @@ function solve_subproblem!(
     set_initial_radius!(tr, g)
 
     # Prepare for inner minimization loop
-    # TODO: add computation of criticality measure for polyhedral problem
-    # (when lincons_present = true)
     pix = lincons_present ?
         criticality_measure(x, g, gproj, proj_op) :
         criticality_measure(x, g, gproj, xlow, xupp)
@@ -548,30 +451,6 @@ function solve_subproblem!(
         alx = al_obj(rx, cx, y, mu)
         model.counters.nalobj_eval += 1
         norm_step = norm(s, Inf) # used for radius update
-
-        # Feature currenlty not used
-        # Magical step taken on the slack variables, if any
-        # if nslack > 0
-
-        #     # Add "magical" step to current point x
-        #     step_slack!(x, y, cx, mu, nslack, ncons)
-
-        #     # Adjust the step vector
-        #     slack_idx = n - nslack + 1 : n
-        #     ineq_idx = ncons - nslack + 1 : ncons
-        #     s[slack_idx] .= x[slack_idx] .- x_prev[slack_idx] .- s[slack_idx]
-
-        #     # Update the constraints involving slack variables without evaluating
-        #     cx[ineq_idx] .-= s[slack_idx]
-
-        #     # Add reduction of the true objective function after taking second
-        #     # step to pred
-        #     pred -= alx
-        #     alx = al_obj(rx, cx, y, mu)
-        #     model.counters.nalobj_eval += 1
-        #     pred += alx
-
-        # end
 
         # Compute the ratio actual reduction / predicted reduction
         ratio = step_ratio(alx_prev, alx, pred)
@@ -656,7 +535,7 @@ function solve_subproblem!(
 end
 
 """
-    projected_gradient!(x,g,z,xₗ,xᵤ,Δ,max_cg_iter,κₛ,κᵪ)
+    projected_gradient!(x,s,g,gproj,H,P,xₗ,xᵤ,Δ,max_cg_iter,κ_pg,κ_cg,workspace)
 
 Approximately solves the quadratic program
 
@@ -670,12 +549,16 @@ Approximately solves the quadratic program
 
 In the QP model, `||.||` denotes the `∞`-norm `||s|| = maxᵢ |sᵢ|`.
 
+The step is formed by a Cauchy step along the projected gradient path, then improved by
+projected conjugate gradient iterations on the subspace of the free variables. A detailed
+description of the method is given in the [Method](@ref Method) page of the documentation.
+
 # Arguments
 
 - `x`: Current iterate
 - `s`: Buffer vector for the step
 - `g`: Gradient of the Augmented Lagrangian at `x`
-- `z`: Buffer vector for the projected gradient
+- `gproj`: Buffer vector for the projected gradient
 - `H`: `ALHessian` operator to compute Hessian-vector products
 - `P`: `Projector` operator to compute projections onto tangent spaces
 - `xₗ`: Lower bounds on `x`
