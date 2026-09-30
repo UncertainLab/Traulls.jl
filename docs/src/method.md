@@ -16,7 +16,8 @@ We consider the problem
 ```
 
 and denote by $J(x) \in \mathbb{R}^{n_r \times n}$ and $C(x) \in \mathbb{R}^{n_c \times n}$
-the Jacobian matrices of the residuals $r$ and of the constraints $c$.
+the Jacobian matrices of the residuals $r$ and of the constraints $c$. The $m \times n$ 
+matrix $A$ is assumed to have full row rank with $m < n$.
 
 !!! note "Inequality constraints"
     Nonlinear inequality constraints $g(x) \ge 0$ are converted into equality constraints
@@ -27,22 +28,21 @@ the Jacobian matrices of the residuals $r$ and of the constraints $c$.
 
 The method is made of three nested levels:
 
-1. an [augmented Lagrangian outer loop](@ref method_al) that handles the nonlinear
-   constraints $c(x) = 0$ (function [`traulls`](@ref));
+1. an [augmented Lagrangian outer loop](@ref method_al) (function [`traulls`](@ref));
 2. a [trust-region inner loop](@ref method_subproblem) that approximately minimizes the
-   augmented Lagrangian subject to the linear constraints
+   augmented Lagrangian with respect to the nonlinear constraints, and subject to the linear constraints
    (function [`Traulls.solve_subproblem!`](@ref));
 3. a [gradient projection method](@ref method_qp) that approximately solves the quadratic
    program defining each trust-region step
    (function [`Traulls.projected_gradient!`](@ref)).
 
-The linear constraints $Ax = b$ and $\ell \le x \le u$ are never penalized: every iterate
-remains feasible with respect to them. Two cases are distinguished throughout the algorithm:
+The linear constraints $Ax = b$ and $\ell \le x \le u$ are never penalized and every iterate
+remains feasible with respect to them. This presentation remains valid for problems where
+the only linear constraints are the bounds $\ell \le x \le u$. 
 
-- the **bound-constrained case**, where the only linear constraints are the bounds
-  $\ell \le x \le u$;
-- the **general linear constraints case**, where equality constraints $Ax = b$ are also
-  present. The $m \times n$ matrix $A$ is assumed to have full row rank with $m < n$.
+Since the initial point is made 
+[feasible with respect to the linear constraints](@ref method_init) and every step preserves
+this feasibility, all the iterates satisfy $Ax_k = b$ and $\ell \le x_k \le u$.
 
 ## [Augmented Lagrangian outer loop](@id method_al)
 
@@ -73,16 +73,6 @@ respect to a criticality tolerance $\omega_k > 0$, of the subproblem
 
 using $x_k$ as a starting point, with fixed penalty parameter $\mu_k$ and multipliers $y_k$.
 
-- In the **bound-constrained case**, the subproblem is a bound-constrained minimization
-  problem, whose feasible set is the box $[\ell, u]$.
-- In the **general linear constraints case**, the feasible set of the subproblem is the
-  polyhedron $\{x \mid Ax = b,\ \ell \le x \le u\}$.
-
-In both cases, the constraints of the subproblem are exactly those of the original problem
-minus the nonlinear constraints. Since the initial point is made
-[feasible with respect to the linear constraints](@ref method_init) and every step preserves
-this feasibility, all the iterates satisfy $Ax_k = b$ and $\ell \le x_k \le u$.
-
 ### Multipliers and penalty updates
 
 The new iterate $x_{k+1}$ is then tested against a feasibility tolerance $\eta_k > 0$:
@@ -101,7 +91,7 @@ The new iterate $x_{k+1}$ is then tested against a feasibility tolerance $\eta_k
   ```
 - Otherwise, the multipliers are kept, $y_{k+1} = y_k$, and the penalty parameter is
   increased by a factor $\tau > 1$, $\mu_{k+1} = \tau \mu_k$. The tolerances are
-  recomputed from their initial constants, which reduces them in a weaker manner:
+  reduced in a weaker manner:
   ```math
   \omega_{k+1} = \max\left(\dfrac{\omega_0}{\mu_{k+1}^{\kappa_\omega}}, \omega_{\min}\right),
   \quad
@@ -225,21 +215,18 @@ indices of the components fixed at one of their bounds.
 
 The Cauchy step is the first local minimizer of the model $q_j$ along the projected
 gradient path.
-
-- In the **bound-constrained case**, the path is the exact projected gradient path
   ```math
-  s(t) = P_{B_j}\big[x_j - t g_j\big] - x_j, \quad t \ge 0,
+  s(t) = \mathcal{P}\big[x_j - t g_j\big] - x_j, \quad t \ge 0,
   ```
-  where $P_{B_j}$ is the projection onto the box of the QP. This path is piecewise linear:
-  its breakpoints are the values of $t$ at which a component reaches a bound of $B_j$.
-  The model restricted to each segment is a one-dimensional quadratic, so the segments are
-  examined successively until the first local minimizer is found.
-- In the **general linear constraints case**, the projection onto
-  $\{s \in B_j \mid As = 0\}$ has no closed form. The path is instead built as a sequence
-  of segments along the directions $d = -P g_j$: the search moves along $d$ until a
-  component reaches a bound of $B_j$ (breakpoint), this bound is added to $\mathcal{A}$,
-  the projector $P$ is updated and a new direction is computed. The model is minimized
-  along each segment in the same way as in the bound-constrained case.
+where $\mathcal{P}$ is the projection onto the feasible set. This path is piecewise 
+linear: its breakpoints are the values of $t$ at which a component reaches a bound of 
+$B_j$. The model restricted to each segment is a one-dimensional quadratic, so the 
+segments are examined successively until the first local minimizer is found.
+
+The path is built as a sequence of segments along the directions $d = -P g_j$ where $P$
+is the projection onto $\{s \mid As = 0, \ s_i = 0 \ i \in \mathcal{A}\}$: the search 
+moves along $d$ until a component reaches a bound of $B_j$ (breakpoint), this bound is 
+added to $\mathcal{A}$, the projector $P$ is updated and a new direction is computed. 
 
 Before computing the path, the components that lie at a bound with a direction pointing
 outwards the feasible set are fixed in $\mathcal{A}$. The search stops when a local
@@ -255,8 +242,11 @@ method to the QP restricted to the subspace defined by the set $\mathcal{A}$ of 
 active at the Cauchy point. Starting from the current step $s$, CG approximately solves
 
 ```math
-\min_{w} \ \dfrac{1}{2} w^T H_j w + w^T (H_j s + g_j)
-\quad \text{s.t.} \quad Pw = w,
+\begin{aligned}
+\min_{w} \ & \dfrac{1}{2} w^T H_j w + w^T (H_j s + g_j) \\
+\text{s.t.} \quad & Aw = 0 \\
+& w_i = 0,\ i \in \mathcal{A}
+\end{aligned}
 ```
 
 using $P$ as a preconditioner, so that all the search directions remain in the subspace.
@@ -329,7 +319,7 @@ approximation is reset at the start of each outer iteration.
 
 ### Hybrid switching
 
-When the residuals and the constraints (or more precisely the weights $y + \mu c$) are small
+When the residuals and the terms $y + \mu c$ are small
 at the solution, the second-order terms $S(x)$ are negligible and the Gauss-Newton
 approximation $J^T J + \mu C^T C$ performs well. On the contrary, when they are large,
 neglecting $S(x)$ may significantly slow down the convergence.
@@ -368,9 +358,6 @@ skipped when the curvature condition $s_j^T \hat{y}_j > 0$ does not hold with a 
 margin. Contrary to BFGS, SR1 updates may produce indefinite approximations, which are
 handled by the negative curvature detection of the CG iterations.
 
-The Hessian approximation does not depend on the structure of the linear constraints: the
-same schemes are used in the bound-constrained and the general linear constraints cases.
-
 ## [Stopping criteria](@id method_stop)
 
 ### Criticality measure
@@ -402,11 +389,8 @@ The algorithm terminates successfully when the current point $x_k$ satisfies bot
 ```
 
 i.e. it is feasible and first-order critical for the gradient of the Lagrangian. The
-tolerance $\epsilon_{\text{crit}}$ is
-
-- **relative** in the bound-constrained case: $\epsilon_{\text{crit}} = \omega_{\min}(1 + \pi_0)$,
+tolerance $\epsilon_{\text{crit}}$ is $\epsilon_{\text{crit}} = \omega_{\min}(1 + \pi_0)$,
   where $\pi_0$ is the criticality measure at the initial point;
-- **absolute** in the general linear constraints case: $\epsilon_{\text{crit}} = \omega_{\min}$.
 
 The algorithm also stops when the number of outer iterations exceeds `max_iter` or when the
 penalty parameter reaches `mu_max`. The status returned in [`Traulls.TraullsResults`](@ref)

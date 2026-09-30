@@ -57,7 +57,7 @@ println(io::IO, tr::TrustRegion) = print(io, "\n", tr)
 """
     set_initial_radius!(tr,g;κ,p)
 
-Set the field `radius` of the trust region `tr` to `max(1, κ*||g||ₚ)`, where:
+Set the field `radius` of the trust region `tr` to `κ*||g||ₚ`, where:
 
 - `g` is the gradient of the objective function to minimize
 - `κ` is a constant (default value to `0.1`)
