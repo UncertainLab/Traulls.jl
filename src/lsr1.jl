@@ -1,3 +1,12 @@
+#=
+    lsr1.jl
+
+Limited memory SR1 (L-SR1) approximation of the augmented Lagrangian Hessian in compact
+representation.
+
+Author(s): Pierre Borie
+=#
+
 # Structure encoding a limite memory SR1 (L-SR1) approximation in compact representation
 # format
 # TODO: Think about one field for middle matrix instead of two

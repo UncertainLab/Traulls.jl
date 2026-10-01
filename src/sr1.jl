@@ -1,3 +1,11 @@
+#=
+    sr1.jl
+
+Structured SR1 and hybrid SR1 approximations of the augmented Lagrangian Hessian.
+
+Author(s): Pierre Borie
+=#
+
 """
     SR1 <: ALHessian
 
@@ -8,25 +16,19 @@ The approximation is of the form `H = JᵀJ + μCᵀC + S` where
  and `S` approximates the second order terms of the true Hessian.
 
 Matrix `S` is updated iteratively by a SR1 formula derived from a structured
-secant equation `Ss = y` where `s` is a step and right handside `y` is defined
+secant equation `Ss = y` where `s` is a step and right-hand side `y` is defined
 by first order quantities.
 
-** Attributes
+# Attributes
 
-* `J`: Jacobian of the residuals
-
-* `C`: Jacobian of the nonlinear constraints
-
-* `S`: approximation of the second order terms of the true Hessian
-
-* `mu`: penalty parameter
-
-* `step`: step of the current iteration
-
-* `secant_rhs`: right handside of the structured secant equation
-
-* `temp`: buffer vector to avoid reallocations for intermediate
-quantities involved when computing matrix-vector products
+- `J`: Jacobian of the residuals
+- `C`: Jacobian of the nonlinear constraints
+- `S`: approximation of the second order terms of the true Hessian
+- `mu`: penalty parameter
+- `step`: step of the current iteration
+- `secant_rhs`: right handside of the structured secant equation
+- `temp`: buffer vector to avoid reallocations for intermediate
+  quantities involved when computing matrix-vector products
 
 """
 mutable struct SR1{T<:Real} <: ALHessian{T}
@@ -47,13 +49,11 @@ Constructor method for the [`SR1`](@ref) structure.
 Takes jacobians and a penalty parameter as inputs and initializes the other
 attributes to `0`.
 
-**Arguments**
+# Arguments
 
-* `J`: Jacobian matrix of the residuals
-
-* `C`: Jacobian matrix of the nonlinear equality constraints
-
-* `μ`: Penalty parameter
+- `J`: Jacobian matrix of the residuals
+- `C`: Jacobian matrix of the nonlinear equality constraints
+- `μ`: Penalty parameter
 """
 function SR1(
     J::AbstractMatrix{T},
@@ -72,9 +72,35 @@ function SR1(
                zeros(T,max(n,m,p)))
 end
 
-# Hybrid structured and scaled SR1 formula
-# Uses the secant equation from Zhou and Chen and the same heuristic to detect small
-# residuals problems and applies the SR1 update
+"""
+    HybridSR1 <: ALHessian
+
+Mutable structure encoding the hybrid SR1 approximation of the augmented Lagrangian
+Hessian.
+
+As for [`SR1`](@ref), the approximation is of the form `H = JᵀJ + μCᵀC + S`, where `S`
+approximates the second order terms of the true Hessian and is updated by an SR1 formula
+derived from a structured secant equation.
+
+The second order terms are only used when the problem is detected to have non-small
+residuals. This detection relies on a heuristic based on the relative reduction of the
+augmented Lagrangian objective over the last step. When the residuals are deemed small,
+the approximation reduces to the Gauss-Newton one `H = JᵀJ + μCᵀC`, but `S` keeps being
+updated.
+
+# Attributes
+
+- `J`: Jacobian of the residuals
+- `C`: Jacobian of the nonlinear constraints
+- `S`: approximation of the second order terms of the true Hessian
+- `mu`: penalty parameter
+- `step`: step of the current iteration
+- `secant_rhs`: right-hand side of the structured secant equation
+- `small_res`: `true` if the residuals are deemed small, in which case `S` is not used in
+  the Hessian-vector products
+- `temp`: buffer vector to avoid reallocations for intermediate quantities involved when
+  computing matrix-vector products
+"""
 mutable struct HybridSR1{T<:Real} <: ALHessian{T}
     J::AbstractMatrix{T}
     C::AbstractMatrix{T}
@@ -86,7 +112,20 @@ mutable struct HybridSR1{T<:Real} <: ALHessian{T}
     temp::AbstractVector{T}
 end
 
-# Constructor for the HybridSR1 struct
+"""
+    HybridSR1(J,C,μ)
+
+Constructor method for the [`HybridSR1`](@ref) structure.
+
+Takes jacobians and a penalty parameter as inputs and initializes the other attributes to
+`0`. The residuals are initially not considered small, i.e. `small_res` is set to `false`.
+
+# Arguments
+
+- `J`: Jacobian matrix of the residuals
+- `C`: Jacobian matrix of the nonlinear constraints
+- `μ`: Penalty parameter
+"""
 function HybridSR1(
     J::AbstractMatrix{T},
     C::AbstractMatrix{T},
@@ -105,9 +144,10 @@ function HybridSR1(
               zeros(T, max(n, m, p)))
 end
 
-""" Base.:*(H::SR1, v)
+""" 
+    Base.:*(H::SR1, v)
 
-Overload the `*` operator to the type [`GN`](@ref) in order to avoid
+Overload the `*` operator to the type [`SR1`](@ref) in order to avoid
 matrix-matrix multiplication
 """
 function Base.:*(sr1_op::SR1{T}, v::AbstractVector{T}) where T
@@ -145,7 +185,15 @@ function mul!(Hv::Vector{T}, sr1_op::SR1{T}, v::AbstractVector{T}) where T
 end
 
 
-# Overload the 3-argument `mul!` method to the `HybridSR1` scheme
+"""
+    mul!(Hv, H::HybridSR1, v)
+
+Overload the 3-argument `mul!` method to the type [`HybridSR1`](@ref) to compute the
+Hessian-vector product `Hv` without doing matrix-matrix multiplications.
+
+The product is `(JᵀJ + μCᵀC)v`, to which `Sv` is added only if the residuals are not
+deemed small, i.e. if attribute `small_res` is `false`. The result is stored in `Hv`.
+"""
 function mul!(Hv::AbstractVector{T}, hsr1_op::HybridSR1{T}, v::AbstractVector{T}) where T
     m = size(hsr1_op.J, 1)
     p = size(hsr1_op.C, 1)
@@ -195,13 +243,12 @@ function update_hessian!(
     update_jacobians!(sr1_op, J_new, C_new)
 
     # Compute Second order terms
-    second_order_secant_update!(sr1_op)
-
+    second_order_secant_update(sr1_op)
     return
 end
 
 """
-    update_sr1_second_order!(H::SR1)
+    second_order_secant_update!(H::SR1)
 
 Updates the second order terms of the Hessian approximation `H`.
 
@@ -234,9 +281,42 @@ function second_order_secant_update!(sr1_op::SR1{T}) where T
 end
 
 
-# Update the Hybrid SR1 Hessian approximation using the scaled secant approximation
-# Small residuals are evaliuated using the curvature condition
-# Second order terms are updated following the standard SR1 safeguard
+"""
+    update_hessian!(H::HybridSR1, J₊, C₊, r₊, c₊, f₊, f, g, y, s)
+
+Update the hybrid SR1 Hessian approximation `H` after an accepted step `s`.
+
+First, the small residuals heuristic is evaluated: the residuals are deemed small if the
+relative reduction of the augmented Lagrangian objective satisfies
+
+`f - f₊ + δ > ε f,`
+
+where `ε = 0.1` (value recommended by Tjoa and Biegler) and `δ` is a small
+safeguard proportional to the machine precision. The result is stored in attribute
+`small_res`.
+
+Then, the second order terms `S` are updated by the SR1 formula derived from the
+structured secant equation
+
+`S₊s = [J₊ - J]ᵀr₊ + [C₊ - C]ᵀ[y + μc₊],`
+
+with the standard SR1 safeguard that skips the update when its denominator is too small
+(see [`second_order_secant_update!`](@ref)). Finally, the `J` and `C` attributes are
+replaced by, respectively, `J₊` and `C₊`.
+
+# Arguments
+
+- `H`: Hessian approximation to update
+- `J₊`: Jacobian of the residuals at the new point
+- `C₊`: Jacobian of the nonlinear constraints at the new point
+- `r₊`: residuals at the new point
+- `c₊`: nonlinear constraints at the new point
+- `f₊`: augmented Lagrangian objective value at the new point
+- `f`: augmented Lagrangian objective value at the previous point
+- `g`: gradient of the augmented Lagrangian at the new point
+- `y`: Lagrange multipliers
+- `s`: accepted step
+"""
 function update_hessian!(
     hsr1_op::HybridSR1{T},
     J_new::AbstractMatrix{T},
@@ -273,6 +353,19 @@ function update_hessian!(
 end
 
 # TODO: merge the the update_sr1_second_order into one method
+"""
+    second_order_secant_update!(H::HybridSR1)
+
+Update the second order terms `S` of the hybrid SR1 approximation `H`.
+
+Applies the structured SR1 update
+
+`S₊ = S + (y - Ss)(y - Ss)ᵀ / (y - Ss)ᵀs,`
+
+where `s` and `y` are the step and right-hand side of the secant equation stored in `H`.
+As a safeguard to prevent the approximation from breaking down, the update is skipped if
+the denominator `(y - Ss)ᵀs` is too small.
+"""
 function second_order_secant_update!(hsr1_op::HybridSR1{T}) where T
 
     # Tolerance for the skipping update safeguard
@@ -305,8 +398,6 @@ Reset the SR1 approximation `H` by setting the `J`, `C` and `mu`
 attributes to, respectively, `J₀`, `C₀` and μ₀.
 
 The second order terms in attribute `S` are set to `0`.
-
-Test to see what happens when they are maintained
 """
 function reset_hessian!(
     H::SR1{T},
@@ -326,8 +417,15 @@ function reset_hessian!(
     return
 end
 
-# Reset fields of the HybridSR1 structure at the start of a new outer iteration
-# Current version: second order terms are are not reset
+"""
+    reset_hessian!(H::HybridSR1, J₀, C₀, μ₀)
+
+Reset the hybrid SR1 approximation `H` at the start of a new outer iteration, by setting
+the `J`, `C` and `mu` attributes to, respectively, `J₀`, `C₀` and `μ₀`.
+
+The second order terms in attribute `S`, the step and the secant right-hand side are set
+to `0`, and the residuals are no longer considered small (`small_res` is set to `false`).
+"""
 function reset_hessian!(
     H::HybridSR1{T},
     J0::AbstractMatrix{T},

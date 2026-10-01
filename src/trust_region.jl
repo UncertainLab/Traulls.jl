@@ -21,7 +21,7 @@ update parameters.
 - `increase_factor`: factor to increase the radius (scalar greater than `1`)
 - `decrease_factor`: factor to decrease the radius (scalar in `(0,1)`)
 - `neg_ratio_factor`: factor to decrease the radius in case of negative ratio
-(scalar in `(0,1)`)
+  (scalar in `(0,1)`)
 """
 mutable struct TrustRegion{T<:Real}
     radius::T

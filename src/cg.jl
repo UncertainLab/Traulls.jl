@@ -1,3 +1,12 @@
+#=
+    cg.jl
+
+Projected conjugate gradient method used to refine the Cauchy step in the subspace of the
+free variables.
+
+Author(s): Pierre Borie
+=#
+
 """
     CG_status
 
@@ -19,9 +28,19 @@ Enum representing the termination status of the projected conjugate gradient met
 end
 
 """ 
-    pcg!(b, H, P, s,  s_l, s_u, radius, r, v, p, Hp, κ_cg; ε_curv)
+    pcg!(b,H,P,s,sₗ,sᵤ,Δ,r,v,p,Hp,κ_cg;ε_curv)
 
-Approximately solves, w.r.t. `w` the subproblem:
+Refine the current step `s` with the projected conjugate gradient (CG) method.
+
+# Problem setup
+
+The quadratic model of the augmented Lagrangian at the current iterate is 
+
+`q(s) = 0.5 sᵀHs + gᵀs`, 
+
+Starting from the current step `s`, the CG iterations look for a descent direction `w` 
+such that `s + w` further reduces the model, which amounts to approximately solve w.r.t. 
+`w` the subproblem:
 
 `min 0.5 wᵀHw + wᵀb`
 
@@ -29,49 +48,58 @@ Approximately solves, w.r.t. `w` the subproblem:
 
 `wᵢ = 0, i ∈ fix_vars`
 
-`wₗ ≤ w ≤ wᵤ,`
+where:
 
-using the projected conjugate gradient method.
+- `b = Hs + g` is the gradient of the quadratic model at the current step `s`
+- `A` is the matrix of the linear equality constraints (the constraint `Aw = 0` is
+  absent when the problem only has bounds)
+- `fix_vars` is the set of indices of the variables whose bounds are active at `x + s`.
 
-The search directions updates are accumulated in the current step `s`.
+The matrix `A` and the set `fix_vars` are stored in the projector `P`, so that `P` 
+projects onto `{w | Aw = 0, wᵢ = 0 for i ∈ fix_vars}`.
 
-Termination cases: 
+To ensure the feasiblity of the total step `s + w`, the search direction is also subject 
+to the implicit bounds
+
+`sₗ - s ≤ w ≤ sᵤ - s,`
+
+with `sₗ = max(-Δ, xₗ - x)` and `sᵤ = min(Δ, xᵤ - x)`. 
+
+The successive CG updates are accumulated in place in `s`, which holds `s + w` on return.
+
+# Termination cases
 
 - the norm of the preconditionned gradient has been reduced by a factor `κ_cg`
-
 - direction of negative curvature is encountered (can happen when the Hessian is
- updated with SR1 formula)
-
+  updated with SR1 formula)
 - a conjugate direction goes beyond the feasible domain (either a bound or the trust region)
-
 - a maximum number of iterations have been done (defined to be twice the number of free variables)
 
 # Arguments
 
-- `b`: Initial right handside vector
-
-- `H`: Operator associated to the Hessian matrix
-
-- `P`: Projector operator to compute the projected directions
-
-- `s_l`: Lower bounds for the step
-
-- `s_u`: Upper bounds for the step
-
-- `radius`: Radius of the infinite norm trust region
- 
-- `kappa_cg`: Tolerance parameter for convergence
-
-- `eps_curv`: Optionnal tolerance to assert if the Hessian curvature is high enough
-(default: 1e-10)
-
+- `b`: initial right-hand side vector `Hs + g`
+- `H`: operator associated to the Hessian matrix
+- `P`: projector operator onto `{w | Aw = 0, wᵢ = 0 for i ∈ fix_vars}`, used to compute the
+  projected directions
+- `s`: current step, starting point of the CG iterations
+- `sₗ`: lower bounds for the step
+- `sᵤ`: upper bounds for the step
+- `Δ`: radius of the infinite norm trust region
+- `κ_cg`: relative tolerance to assert convergence of the CG iterations
 - `r`, `v`, `p`, `Hp`: Buffer vectors
 
-# Returns
+# Keywords
 
-- step `s` modified in place
-- `status`: The termination status, encoded in the `CG_status` Enum (see [`CG_status`](@ref))
-- `pred`: value of the reduction of the model after taking step `s`
+- `ε_curv`: Absolute tolerance used to decide whether the Hessian curvature is negative. 
+  Defaults to `1e-10`.
+
+# On return
+
+- argument `s` modified in place to store the total step `s + w`, obtained after the CG 
+  iterations
+- `status`: the termination status of the CG iterations, encoded as a [`CG_status`](@ref)
+- `pred`: reduction of the model after taking the correction step `w`, i.e. `q(s + w) - 
+  q(s)`
 """
 function pcg!(
     b::AbstractVector{T},

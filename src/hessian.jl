@@ -1,3 +1,12 @@
+#=
+    hessian.jl
+
+Common interface of the augmented Lagrangian Hessian approximations (selection, update and
+products with vectors) and Gauss-Newton approximation.
+
+Author(s): Pierre Borie
+=#
+
 """
     HessianApprox
 
@@ -9,7 +18,7 @@
 - `hybrid_bfgs`: second-order terms updated by BFGS formula and used if non zero residuals
 - `hybrid_sr1`: second-order terms updated by SR1 formula and used if non zero residuals
 - `limited_sr1`: second-order terms approximated by a limited memory hessian and updated
-with SR1 formula
+  with SR1 formula
 """
 @enum HessianApprox begin
     gn
@@ -33,16 +42,13 @@ const dict_hessians = Dict(:gn => gn,
 Mutable structure representing the Gauss-Newton approximation of the Augmented
 Lagrangian Hessian
 
-**Attributes**
+# Attributes
 
-* `J`: Jacobian of the residuals 
-
-* `C`: Jacobian of the nonlinear constraints 
-
-* `μ`: penalty parameter
-
-* `temp`: buffer vector to avoid reallocations for intermediate
-quantities involved when computing matrix-vector products
+- `J`: Jacobian of the residuals 
+- `C`: Jacobian of the nonlinear constraints 
+- `μ`: penalty parameter
+- `temp`: buffer vector to avoid reallocations for intermediate
+  quantities involved when computing matrix-vector products
 
 The resulting approximation is `H = JᵀJ + μCᵀC`.
 """
@@ -61,12 +67,10 @@ Constructor method for the [`GN`](@ref) structure.
 Takes jacobians and a penalty parameter as inputs and initializes the buffer
 vector to zero.
 
-* Arguments
+# Arguments
 
 - `J`: Jacobian matrix of the residuals
-
 - `C`: Jacobian matrix of the nonlinear equality constraints
-
 - `μ`: Penalty parameter
 """
 function GN(

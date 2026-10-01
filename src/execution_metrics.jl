@@ -1,3 +1,11 @@
+#=
+    execution_metrics.jl
+
+Termination status, evaluation counters and results structure returned by Traulls.
+
+Author(s): Pierre Borie
+=#
+
 # `@enum` type for the different termination status in Traulls
 @enum CriticalityStatus begin
     first_order_critical
@@ -66,14 +74,14 @@ Mutable structure gathering the informations about a solution computed by `Traul
 
 - `solution`: optimal solution of the optimization problem found by the solver
 - `lagrange_mults`: vector of Lagrange multipliers associated to the equality constraints at
- the solution
+  the solution
 - `objective`: value of the objective function, i.e. the squared sum of residuals at
-solution
+  solution
 - `feasibility`: norm of the equality constraints at the solution
 - `criticality`: value of the criticality measure, i.e. measure of optimality, at the
-solution
+  solution
 - `counters`: structure of type `TraullsCounters` storing the number of evaluation functions
- and iterations performed
+  and iterations performed
 - `elapsed_time`: solving time measured during the execution in seconds
 """
 mutable struct TraullsResults{T}

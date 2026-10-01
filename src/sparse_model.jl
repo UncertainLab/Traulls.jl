@@ -1,9 +1,106 @@
+#=
+    sparse_model.jl
+
+Structure and methods for constrained nonlinear least-squares models with sparse Jacobians
+given by their sparsity patterns.
+
+Author(s): Pierre Borie
+=#
+
 export SparseCnlsModel, SparseCnlsModel!
 
-# Mutable struct to encode a nonlinear least-squares problem subject to nonlinear
-# constraints for which the jacobian are sparse
-# When initializing a model wit the different constructors, make sure that the functions
-# computing the jacobian respect the sparsity pattern indicated by the corresponding fields
+"""
+    SparseCnlsModel{Tv,Ti} <: AbstractCnlsModel{Tv}
+
+Structure representing a nonlinear least-squares problem with sparse Jacobians, of the form
+
+`minₓ 1/2 * r(x)ᵀr(x)`
+
+`s.t. h(x) = 0`
+
+`g(x) ≥ 0`
+
+`Ax = b`
+
+`ℓ ≤ x ≤ u.`
+
+Functions `r`, `h` and `g` are twice continuously differentiable and their Jacobians are
+sparse matrices, whose sparsity patterns are given in coordinate format, i.e. as the row
+and column indices of their nonzero entries. Type parameters `Tv` and `Ti` are,
+respectively, the type of the values and the type of the indices.
+
+# Attributes
+
+- `res!`: Function evaluating the residuals
+- `nleq!`: Function evaluating the nonlinear equality constraints
+- `nlineq!`: Function evaluating the nonlinear inequality constraints
+- `jres!`: Function evaluating the Jacobian of the residuals
+- `jnleq!`: Function evaluating the Jacobian of the nonlinear equality constraints
+- `jnlineq!`: Function evaluating the Jacobian of the nonlinear inequality constraints
+- `jr_nzrows`, `jr_nzcols`: Row and column indices of the nonzero entries of the
+  Jacobian of the residuals
+- `jnleq_nzrows`, `jnleq_nzcols`: Row and column indices of the nonzero entries of the
+  Jacobian of the nonlinear equality constraints
+- `jnlineq_nzrows`, `jnlineq_nzcols`: Row and column indices of the nonzero entries of
+  the Jacobian of the nonlinear inequality constraints
+- `linmat`: Matrix of the linear equality constraints
+- `linrhs`: Right-hand side of the linear equality constraints
+- `xlow`: Lower bounds on the variables
+- `xupp`: Upper bounds on the variables
+- `n`: Number of variables
+- `nslack`: Number of slack variables
+- `nres`: Number of residuals
+- `ncons`: Total number of nonlinear constraints (equalities + inequalities)
+- `nlincons`: Total number of linear equality constraints, i.e. number of rows of `linmat`
+- `x`: Initial guess for solution
+- `counters`: [`TraullsCounters`](@ref) storing the number of function evaluations
+
+The solver converts the nonlinear inequality constraints into equalities by adding slack
+variables. Linear constraints must be provided as equalities.
+
+Constructors are only available for in-place functions. Evaluation functions must return
+nothing and have the signature `f!(fx, x)`, with input `x` and the result being stored in
+`fx`. Jacobian functions have the same signature `jac!(Jx, x)`, where `Jx` is a sparse
+matrix that already has the sparsity pattern given to the constructor. They must only
+fill the entries of this pattern, so make sure that they respect it.
+
+The default constructor method has signature
+
+`SparseCnlsModel!(r!, h!, g!, jac_r!, jac_h!, jac_g!, jr_nzrows, jr_nzcols, jh_nzrows,
+jh_nzcols, jg_nzrows, jg_nzcols, A, b, ℓ, u, x0, nvar, nres, neq, nineq)`
+
+and requires
+
+- `r!`, `h!`, `g!`: evaluation functions of the residuals `r` and constraints `h`, `g`
+- `jac_r!`, `jac_h!`, `jac_g!`: evaluation functions of the respective Jacobians of `r`,
+  `h`, `g`
+- `jr_nzrows`, `jr_nzcols`: row and column indices of the nonzero entries of the Jacobian
+  of `r`
+- `jh_nzrows`, `jh_nzcols`: row and column indices of the nonzero entries of the Jacobian
+  of `h`
+- `jg_nzrows`, `jg_nzcols`: row and column indices of the nonzero entries of the Jacobian
+  of `g`
+- `A`, `b`: matrix coefficients and right-hand side of the linear equality constraints
+- `ℓ`, `u`: bounds on the decision variables (set components of unbounded variables to
+  `±Inf`)
+- `x0`: initial guess for the decision variables
+- `nvar`: the number of decision variables
+- `nres`: the number of residuals
+- `neq`: the number of nonlinear equality constraints
+- `nineq`: the number of nonlinear inequality constraints
+
+The row and column index vectors of a same sparsity pattern must have the same length,
+otherwise an `ArgumentError` is thrown.
+
+The following methods are available variants of this constructor for problems with only
+nonlinear equality constraints, with or without linear equality constraints.
+
+`SparseCnlsModel!(r!, c!, jac_r!, jac_c!, jr_nzrows, jr_nzcols, jc_nzrows, jc_nzcols, A, b,
+ℓ, u, x0, nvar, nres, ncons, Val(:only_equalities))`
+
+`SparseCnlsModel!(r!, c!, jac_r!, jac_c!, jr_nzrows, jr_nzcols, jc_nzrows, jc_nzcols, ℓ, u,
+x0, nvar, nres, ncons, Val(:only_equalities))`
+"""
 mutable struct SparseCnlsModel{Tv<:Real, Ti <: Int} <: AbstractCnlsModel{Tv}
     # In-place evaluation functions
     res!

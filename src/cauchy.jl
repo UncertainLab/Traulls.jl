@@ -1,12 +1,22 @@
+#=
+    cauchy.jl
+
+Computation of the Cauchy step along the projected gradient path, which provides the
+starting point for the approximate solution of the trust region subproblem.
+
+Author(s): Pierre Borie
+=#
+
 """
-    cauchy_step!(x,s,g,ℓ,u,sₗ,sᵤ,H,P,ℓ,d,Hd)
+    cauchy_step!(x,s,g,ℓ,u,sₗ,sᵤ,hess_op,proj_op,d,Hd)
 
 Compute a Cauchy step that provides a sufficient reduction of the quadratic model
 `q(s) = <s,Hs> + <g,s>`.
 
 The step is defined by `s_c = s(t_c)` , where `s(t)`, for `t ≥ 0`, is the
 projected gradient step `P(x-t*g) - x` with `P` denoting the projection over
-`{s | Av = 0 and sₗ ≤ s ≤ sᵤ`, with `sₗ = max(-Δ, ℓ - x)`
+`{s | Av = 0 and sₗ ≤ s ≤ sᵤ`, with `sₗ = max(-Δ, ℓ - x)` and 
+`sᵤ = min(Δ, u - x)`
 
 This method finds the first local minimum of the quadratic model along the
 projected gradient path, i.e. the first local minimum of `t ↦ q(s(t))` on `[0, ∞)`.
@@ -21,22 +31,23 @@ Follows the procedure of algorithm 17.3.1 from Trust Regions Methods
 # Arguments
 
 - `x`: current iterate
-- `s`: buffer vector for the Cauchy step
+- `s`: buffer vector to store the Cauchy step
 - `g`: gradient of the augmented Lagrangian at current point
-- `xlow`: lower bounds on the variables `x`
-- `xupp`: upper bounds on the variables `x`
-- `slow`: lower bounds on the step `s`
-- `supp`: upper bounds on the step `s`
+- `ℓ`: lower bounds on the variables `x`
+- `u`: upper bounds on the variables `x`
+- `sₗ`: lower bounds on the step `s`
+- `sᵤ`: upper bounds on the step `s`
 - `hess_op`: Operator for the Hessian approximation of type `ALHessian` at current point
 - `proj_op`: [`SubspaceProjector`](@ref) operator onto tangent space of feasible directions
-- `xlow`: lower bounds on the variables `x`
-- `xupp`: upper bounds on the variables `x`
-- `d`: buffer vector the the projected steepest direction
-- `Hd`: Buffer vector to store Hessian-vector product
+- `d`: buffer vector to store the projected steepest directions
+- `Hd`: Buffer vector to store Hessian-vector products
 
 # On return
 
-- `s` argument modified in place with components set to the Cauchy step
+- `pred`: reduction of the quadratic model obtained after taking the Cauchy step
+- argument `s` stores the resulting Cauchy step
+- argument `proj_op` corresponds to the projector operator onto the null space of the
+  active constraints (linear equalities + active bounds)
 """
 function cauchy_step!(
     x::AbstractVector{T},
@@ -133,14 +144,34 @@ function cauchy_step!(
     return pred
 end
 
-# Finds the variables fixed during the Cauchy step computation
-# It includes the variables lying at their upper or lower bound with direction moving out
-# of the feasible region and variables whose associated component in the search direction
-# is zero
-# Uses square root of machine precision as relative tolerance to assert if bounds are active
-# or if search direction is zero
-#
-# Returns the indices of the active variables and zero direction in separate arrays of integers
+"""
+    initial_fixed(x, d, xlow, xupp; epsrel = sqrt(eps(T)))
+
+Find the variables that are fixed at the start of the Cauchy step computation.
+
+These are either:
+
+- variables lying at their lower (resp. upper) bound whose component in the search
+  direction `d` points out of the feasible region, i.e. is negative (resp. positive)
+- variables lying strictly between their bounds whose component in `d` is zero.
+
+# Arguments
+
+- `x`: current iterate
+- `d`: search direction
+- `xlow`: lower bounds on the variables `x`
+- `xupp`: upper bounds on the variables `x`
+
+# Keywords
+
+- `epsrel`: relative tolerance used to decide whether a bound is active and whether a
+  component of `d` is zero. Defaults to the square root of the machine precision.
+
+# On return
+
+- `active`: `Vector{Int}` of indices of the variables at an active bound
+- `zero_dir`: `Vector{Int}` of indices of the free variables with a zero direction
+"""
 function initial_fixed(
     x::AbstractVector{T},
     d::AbstractVector{T},
@@ -171,13 +202,36 @@ function initial_fixed(
     return active, zero_dir
 end
 
-# Finds the next breakpoint on the projected gradient path with a given set of variables
-# already fixed
-# Variables with breakpoint differing from a small quantity are associated to the same
-# breakpoint.
-#
-# Returns the value of the gap between the previous and the next breakpoint
+"""
+    next_breakpoint(d, s, slow, supp, proj_op; epsbp = 10*eps(T))
 
+Find the next breakpoint on the projected gradient path, given the set of variables
+already fixed in `proj_op`.
+
+A breakpoint is a step length along `d`, starting from the current step `s`, at which a
+free variable reaches one of its bounds `slow` or `supp`. Only the variables that are not
+fixed in `proj_op` are considered. Breakpoints that differ by less than `epsbp` are
+treated as the same breakpoint, so that several variables can become active at once.
+
+# Arguments
+
+- `d`: current search direction
+- `s`: current step on the projected gradient path
+- `slow`: lower bounds on the step `s`
+- `supp`: upper bounds on the step `s`
+- `proj_op`: `Projector` operator that tracks the fixed variables
+
+# Keywords
+
+- `epsbp`: tolerance under which two breakpoints are considered equal. Defaults to
+  `10*eps(T)`.
+
+# On return
+
+- `bp_value`: gap between the previous and the next breakpoint, i.e. the step length along
+  `d` from `s` to the next breakpoint (`Inf` if no free variable can reach a bound)
+- `bp_idx`: `Vector{Int}` of indices of the variables becoming active at that breakpoint
+"""
 function next_breakpoint(
     d::AbstractVector{T},
     s::AbstractVector{T},
@@ -186,7 +240,7 @@ function next_breakpoint(
     proj_op::Projector{T};
     epsbp::T = 10*eps(T)) where T
 
-    bp_value = Inf         # current breakpoint value
+    bp_value = T(Inf)         # current breakpoint value
     bp_idx = Vector{Int}() # indices of variables becoming active at breakpoint
 
     # TODO: filter the axes with free variables to get directly the iterator with the right

@@ -1,3 +1,13 @@
+#=
+    solver.jl
+
+Main solver routine: outer augmented Lagrangian loop, inner trust region iterations on the
+subproblems, gradient projection step and computation of an initial point feasible with
+respect to the linear constraints.
+
+Author(s): Pierre Borie
+=#
+
 export traulls
 
 """
@@ -33,53 +43,53 @@ documentation.
 - `mu`: Initial penalty parameter (default: `10`)
 - `tau`: Increase factor for the penalty parameter (default: `10`)
 - `omega0`: Constant to set the initial criticality tolerance
-(default: `1`)
+  (default: `1`)
 - `eta0`: Constant to set the initial feasibility tolerance
-(default: `1`)
+  (default: `1`)
 - `min_tol_feas`: Absolute tolerance for feasibility of nonlinear constraints
-(default: `1e-7`)
+  (default: `1e-7`)
 - `min_reltol_crit`: Relative tolerance for criticality (default: `1e-7`)
 - `k_crit`: Positive constant used to initialize and update the
-subproblem criticality tolerance in the case of poor improvement of the
-feasibility (default: `1.0`)
+  subproblem criticality tolerance in the case of poor improvement of the
+  feasibility (default: `1.0`)
 - `k_feas`: Positive constant used to initialize and update the subproblem feasibility
-tolerance in the case of poor improvement of the feasibility (default: `0.1`)
+  tolerance in the case of poor improvement of the feasibility (default: `0.1`)
 - `beta_crit`: Positive constant used to reduce the subproblem criticality tolerance in the
-case of good improvement of the primal feasibility (default: `1.0`)
+  case of good improvement of the primal feasibility (default: `1.0`)
 - `beta_feas`: Positive constant used to reduce the subproblem feasibility tolerance in the
-case of good improvement of the feasibility (default: `0.9`)
+  case of good improvement of the feasibility (default: `0.9`)
 - `hessian_approx`: Symbol encoding the Hessian approximation used during the inner
-minimization (default: `:gn` for Gauss-Newton)
+  minimization (default: `:gn` for Gauss-Newton)
 - `init_mult`: Boolean. If set to true, initialises the Lagrange multipliers with the
-least-squares estimate.
+  least-squares estimate.
 
 ## Trust region parameters
 
 - `accept_threshold`: Threshold for accepting a step (default: `0.05`)
 - `increase_threshold`: Threshold for very successful steps to extend the trust region
-(default: `0.9`)
+  (default: `0.9`)
 - `decrease_factor`: Reducing factor of the trust region (default: `0.25`)
 - `increase_factor`: Extension factor of the trust region (default: `2.5`)
 - `neg_ratio_factor`: Reduction factor of the trust region radius for steps with negative
-ratio (default: `0.0625`)
+  ratio (default: `0.0625`)
 
 ## Solver related constants
 
 - `mu_max`: maximum value of the penalty parameter (default: `1/ϵ` with `ϵ` is the relative
-machine precision)
+  machine precision)
 - `max_iter`: Maximum number of outer iterations (default: `200`)
 - `max_inner_iter`: Maximum number of iterations for the inner minimization phase
-(default: `1000`)
+  (default: `1000`)
 - `max_cg_iter`: Maximum number of minor iterates for the gradient projection loop
-(default: `50`)
+  (default: `50`)
 
 ## Miscellaneous
 
 - `output_io`: Input-Output stream where the iteration detail is printed (default: `stdout`)
 - `verbose`: Boolean. If set to `true`, print information about the outer iterations into
-`output_io` (default: `false`)
+  `output_io` (default: `false`)
 - `inner_verbose`: Boolean. If set to `true`, print information about the iterations of the
-inner minimization phase into `output_io` (default: `false`)
+  inner minimization phase into `output_io` (default: `false`)
 
 # On return
 
@@ -338,17 +348,17 @@ documentation.
 - `hess_op`: `ALHessian` operator to compute Hessian-vector products
 - `proj_op`: `Projector` operator to compute projections onto tangent spaces
 - `tr`: `TrustRegion` encoding the trust region constraint and the constants involved in the
-radius update mechanism (see [`TrustRegion`](@ref))
+  radius update mechanism (see [`TrustRegion`](@ref))
 - `reltol_crit`: Relative optimality tolerance
 - `hessian_approx`: Instance of `HessianApprox` enum type encoding how the approximated
-Hessian is updated
+  Hessian is updated
 - `max_iter::Int`: maximum number of inner iterations
 - `max_cg_iter::Int`: maximum number of uses of the conjugate gradient method, i.e. minor
-iterates
+  iterates
 - `workspace`: Instance of `Workspace` whose fields contain pre-allocated memory for vectors
-involed in linear algebra computations
+  involed in linear algebra computations
 - `patience_counter`: Maximum number of consecutive stalling iterations before exiting the
-algorithm (default: `3`)
+  algorithm (default: `3`)
 - `verbose`:Boolean. If set to `true`, print iteration detail into `io` (default: false)
 - `io`: input/output stream to log iteration detail (default: `stdout`)
 """
@@ -566,11 +576,11 @@ description of the method is given in the [Method](@ref Method) page of the docu
 - `Δ`: Trust region radius
 - `max_cg_iter`: Number of maximum uses of the conjugate gradient method
 - `κ_pg`: Positive constant used to define the convergence criteria
-relative of the gradient projection method
+  relative of the gradient projection method
 - `κ_cg`: Positve constant used to define the convergence criteria of
-the conjugate gradient method
+  the conjugate gradient method
 - `workspace`: Instance of `Workspace` whose fields contain pre-allocated memory for vectors
-involed in linear algebra computations
+  involed in linear algebra computations
 
 # On return
 
@@ -685,7 +695,6 @@ Also forms the projector operator used to compute projections onto null spaces.
 # Methods
 
 - `initial_point_and_projector!(model, x, Val(false))` for models without linear equality constraints
-
 - `initial_point_and_projector!(model, x, Val(true))` for models with linear equality constraints
 """
 function initial_point_and_projector!(
@@ -792,7 +801,7 @@ It equals `πₓ = ||P[x-g] - x||` where `P` denotes the projection onto the box
 
 - `x`: Current iterate
 - `g`: Gradient of the Augmented Lagrangian at current primal-dual
-iterate
+  iterate
 - `gproj`: Buffer vector to store the projected gradient
 - `xₗ`: Lower bounds on `x`
 - `xᵤ`: Upper bounds on `x`

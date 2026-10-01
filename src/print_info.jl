@@ -1,3 +1,11 @@
+#=
+    print_info.jl
+
+Printing of the solver header and of the information on the outer and inner iterations.
+
+Author(s): Pierre Borie
+=#
+
 function print_traulls_header(
     model::AbstractCnlsModel{T},
     fx::T,

@@ -1,3 +1,12 @@
+#=
+    bfgs.jl
+
+Structured BFGS and hybrid BFGS approximations of the augmented Lagrangian Hessian, where
+the second order terms are updated with a BFGS formula based on an NL2SOL-style secant
+equation.
+
+Author(s): Pierre Borie
+=#
 
 # Approximation of the AL Hessian with second order terms approximated with
 # BFGS update formula

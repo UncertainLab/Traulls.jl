@@ -1,3 +1,12 @@
+#=
+    Traulls.jl
+
+Main module of Traulls. Loads the package dependencies, declares the core abstract types
+(problem models, Hessian approximations and projectors) and includes the source files.
+
+Author(s): Pierre Borie
+=#
+
 module Traulls
 
 # Packages
