@@ -11,3 +11,4 @@ include("model.jl")
 
 include("solve_hs65.jl")
 include("sparse_model.jl")
+include("polyhedral_solve.jl")
