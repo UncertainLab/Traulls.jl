@@ -207,9 +207,16 @@ indices of the components fixed at one of their bounds.
   ```math
   P v = v - A_+^T \big(A_+ A_+^T\big)^{-1} A_+ v.
   ```
-  The Cholesky factorization of $AA^T$ is computed once at the start of the algorithm. The
-  one of $A_+ A_+^T$ is derived from it by exploiting its block structure each time the
-  set $\mathcal{A}$ changes.
+  The Cholesky factorization $AA^T = L_{11}L_{11}^T$ and the matrix $W = L_{11}^{-1}A$ are
+  computed once at the start of the algorithm. The Cholesky factor of $A_+ A_+^T$ then has
+  the block form
+  ```math
+  \begin{bmatrix} L_{11} & 0 \\ G^T & L_H \end{bmatrix},
+  ```
+  where $G$ gathers the columns of $W$ indexed by $\mathcal{A}$ and $L_H$ is the Cholesky
+  factor of $H = I - G^TG$. Only $L_H$ is maintained when the set $\mathcal{A}$ changes:
+  adding an index appends a row and a column to $H$ (bordered update), removing one is a
+  rank-one update of the trailing block of $L_H$.
 
 ### Cauchy step
 
@@ -269,8 +276,8 @@ of freedom remains, or `max_cg_iter` CG runs have been performed.
 
 - In the **bound-constrained case**, the projections are cheap and the number of degrees of
   freedom is the number of free variables $n - |\mathcal{A}|$.
-- In the **general linear constraints case**, each projection requires solving a linear
-  system with the Cholesky factors of $A_+ A_+^T$, and the number of degrees of freedom is
+- In the **general linear constraints case**, each projection requires two products with
+  $W$ and two triangular solves with $L_H$, and the number of degrees of freedom is
   $n - m - |\mathcal{A}|$.
 
 ## [Hessian approximation](@id method_hessian)

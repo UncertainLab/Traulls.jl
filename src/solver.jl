@@ -609,8 +609,8 @@ function projected_gradient!(
     r, v, p = workspace.r, workspace.v, workspace.p
 
     # Bounds the step  on the search direction
-    slow .= (t -> max(-radius, t)).(xlow - x)
-    supp .= (t -> min(radius, t)).(xupp - x)
+    slow .= max.(-radius, xlow .- x)
+    supp .= min.(radius, xupp .- x)
     # Reset active constraints
     reset_projector!(proj_op)
 
@@ -632,7 +632,10 @@ function projected_gradient!(
     b .= Hs .+ g
 
     # If Cauchy step provides sufficient decrease, exit
-    quasi_optimal = norm(proj_op * b) <= tol_pg * (1 + norm(proj_op*g))
+    # The CG buffer `v` is free outside of `pcg!` and holds the projected vectors
+    norm_reduced_g = norm(mul!(v, proj_op, g))
+    norm_reduced_gnext = norm(mul!(v, proj_op, b))
+    quasi_optimal = norm_reduced_gnext <= tol_pg * (1 + norm_reduced_g)
     cg_stop = false
     iter = 1
 
@@ -660,9 +663,8 @@ function projected_gradient!(
         b .= Hs .+ g
 
         # Compute norms of reduced gradients ||Zᵀg|| and ||Zᵀ(Hs+g)||
-        # TODO: in-place computations for norms of reduced gradients
-        norm_reduced_g = norm(proj_op * g)
-        norm_reduced_gnext = norm(proj_op * b)
+        norm_reduced_g = norm(mul!(v, proj_op, g))
+        norm_reduced_gnext = norm(mul!(v, proj_op, b))
 
         # Stop if the step provides sufficient decrease in the reduced gradient
         quasi_optimal = norm_reduced_gnext <= tol_pg * (1 + norm_reduced_g)
@@ -703,7 +705,7 @@ function initial_point_and_projector!(
     ::Val{false}) where T
 
     # Make starting point feasible with respect to bounds
-    x .= max.(model.xlow, min.(x, model.xupp))
+    project!(x, model.xlow, model.xupp)
 
     CoordinateSubspaceProjector(model.n; T=T)
 end
@@ -817,8 +819,10 @@ function criticality_measure(
     xlow::AbstractVector{T},
     xupp::AbstractVector{T}) where T
 
-    project!(gproj, x .- g, xlow, xupp) # gproj ← P[x-g]
-    gproj .-= x                         # gproj ← gproj - x
+    gproj .= x .- g
+    project!(gproj, xlow, xupp) # gproj ← P[x-g]
+    gproj .-= x                 # gproj ← gproj - x
+    
     norm(gproj, Inf)
 end
 

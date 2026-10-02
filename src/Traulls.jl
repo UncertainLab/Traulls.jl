@@ -12,7 +12,7 @@ module Traulls
 # Packages
 using LinearAlgebra, SparseArrays, Printf, Match, ForwardDiff, JuMP, HiGHS
 
-import LinearAlgebra.mul!, LinearAlgebra.transpose
+import LinearAlgebra.mul!
 
 import Base.print, Base.println
 

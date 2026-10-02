@@ -68,7 +68,7 @@ function cauchy_step!(
     eps_curv = 1e-10
 
     # Initial projected steepest direction
-    mul!(d, proj_op, -g) # d ← P[-g]
+    mul!(d, proj_op, g, -one(T), zero(T)) # d ← P[-g]
 
     # Fixed variables for the Cauchy step computation
     active, zero_dir = initial_fixed(x, d, xlow, xupp)
@@ -76,7 +76,7 @@ function cauchy_step!(
 
     # Update the projector operator and search direction
     !isempty(fixed) && set_active!(proj_op, fixed)
-    mul!(d, proj_op, -g)
+    mul!(d, proj_op, g, -one(T), zero(T)) # d ← P[-g]
 
     # Find first breakpoint
     s .= zeroT
@@ -126,7 +126,7 @@ function cauchy_step!(
 
             # Form next search direction
             set_active!(proj_op, idx)
-            mul!(d, proj_op, -g)
+            mul!(d, proj_op, g, -one(T), zero(T)) # d ← P[-g]
             gd = dot(g, d)
             mul!(Hd, hess_op, d)
 
