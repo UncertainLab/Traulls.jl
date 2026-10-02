@@ -1,7 +1,8 @@
 #=
     workspace.jl 
 
-Structure and related methods for the memory allocation of the buffers vectors involved into intermediate computations.
+Structure and related methods for the memory allocation of the buffers vectors involved 
+into intermediate computations.
     
 Author(s): Pierre Borie 
 =#

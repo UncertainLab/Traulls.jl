@@ -141,8 +141,7 @@ solution of the quadratic program
 ```
 
 where $\Delta_j > 0$ is the trust-region radius. The trust region is defined with the
-$\infty$-norm, so that it combines with the bounds into a single box: the constraints on
-the step are equivalent to $s \in B_j$ with
+$\infty$-norm, so that it combines with the bounds into a single box $B_j$ defined by
 
 ```math
 B_j = \big[\max(-\Delta_j e, \ell - x_j),\ \min(\Delta_j e, u - x_j)\big],
@@ -166,10 +165,10 @@ augmented Lagrangian over the reduction predicted by the model
 \rho_j = \dfrac{L_A(x_j + s_j) - L_A(x_j)}{q_j(s_j) - q_j(0)}.
 ```
 
-If $\rho_j \ge \eta_1$, the model and the function are in good agreement: the step is
-accepted, $x_{j+1} = x_j + s_j$, and the Jacobians, the gradient and the Hessian
-approximation are updated. Otherwise, the step is rejected, $x_{j+1} = x_j$, and a new
-step is computed in a smaller trust region. The radius is updated as follows, where
+If $\rho_j \ge \eta_1$, the model and the function are in good agreement and the step is
+accepted, i.e. $x_{j+1} = x_j + s_j$; the Jacobians, the gradient and the Hessian
+approximation are then updated. Otherwise, the step is rejected, $x_{j+1} = x_j$, and a 
+new step is computed in a smaller trust region. The radius is updated as follows, where
 $\|s_j\|$ denotes the $\infty$-norm of the step:
 
 | Ratio | Step | New radius $\Delta_{j+1}$ |
@@ -199,7 +198,7 @@ preserve the constraints currently fixed as active. Let $\mathcal{A}$ denote the
 indices of the components fixed at one of their bounds.
 
 - In the **bound-constrained case**, $P$ is the projection onto the coordinate subspace
-  $\{v \mid v_i = 0,\ i \in \mathcal{A}\}$: it merely sets to zero the components of a
+  $\{v \mid v_i = 0,\ i \in \mathcal{A}\}$ so it merely sets to zero the components of a
   vector indexed by $\mathcal{A}$.
 - In the **general linear constraints case**, $P$ is the orthogonal projection onto the
   null space of the matrix $A_+$ formed by stacking $A$ and the rows $e_i^T$,
@@ -226,12 +225,12 @@ gradient path.
 s(t) = \mathcal{P}\big[x_j - t g_j\big] - x_j, \quad t \ge 0,
 ```
 where $\mathcal{P}$ is the projection onto the feasible set. This path is piecewise 
-linear: its breakpoints are the values of $t$ at which a component reaches a bound of 
+linear and its breakpoints are the values of $t$ at which a component reaches a bound of 
 $B_j$. The model restricted to each segment is a one-dimensional quadratic, so the 
 segments are examined successively until the first local minimizer is found.
 
 The path is built as a sequence of segments along the directions $d = -P g_j$ where $P$
-is the projection onto $\{s \mid As = 0, \ s_i = 0 \ i \in \mathcal{A}\}$: the search 
+is the projection onto $\{s \mid As = 0, \ s_i = 0 \ i \in \mathcal{A}\}$. The search 
 moves along $d$ until a component reaches a bound of $B_j$ (breakpoint), this bound is 
 added to $\mathcal{A}$, the projector $P$ is updated and a new direction is computed. 
 
@@ -262,9 +261,9 @@ CG iterations stop when:
 - the norm of the projected residual $\|Pr\|$ falls below $\omega(1 + \|Pr_0\|)$, where
   $r_0$ is the initial residual and $\omega$ the current criticality tolerance of the
   outer loop;
-- a direction crosses the boundary of the box $B_j$: the step is then truncated at the
+- a direction crosses the boundary of the box $B_j$; the step is then truncated at the
   boundary;
-- a direction of nonpositive curvature is found, which can happen with the SR1 updates:
+- a direction of nonpositive curvature is found, (which can happen with the SR1 updates);
   the step then follows this direction up to the boundary of $B_j$;
 - the number of iterations exceeds twice the number of degrees of freedom of the subspace.
 
@@ -302,9 +301,8 @@ approximation therefore has the form
 H_j = J_j^T J_j + \mu C_j^T C_j + S_j,
 ```
 
-where $J_j = J(x_j)$, $C_j = C(x_j)$ and $S_j \approx S(x_j)$. The matrix $H_j$ is never
-formed explicitly: only Hessian-vector products are computed, which avoids matrix-matrix
-products with the Jacobians.
+where $J_j = J(x_j)$, $C_j = C(x_j)$ and $S_j \approx S(x_j)$. In order to avoid 
+matrix-matrix products with the Jacobians the matrix $H_j$ is never formed explicitly.
 
 ### Structured secant equation
 
@@ -338,11 +336,10 @@ the relative decrease of the augmented Lagrangian:
 L_A(x_j) - L_A(x_{j+1}) > \varepsilon \, L_A(x_j), \quad \varepsilon = 0.1.
 ```
 
-If this inequality holds, the objective decreases fast, which indicates a small residual
-problem: the Gauss-Newton model is used for the next iteration, i.e. $S_{j+1}$ is dropped
-from the Hessian-vector products. Otherwise, the structured approximation
-$J^T J + \mu C^T C + S_{j+1}$ is used. In both cases, $S_{j+1}$ keeps being updated with the
-secant pairs $(s_j, \hat{y}_j)$, so that it is available when the switching test fails.
+If this inequality holds, the Gauss-Newton model is used for the next iteration, i.e. 
+$S_{j+1}$ is dropped from the Hessian-vector products. Otherwise, the structured 
+approximation $J^T J + \mu C^T C + S_{j+1}$ is used. In both cases, $S_{j+1}$ keeps being 
+updated with the secant pairs $(s_j, \hat{y}_j)$.
 
 ### Available approximations
 

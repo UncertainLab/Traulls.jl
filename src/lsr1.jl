@@ -7,7 +7,7 @@ representation.
 Author(s): Pierre Borie
 =#
 
-# Structure encoding a limite memory SR1 (L-SR1) approximation in compact representation
+# Structure encoding a limited memory SR1 (L-SR1) approximation in compact representation
 # format
 # TODO: Think about one field for middle matrix instead of two
 # When updating, use it to form the middle matrix

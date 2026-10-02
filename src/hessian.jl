@@ -369,9 +369,7 @@ share this signature.
 
 - argument `H` modified in place to store the updated Hessian approximation
 
-[^TB91]: I.B. Tjoa and L.T. Biegler, *Simultaneous solution and optimization strategies 
-for parameter estimation of differential-algebraic equation systems*, Industrial & 
-Engineering Chemistry Research, vol. 30(2), pp. 376-385, 1991.
+[^TB91]: I.B. Tjoa and L.T. Biegler, *Simultaneous solution and optimization strategies for parameter estimation of differential-algebraic equation systems*, Industrial & Engineering Chemistry Research, vol. 30(2), pp. 376-385, 1991.
 """
 function update_hessian!(
     H::GN{T},
