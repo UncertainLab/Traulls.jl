@@ -28,7 +28,7 @@ with an Augmented Lagrangian method.
 
 The nonlinear constraints `c(x) = 0` are handled by the Augmented Lagrangian outer loop,
 while the linear constraints are kept explicitly in the subproblems, which are solved by a
-trust-region gradient projection method (see [`solve_subproblem!`](@ref)).
+trust-region gradient projection method (see [`Traulls.solve_subproblem!`](@ref)).
 A detailed description of the method is given in the [Method](@ref Method) page of the
 documentation.
 
@@ -93,7 +93,7 @@ documentation.
 
 # On return
 
-Returns the important execution informations into a [`TraullsResults`](@ref).
+Returns the important execution informations into a [`Traulls.TraullsResults`](@ref).
 """
 function traulls(
     model::AbstractCnlsModel{T};
@@ -222,7 +222,6 @@ function traulls(
             proj_op,
             tr,
             reltol_crit,
-            hessian_type,
             max_inner_iter,
             max_cg_iter,
             inner_workspace;
@@ -325,7 +324,7 @@ Solves the outer iteration subproblem
 
 using a trust-region gradient projection method, starting from `x` with fixed Lagrange
 multipliers `y` and penalty parameter `μ`. The trial steps are computed by
-[`projected_gradient!`](@ref).
+[`Traulls.projected_gradient!`](@ref).
 
 The inner iterations stop once the criticality measure is reduced below a threshold relative
 to `reltol_crit`, or earlier if the iterations stall or the trust region becomes too small.
@@ -350,8 +349,6 @@ documentation.
 - `tr`: `TrustRegion` encoding the trust region constraint and the constants involved in the
   radius update mechanism (see [`TrustRegion`](@ref))
 - `reltol_crit`: Relative optimality tolerance
-- `hessian_approx`: Instance of `HessianApprox` enum type encoding how the approximated
-  Hessian is updated
 - `max_iter::Int`: maximum number of inner iterations
 - `max_cg_iter::Int`: maximum number of uses of the conjugate gradient method, i.e. minor
   iterates
@@ -378,7 +375,6 @@ function solve_subproblem!(
     proj_op::Projector{T},
     tr::TrustRegion{T},
     reltol_crit::T,
-    hessian_approx::HessianApprox,
     max_iter::Int,
     max_cg_iter::Int,
     workspace::Workspace{T};
@@ -403,14 +399,7 @@ function solve_subproblem!(
     model.counters.nalgrad_eval += 1
     model.counters.nalobj_eval += 1
     # Reset Hessian approximation and projector operator
-    @match hessian_approx begin
-        $gn          => reset_hessian!(hess_op, J, C, mu)
-        $sr1         => reset_hessian!(hess_op, J, C, mu)
-        $hybrid_sr1  => reset_hessian!(hess_op, J, C, mu)
-        $bfgs        => reset_hessian!(hess_op, J, C, mu)
-        $hybrid_bfgs => reset_hessian!(hess_op, J, C, mu)
-        $limited_sr1 => reset_hessian!(hess_op, J, C, mu)
-    end
+    reset_hessian!(hess_op, J, C, mu)
 
     reset_projector!(proj_op)
 
@@ -476,30 +465,7 @@ function solve_subproblem!(
             model.counters.nalgrad_eval += 1
 
             # Update Hessian approximation
-            if hessian_approx == gn
-                # Gauss-Newton case
-                update_hessian!(hess_op, J, C)
-
-            elseif hessian_approx == sr1
-                # SR1 update
-                update_hessian!(hess_op, J, C, rx, cx, g, y, s)
-
-            elseif hessian_approx == bfgs
-                # BFGS update
-                update_hessian!(hess_op, J, C, rx, cx, g, y, s, iter == 1)
-
-            elseif hessian_approx == hybrid_bfgs
-                # HybridBFGS update
-                update_hessian!(hess_op, J, C, rx, cx, alx, alx_prev, g, y, s, iter == 1)
-
-            elseif hessian_approx == hybrid_sr1
-                # HybridSR1 update
-                update_hessian!(hess_op, J, C, rx, cx, alx, alx_prev, g, y, s)
-
-            elseif hessian_approx == limited_sr1
-                # L-SR1 update
-                update_hessian!(hess_op, J, C, rx, cx, g, y, s)
-            end
+            update_hessian!(hess_op, J, C, rx, cx, alx, alx_prev, g, y, s)
 
             # Compute criticality measure
             pix = if lincons_present

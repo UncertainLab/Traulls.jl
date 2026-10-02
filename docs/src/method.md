@@ -222,9 +222,9 @@ indices of the components fixed at one of their bounds.
 
 The Cauchy step is the first local minimizer of the model $q_j$ along the projected
 gradient path.
-  ```math
-  s(t) = \mathcal{P}\big[x_j - t g_j\big] - x_j, \quad t \ge 0,
-  ```
+```math
+s(t) = \mathcal{P}\big[x_j - t g_j\big] - x_j, \quad t \ge 0,
+```
 where $\mathcal{P}$ is the projection onto the feasible set. This path is piecewise 
 linear: its breakpoints are the values of $t$ at which a component reaches a bound of 
 $B_j$. The model restricted to each segment is a one-dimensional quadratic, so the 

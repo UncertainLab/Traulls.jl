@@ -6,6 +6,11 @@
 Pages = ["reference.md"]
 ```
 
+```@docs
+traulls(model; kwargs...)
+```
+
 ```@autodocs
 Modules = [Traulls]
 ```
+

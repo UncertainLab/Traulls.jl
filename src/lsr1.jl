@@ -12,7 +12,7 @@ Author(s): Pierre Borie
 # TODO: Think about one field for middle matrix instead of two
 # When updating, use it to form the middle matrix
 # Modify in place this same field to store the LU decomposition
-mutable struct LSR1{T <: Real} <: ALHessian{T}
+mutable struct LSR1{T <: Real} <: SecantHessian{T}
     # First order fields
     J::AbstractMatrix{T}
     C::AbstractMatrix{T}
@@ -27,9 +27,12 @@ mutable struct LSR1{T <: Real} <: ALHessian{T}
     middle_mat::AbstractMatrix{T}
     lu_middle_mat::Factorization
 
-    # Buffers for intermediate computations
-    temp::AbstractVector{T}
+    # Secant equation components
+    step::AbstractVector{T}
     secant_rhs::AbstractVector{T}
+
+    # Buffer for intermediate computations
+    temp::AbstractVector{T}
 end
 
 # Constructor
@@ -41,61 +44,37 @@ function LSR1(
 
     (m,n) = size(J)
     p = size(C, 1)
+    mem = max(mem, 1)
 
     LSR1(copy(J),
          copy(C),
          mu,
-         max(mem, 1),
+         mem,
          0,
          [zeros(T, n) for _ = 1:mem],
          [zeros(T, n) for _ = 1:mem],
          T(1),
          zeros(T, mem, mem),
          lu(ones(T, 1, 1)),
-         zeros(T, max(n, m, p)),
-         zeros(T, n))
+         zeros(T, n),
+         zeros(T, n),
+         zeros(T, max(n, m, p)))
 end
 
-# 3-argument `mul!` overload
-function mul!(Hv::AbstractVector, lsr1::LSR1, v::AbstractVector)
-
-    # Product with first order terms
-    m = size(lsr1.J, 1)
-    p = size(lsr1.C, 1)
-    n = size(v, 1)
-
-    # JᵀJv term
-    temp_Jv = view(lsr1.temp, 1:m)
-    mul!(temp_Jv, lsr1.J, v) # form Jv
-    mul!(Hv, lsr1.J', temp_Jv, 1, 0) # Hv ← JᵀJv
-
-    # μCᵀCv term
-    temp_Cv = view(lsr1.temp, 1:p)
-    mul!(temp_Cv, lsr1.C, v) # form Cv
-    mul!(Hv, lsr1.C', temp_Cv, lsr1.mu, 1) # Hv ← Hv + μCᵀCv
-
-    # Bv term
-    temp_Bv = view(lsr1.temp, 1:n)
-    second_order_product!(temp_Bv, lsr1, v)
-    Hv .+= temp_Bv
-
-    return
-end
-
-# Computes the product of the second order terms approximated by LSR1
-# TODO: Avoid allocation for auxiliary vector, suspect something to go wrong if the
-# buffer field is used for both `res` and used to define `w`
-function second_order_product!(
-    res::AbstractVector{T},
+# Computes `Hv ← Hv + αBv`, where `B` is the L-SR1 approximation of the second order terms
+# TODO: Avoid allocation for auxiliary vector `w`
+function second_order_mul!(
+    Hv::AbstractVector{T},
     lsr1::LSR1{T},
-    v::AbstractVector{T}) where T
+    v::AbstractVector{T},
+    alpha::T) where T
 
     k = lsr1.stored_pairs
     sigma = lsr1.scaling_factor
 
     # Accumulated information terms
     if k > 0
-        w = zeros(k)
+        w = zeros(T, k)
 
         S, Y = lsr1.stored_steps, lsr1.stored_rhs
 
@@ -107,44 +86,33 @@ function second_order_product!(
         # w ← M⁻¹w
         ldiv!(lsr1.lu_middle_mat, w)
 
-        # res ← (Y - σS)w
+        # Hv ← Hv + α(Y - σS)w
         for i = 1:k
-            res .+= (Y[i] .- sigma .* S[i]) .* w[i]
+            Hv .+= alpha .* w[i] .* (Y[i] .- sigma .* S[i])
         end
 
     end
 
     # Initial term
-    res .+= v .* sigma
+    Hv .+= (alpha * sigma) .* v
 
     return
 end
 
-# Update of the approximation
-function update_hessian!(
-    lsr1::LSR1{T},
-    J_new::AbstractMatrix{T},
-    C_new::AbstractMatrix{T},
-    rx::Vector{T},
-    cx::Vector{T},
-    g::Vector{T},
-    lambda::Vector{T},
-    s::Vector{T}) where T
+# Add the pair `(s, y)` stored in `lsr1` to the approximation
+# The pair is skipped if the denominator (y - Bs)ᵀs is too small
+function second_order_secant_update!(lsr1::LSR1{T}) where T
 
     # Tolerance for the skipping update safeguard
     eps_skip = T(1e-8)
 
-    n = size(s, 1)
-    # Update Jacobians
-    update_jacobians!(lsr1, J_new, C_new)
-
-    # Form the secant equations components
-    y = g - lsr1.J' * rx .- lsr1.C' * (lambda .+ cx .* lsr1.mu)
+    y = lsr1.secant_rhs
+    s = lsr1.step
 
     # Form y - Bs
-    ymBs = view(lsr1.temp, 1:n)
-    second_order_product!(ymBs, lsr1, s) # ymBs ← Bs
-    ymBs .= y .- ymBs                    # ymBs ← y - Bs
+    ymBs = view(lsr1.temp, 1:size(s, 1))
+    ymBs .= y
+    second_order_mul!(ymBs, lsr1, s, -one(T)) # ymBs ← y - Bs
     denom = dot(s, ymBs)
 
     # Add pair if denominator (y - Bs)ᵀs not zero
@@ -212,7 +180,7 @@ function update_compact_representation!(lsr1::LSR1)
         M[i, i] = dot(si, Y[i]) - sigma * dot(si, si)
     end
 
-    # Feed remaining elements exploiting symmetry
+    # Feed remaining elements
     for i = 2:m
         for j = 1:i-1
             si = S[i]
@@ -227,26 +195,14 @@ function update_compact_representation!(lsr1::LSR1)
 
     return
 end
-# Reset the fields of the approximation at the start of a new outer iteration
-function reset_hessian!(
-    H::LSR1{T},
-    J0::AbstractMatrix{T},
-    C0::AbstractMatrix{T},
-    mu::T) where T
 
-    n = size(J0, 2)
-    zero_T = zero(T)
-    one_T = one(T)
-    mem = H.memory
-
-    update_jacobians!(H, J0, C0)
-    H.mu = mu
+# Remove the stored pairs at the start of a new outer iteration
+function reset_second_order!(H::LSR1{T}) where T
 
     H.stored_pairs = 0
-    H.stored_steps = [zeros(T, n) for _ = 1:mem]
-    H.stored_rhs = [zeros(T, n) for _ = 1:mem]
-    H.scaling_factor = one_T
-    H.middle_mat .= zero_T
+    H.scaling_factor = one(T)
+    H.middle_mat .= zero(T)
     H.lu_middle_mat = lu(ones(T, 1,1))
 
+    return
 end
