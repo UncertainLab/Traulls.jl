@@ -15,7 +15,7 @@ end
 
 factor_LH(P) = LowerTriangular(P.LH[1:P.p, 1:P.p])
 
-# Measured through a function barrier so the result only reflects the allocations of `mul!`
+# To measure the allocations of `mul!`
 projection_allocs(r, P, x) = @allocated mul!(r, P, x)
 
 @testset "Subspace projector: construction and projection" begin
@@ -143,8 +143,8 @@ end
     P = Traulls.SubspaceProjector(A, cholesky(A * A'))
     Traulls.set_active!(P, [1, 2])
 
-    @test Traulls.is_fixed(P, 2)                # flagged as active...
-    @test P.p == 1 && P.fixidx == [1]           # ...but left out of the factor
+    @test Traulls.is_fixed(P, 2)                # flagged as active
+    @test P.p == 1 && P.fixidx == [1]           # left out of the factor
     @test Traulls.nb_degrees_of_freedom(P) == n - 2 - 1
     @test P * x ≈ reference_projection(A, [1, 2], x)
     @test abs((P * x)[2]) < 1e-12
@@ -225,9 +225,95 @@ end
 
     @test all(isapprox(0.0), r[P.fixvars]) && r[.!P.fixvars] ≈ v[.!P.fixvars]
 
+    # In-place projection: returns its output, may alias the input, does not allocate
+    w = collect(1.0:n)
+    @test mul!(r, P, w) === r
+    mul!(w, P, w)
+    @test w == r
+    projection_allocs(r, P, v)
+    @test projection_allocs(r, P, v) == 0
+
     # Reset subspace
     Traulls.reset_projector!(P)
     @test all(.!P.fixvars)
+end
 
+# To measure the allocations of `update_inner_active_set!`
+inner_update_allocs(s, slow, supp, P) =
+    @allocated Traulls.update_inner_active_set!(s, slow, supp, P)
 
+@testset "Inner active set update" begin
+    m, n = 3, 8
+    A = rand(m, n)
+    slow, supp = fill(-1.0, n), fill(1.0, n)
+    # Bounds reached: 1 and 5 (lower, 5 within the tolerance), 3 and 8 (upper)
+    s = [-1.0, 0.2, 1.0, 0.5, -1.0 + 1e-12, 0.0, 0.99, 1.0]
+    active = [1, 3, 5, 8]
+
+    for P in (Traulls.CoordinateSubspaceProjector(n),
+              Traulls.SubspaceProjector(A, cholesky(A * A')))
+
+        # Already fixed variables are kept, newly active ones are added
+        Traulls.set_active!(P, [2])
+        Traulls.update_inner_active_set!(s, slow, supp, P)
+        @test findall(i -> Traulls.is_fixed(P, i), 1:n) == sort([2; active])
+
+        # No allocation once the buffers of the projector have been used
+        Traulls.reset_projector!(P)
+        inner_update_allocs(s, slow, supp, P)
+        Traulls.reset_projector!(P)
+        @test inner_update_allocs(s, slow, supp, P) == 0
+        @test findall(i -> Traulls.is_fixed(P, i), 1:n) == active
+    end
+end
+
+# To measure the allocations of `mul!`
+projection_allocs(r, P, x, alpha, beta) = @allocated mul!(r, P, x, alpha, beta)
+
+@testset "Five-argument mul!" begin
+    m, n = 3, 9
+    A = rand(m, n)
+    fixed = [2, 5, 8]
+
+    PS = Traulls.SubspaceProjector(A, cholesky(A * A'))
+    PC = Traulls.CoordinateSubspaceProjector(n)
+    Traulls.set_active!(PS, fixed)
+    Traulls.set_active!(PC, fixed)
+
+    for P in (PS, PC)
+        v, r0 = randn(n), randn(n)
+        alpha, beta = -1.7, 0.3
+        Pv = P * v
+
+        # r ← αPv + βr
+        r = copy(r0)
+        @test mul!(r, P, v, alpha, beta) === r
+        @test r ≈ alpha * Pv + beta * r0
+
+        # β = 0: the input content of r is not read, even if it is NaN
+        r = fill(NaN, n)
+        mul!(r, P, v, alpha, 0.0)
+        @test r ≈ alpha * Pv
+
+        # α = 0 only scales r
+        r = copy(r0)
+        mul!(r, P, v, 0.0, beta)
+        @test r ≈ beta * r0
+
+        # r may alias v, also when β ≠ 0
+        w = copy(v)
+        mul!(w, P, w, alpha, beta)
+        @test w ≈ alpha * Pv + beta * v
+
+        # The 3-argument method is the case α = 1, β = 0
+        @test mul!(similar(v), P, v) ≈ mul!(similar(v), P, v, 1.0, 0.0) ≈ Pv
+
+        # No allocation, including with a Bool or Int scalar
+        r = copy(r0)
+        projection_allocs(r, P, v, alpha, beta)
+        @test projection_allocs(r, P, v, alpha, beta) == 0
+        projection_allocs(r, P, v, true, false)
+        @test projection_allocs(r, P, v, true, false) == 0
+        @test mul!(similar(v), P, v, 2, 0) ≈ 2 * Pv
+    end
 end

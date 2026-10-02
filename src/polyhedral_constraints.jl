@@ -182,10 +182,10 @@ CoordinateSubspaceProjector(n::Int;T::DataType=Float64) = CoordinateSubspaceProj
 
 
 """
-    mul!(r, P, v)
+    mul!(r, P, v, α, β)
 
-Computes the matrix-vector product `Pv` and stores the result in `r`, where `P`
-is the projection operator onto the subspace
+Computes `αPv + βr` and stores the result in `r`, where `P` is the projection operator
+onto the subspace
 
 `{v | Av = 0, vᵢ = 0 for i ∈ 𝒜}`
 
@@ -195,19 +195,25 @@ where `A` is a full row rank `m × n` (`m < n`) matrix and `𝒜 = {i₁,...,i�
 The projection is computed as `Pv = v - Wᵀ(z₁ - Gy₂) - E_𝒜y₂`, where `z₁ = Wv` and `y₂`
 solves `Hy₂ = v_𝒜 - Gᵀz₁` with the factor `L_H` (see [`SubspaceProjector`](@ref)).
 
-Overloads the `LinearAlgebra.mul!` method.
+Overloads the 5-argument `LinearAlgebra.mul!` method.
 
 # Arguments
 
-- `r`: Buffer vector to store the result of the projection operation. It may alias `v`
+- `r`: Buffer vector to store the result. It may alias `v`
 - `P`: Projection operator encoded as a [`SubspaceProjector`](@ref)
 - `v`: input vector
+- `α`, `β`: scalars
 
 # On return
 
-The vector `r`, containing the result of the projection.
+The vector `r`, containing `αPv + βr`.
 """
-function mul!(r::AbstractVector{T}, P::SubspaceProjector{T}, v::AbstractVector{T}) where T
+function mul!(
+    r::AbstractVector{T},
+    P::SubspaceProjector{T},
+    v::AbstractVector{T},
+    alpha::Number,
+    beta::Number) where T
 
     W, z, p = P.W, P.mbuf, P.p
     y = view(P.pbuf, 1:p)
@@ -232,15 +238,32 @@ function mul!(r::AbstractVector{T}, P::SubspaceProjector{T}, v::AbstractVector{T
         end
     end
 
-    # r ← v - Wᵀ(z₁ - Gy₂) - E_𝒜y₂
-    copyto!(r, v)
-    mul!(r, W', z, -one(T), one(T))
-     for k in 1:p
-        r[P.fixidx[k]] -= y[k]
+    # r ← α(v - Wᵀ(z₁ - Gy₂) - E_𝒜y₂) + βr
+    if iszero(beta)
+        r .= alpha .* v
+    else
+        r .= alpha .* v .+ beta .* r
+    end
+    mul!(r, W', z, -alpha, one(T))
+    for k in 1:p
+        r[P.fixidx[k]] -= alpha * y[k]
     end
 
     return r
 end
+
+"""
+    mul!(r, P::SubspaceProjector, v)
+
+Computes the projection `Pv` and stores the result in `r`, which may alias `v`.
+Equivalent to `mul!(r, P, v, 1, 0)`.
+
+# On return
+
+The vector `r`, containing `Pv`.
+"""
+mul!(r::AbstractVector{T}, P::SubspaceProjector{T}, v::AbstractVector{T}) where T =
+    mul!(r, P, v, one(T), zero(T))
 
 """
     Base.:*(P,x)
@@ -269,34 +292,60 @@ function Base.:*(P::SubspaceProjector{T}, x::AbstractVector{T}) where T
 end
 
 """
-    mul!(r, P::CoordinateSubspaceProjector, v)
+    mul!(r, P::CoordinateSubspaceProjector, v, α, β)
 
-Compute the projection `Pv` of vector `v` onto the coordinate subspace represented by `P`
-and store the result in `r`.
+Compute `αPv + βr`, where `Pv` is the projection of vector `v` onto the coordinate
+subspace represented by `P`, and store the result in `r`.
 
-The fixed components of `r` are set to `0` and the free ones are copied from `v`.
+The fixed components of `Pv` are `0` and the free ones are those of `v`, so that
+`rᵢ ← βrᵢ` if `i` is fixed and `rᵢ ← αvᵢ + βrᵢ` otherwise.
 
-Overloads the `LinearAlgebra.mul!` method.
+Overloads the 5-argument `LinearAlgebra.mul!` method. 
 
 # Arguments
 
-- `r`: buffer vector to store the result of the projection
+- `r`: buffer vector to store the result. It may alias `v`
 - `P`: projection operator encoded as a [`CoordinateSubspaceProjector`](@ref)
 - `v`: input vector
+- `α`, `β`: scalars
 
 # On return
 
-Nothing is returned, the result is stored in vector `r`.
+The vector `r`, containing `αPv + βr`.
 """
-function mul!(r::Vector, P::CoordinateSubspaceProjector, v::Vector)
+function mul!(
+    r::AbstractVector{T},
+    P::CoordinateSubspaceProjector{T},
+    v::AbstractVector{T},
+    alpha::Number,
+    beta::Number) where T
 
-    freevars = .!(P.fixvars)
+    fixvars = P.fixvars
+    if iszero(beta)
+        for i in eachindex(r, v, fixvars)
+            r[i] = fixvars[i] ? zero(T) : alpha * v[i]
+        end
+    else
+        for i in eachindex(r, v, fixvars)
+            r[i] = fixvars[i] ? beta * r[i] : alpha * v[i] + beta * r[i]
+        end
+    end
 
-    r[P.fixvars] .= 0          # set rᵢ = 0 for fixed components
-    r[freevars] .= v[freevars] # set rᵢ = vᵢ for free components
-
-    return
+    return r
 end
+
+"""
+    mul!(r, P::CoordinateSubspaceProjector, v)
+
+Compute the projection `Pv` of vector `v` onto the coordinate subspace represented by `P`
+and store the result in `r`, which may alias `v`. Equivalent to `mul!(r, P, v, 1, 0)`.
+
+# On return
+
+The vector `r`, containing `Pv`.
+"""
+mul!(r::AbstractVector{T}, P::CoordinateSubspaceProjector{T}, v::AbstractVector{T}) where T =
+    mul!(r, P, v, one(T), zero(T))
 
 """
     Base.:*(P::CoordinateSubspaceProjector, v)
@@ -673,8 +722,8 @@ the corresponding variables in the projector operator `P`.
 The step bounds are `sₗ = max(-Δ, xₗ - x)` and `sᵤ = min(Δ, xᵤ - x)`, so that a bound is
 active either because `x + s` reaches a bound on the variables or because `s` reaches the
 boundary of the `∞`-norm trust region. Only the variables that are not already fixed are
-checked. The newly fixed variables stay fixed for the rest of the current inner
-iteration.
+checked, and each newly active bound is fixed as soon as it is detected. The newly fixed 
+variables stay fixed for the rest of the current inner iteration.
 
 # Arguments
 
@@ -699,18 +748,14 @@ function update_inner_active_set!(
     P::Projector{T};
     eps_bound::T=sqrt(eps(T))) where T
 
-    newly_active = Vector{Int}([])
-
     for i in axes(s, 1)
         if !is_fixed(P, i) &&
             (s[i] <= slow[i] + eps_bound * abs(slow[i]) || # at lower bound
             s[i] + eps_bound * abs(supp[i]) >= supp[i])    # at upper bound
 
-            push!(newly_active, i)
+            set_active!(P, i)
         end
     end
-
-    set_active!(P, newly_active)
 
     return
 end
@@ -768,10 +813,10 @@ The components considered are among free variables in a coordinate subspace
 encoded in `Projector` `P`.
 """
 function factor_to_boundary(
-    p::Vector{T},
-    s::Vector{T},
-    s_l::Vector{T},
-    s_u::Vector{T},
+    p::AbstractVector{T},
+    s::AbstractVector{T},
+    s_l::AbstractVector{T},
+    s_u::AbstractVector{T},
     proj_op::Projector{T}) where T
 
     stepmax = Inf
@@ -791,11 +836,15 @@ end
 
 
 """
-    project!(v,x,ℓ,u)
+    project!(x,ℓ,u)
 
-Computes the projection of `x` onto the box `[ℓ,u]` and stores the results in `v`.
+Computes the projection of `x` onto the box `[ℓ,u]` and stores the results in `x`.
 """
-function project!(v::Vector, x::Vector, x_low::Vector, x_upp::Vector)
-    v[:] .= max.(x_low, min.(x, x_upp))
+function project!(
+    x::AbstractVector{T}, 
+    x_low::AbstractVector{T}, 
+    x_upp::AbstractVector{T}) where T
+
+    x[:] .= max.(x_low, min.(x, x_upp))
     return
 end
