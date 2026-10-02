@@ -40,7 +40,7 @@
     # Testing for model defined with in-place methods
     model = Traulls.CnlsModel!(r!,c!,jac_r!,jac_c!,x_low,x_upp,x0,n,m,p,Val(:only_inequalities))
 
-    results = traulls(model; verbose=true)
+    results = traulls(model)
 
     @test results.status isa Traulls.CriticalityStatus
     @test results.objective isa Real

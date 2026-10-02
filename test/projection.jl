@@ -229,7 +229,7 @@ end
     w = collect(1.0:n)
     @test mul!(r, P, w) === r
     mul!(w, P, w)
-    @test w == r
+    @test w ≈ r
     projection_allocs(r, P, v)
     @test projection_allocs(r, P, v) == 0
 

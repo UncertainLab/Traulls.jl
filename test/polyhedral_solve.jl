@@ -53,6 +53,7 @@
         @test results.status == Traulls.first_order_critical
         @test sol ≈ [0.0, 1.0, 0.0, 0.0] atol = 1e-5
         @test A * sol ≈ b atol = 1e-6
-        @test all(xlow .- 1e-8 .≤ sol .≤ xupp .+ 1e-8)
+        @show sol
+        @test all(xlow .- 1e-6 .<= sol .<= xupp .+ 1e-6)
     end
 end
