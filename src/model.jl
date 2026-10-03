@@ -87,13 +87,13 @@ and have the signature `f!(fx, x)`, with input `x` and the result being stored i
 
 `CnlsModel!(r!, h!, g!, jac_r!, jac_h!, jac_g!, ℓ, u x0, nvar, nres, neq, nineq)`
 
-`CnlsModel!(r!, c, jac_r!, jac_c!, A, b, ℓ, u x0, nvar, nres, ncons, Val(:only_equalities))`
+`CnlsModel!(r!, c!, jac_r!, jac_c!, A, b, ℓ, u x0, nvar, nres, ncons, Val(:only_equalities))`
 
-`CnlsModel!(r!, c, jac_r!, jac_c!, A, b, ℓ, u x0, nvar, nres, ncons, Val(:only_inequalities))`
+`CnlsModel!(r!, c!, jac_r!, jac_c!, A, b, ℓ, u x0, nvar, nres, ncons, Val(:only_inequalities))`
 
-`CnlsModel!(r!, c, jac_r!, jac_c!, ℓ, u x0, nvar, nres, ncons, Val(:only_equalities))`
+`CnlsModel!(r!, c!, jac_r!, jac_c!, ℓ, u x0, nvar, nres, ncons, Val(:only_equalities))`
 
-`CnlsModel!(r!, c, jac_r!, jac_c!, ℓ, u x0, nvar, nres, ncons, Val(:only_inequalities))`
+`CnlsModel!(r!, c!, jac_r!, jac_c!, ℓ, u x0, nvar, nres, ncons, Val(:only_inequalities))`
 """
 mutable struct CnlsModel{T<:Real} <: AbstractCnlsModel{T}
     # In-place evaluation functions
