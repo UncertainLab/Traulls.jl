@@ -105,8 +105,12 @@ function cauchy_step!(
         delta_t = phi_pp > 0 ? -phi_p / phi_pp : zeroT
         l_interval = tb - prev_tb
 
-        # Stop if slope positive or if slope is small and curvature is positive
-        if phi_p > eps_slope || (abs(phi_p) <= eps_slope && phi_pp > eps_curv)
+        # Stop if the projected direction vanishes at machine precision
+        if norm(d, Inf) <= 10 * eps(T) * norm(g, Inf)
+            found = true
+
+        # Stop if slope nonnegative or if slope is small and curvature is positive
+        elseif phi_p >= zeroT || (abs(phi_p) <= eps_slope && phi_pp > eps_curv)
             found = true
 
         # Positive curvature and local minimum within current interval

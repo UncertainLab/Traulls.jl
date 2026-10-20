@@ -236,7 +236,9 @@ added to $\mathcal{A}$, the projector $P$ is updated and a new direction is comp
 
 Before computing the path, the components that lie at a bound with a direction pointing
 outwards the feasible set are fixed in $\mathcal{A}$. The search stops when a local
-minimizer is found on a segment, or when no free direction remains.
+minimizer is found on a segment, when the slope of the model along the path is
+nonnegative, or when no free direction remains, either because the subspace is saturated
+or because the projected direction vanishes at machine precision.
 
 The Cauchy step provides a sufficient reduction of the model, which is enough to guarantee
 the convergence of the trust-region method.

@@ -57,3 +57,36 @@
         @test all(xlow .- 1e-6 .<= sol .<= xupp .+ 1e-6)
     end
 end
+
+# Regression test: once x₂ ≤ 1 becomes active on the Cauchy path, the projected direction
+# vanishes up to roundoff and must not produce a step leaving the feasible set.
+@testset "Vanishing projected direction in the Cauchy step" begin
+
+    n = 4
+    nres = n
+    ncons = 1
+
+    # Minimize ½‖x - target‖² s.t. x₁ + x₂ + x₃ = 0, x₁ ≥ -1, x₂ ≤ 1, with x₄ free
+    target = [-1.0, 4.0, -1.0, 1.0]
+    A = [1.0 1.0 1.0 0.0]
+    b = [0.0]
+    r!(rx, x) = (rx .= x .- target; nothing)
+    jac_r!(J, x) = (J .= Matrix{Float64}(I, n, n); nothing)
+
+    # Nonlinear equality constraint x₄² - 1 = 0, satisfied at the solution
+    c!(cx, x) = (cx[1] = x[4]^2 - 1.0; nothing)
+    jac_c!(C, x) = (C .= [0.0 0.0 0.0 2x[4]]; nothing)
+
+    xlow = [-1.0, -Inf, -Inf, -Inf]
+    xupp = [Inf, 1.0, Inf, Inf]
+    model = Traulls.CnlsModel!(r!, c!, jac_r!, jac_c!, A, b, xlow, xupp,
+                               [0.0, -2.0, 2.0, 1.0], n, nres, ncons, Val(:only_equalities))
+
+    results = traulls(model)
+    sol = results.solution
+
+    @test results.status == Traulls.first_order_critical
+    @test sol ≈ [-0.5, 1.0, -0.5, 1.0] atol = 1e-5
+    @test A * sol ≈ b atol = 1e-10
+    @test all(xlow .- 1e-10 .<= sol .<= xupp .+ 1e-10)
+end
