@@ -141,10 +141,12 @@ function main()
         @printf("  c = %8.3f ms : %5.1f %%\n", 1e3 * c, 100 * win_fraction(nonzero, c))
     end
 
-    # Figure showing win fraction as a function of the per-evaluation cost
+    # Figure showing win fraction as a function of the per-evaluation cost, with the
+    # interquartile range of the break-even costs; their median is not reported, as it
+    # varies from one timed campaign to the next
     cgrid = vcat(0.0, exp10.(range(-6, 0, length = 200)))
     fractions = [100 * win_fraction(nonzero, c) for c in cgrid]
-    median_cost = quantile_sorted(costs, 0.5)
+    q1_cost, q3_cost = quantile_sorted(costs, 0.25), quantile_sorted(costs, 0.75)
 
     plt = plot(1e3 .* cgrid[2:end], fractions[2:end],
                xscale = :log10, linewidth = 2, legend = :bottomright,
@@ -152,12 +154,13 @@ function main()
                xlabel = "extra cost per residual evaluation (ms)",
                ylabel = "instances (%)", ylims = (0, 100))
 
-    vline!(plt, [1e3 * median_cost], linestyle = :dash, linewidth = 2,
-           label = "median break-even cost")
+    vspan!(plt, 1e3 .* [q1_cost, q3_cost], color = :gray, alpha = 0.2, linewidth = 0,
+           label = "break-even cost, Q1 to Q3")
     hline!(plt, [100 * win_fraction(nonzero, 0.0)], linestyle = :dashdot,
            linewidth = 1, color = :gray, label = "measured times")
 
-    show_fig && display(plt)
+    show_plot && display(plt)
+    savefig(plt, FIGURE_PATH)
 end
 
 main()
