@@ -65,7 +65,7 @@ function lv501(n::Int=100)
         for i=1:n-1
             J[i, i] = 20x[i]
             J[i, i+1] = -10
-            J[N+i, i] = -1
+            J[N+i, i] = 1
         end
 
         return
