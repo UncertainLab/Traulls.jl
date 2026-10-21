@@ -258,7 +258,11 @@ of the distance of the iterates to the inactive bounds; the criticality measure 
 with the same $\varepsilon$-active set. The search stops when a local
 minimizer is found on a segment, when the slope of the model along the path is
 nonnegative, or when no free direction remains, either because the subspace is saturated
-or because the projected direction vanishes at machine precision.
+or because the projected direction vanishes at machine precision. After a breakpoint, the
+direction is considered to vanish as soon as $\|d\|_\infty \le \sqrt{\epsilon_M}\,
+\|g\|_\infty$: below that threshold, the rounding errors of the projection, of order
+$\epsilon_M \|g\|$, dominate the direction, and following it could move the step out of
+the null space of $A$.
 
 The Cauchy step provides a sufficient reduction of the model, which is enough to guarantee
 the convergence of the trust-region method.

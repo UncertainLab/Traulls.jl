@@ -104,8 +104,10 @@ function cauchy_step!(
         delta_t = phi_pp > 0 ? -phi_p / phi_pp : zeroT
         l_interval = tb - prev_tb
 
-        # Stop if the projected direction vanishes at machine precision
-        if norm(d, Inf) <= 10 * eps(T) * norm(g, Inf)
+        # Stop if the projected direction vanishes at machine precision or, after a
+        # breakpoint, is so small compared with the gradient that the rounding errors of the
+        # projection dominate it; the decrease guarantee only involves the first segment
+        if norm(d, Inf) <= (i == 1 ? 10 * eps(T) : sqrt(eps(T))) * norm(g, Inf)
             found = true
 
         # Stop if slope nonnegative or if slope is small and curvature is positive

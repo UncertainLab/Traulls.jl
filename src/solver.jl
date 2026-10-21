@@ -721,7 +721,8 @@ function initial_point_and_projector!(
     n, m = model.n, model.nlincons
     xlow, xupp = model.xlow, model.xupp
 
-    if norm(A*x-b) > tol
+    # Make the starting point feasible, also when it satisfies Ax = b but not the bounds
+    if norm(A*x-b) > tol || any(x .< xlow) || any(x .> xupp)
         solve_linfeas_pb!(A, x, b, xlow, xupp, m, n)
     end
     # Identity active bounds at starting point
