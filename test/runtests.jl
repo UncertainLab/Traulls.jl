@@ -1,5 +1,5 @@
 using Traulls, LinearAlgebra, ForwardDiff, SparseArrays
-using Test
+using Test, Random
 
 
 include("aug_lag.jl")

@@ -111,27 +111,30 @@ end
 end
 
 @testset "Subspace projector: random updates and capacity growth" begin
+    rng = Xoshiro(2026)
     m, n = 5, 60
-    A = randn(m, n)
+    A = randn(rng, m, n)
     P = Traulls.SubspaceProjector(A, cholesky(A * A'))
     initial_capacity = size(P.LH, 1)
 
     for _ in 1:200
-        if rand() < 0.65 && Traulls.nb_degrees_of_freedom(P) > 0
-            Traulls.set_active!(P, rand(1:n))
+        if rand(rng) < 0.65 && Traulls.nb_degrees_of_freedom(P) > 0
+            Traulls.set_active!(P, rand(rng, 1:n))
         else
-            Traulls.set_free!(P, rand(1:n))
+            Traulls.set_free!(P, rand(rng, 1:n))
         end
     end
     Traulls.set_active!(P, 1:40)                # forces the factor beyond its capacity
 
+    # Once no degree of freedom is left, the bounds activated are redundant: they are
+    # flagged in fixvars but not represented in the factor
     fixed = findall(P.fixvars)
     @test size(P.LH, 1) > initial_capacity
-    @test P.p == length(fixed) == length(P.fixidx)
-    @test sort(P.fixidx) == fixed
+    @test P.p == length(P.fixidx) <= length(fixed)
+    @test issubset(P.fixidx, fixed)
     @test factor_LH(P) * factor_LH(P)' ≈ reference_schur(A, P.fixidx)
-    x = randn(n)
-    @test P * x ≈ reference_projection(A, fixed, x)
+    x = randn(rng, n)
+    @test P * x ≈ reference_projection(A, fixed, x) atol = 1e-10
 end
 
 @testset "Subspace projector: redundant bounds" begin
@@ -215,6 +218,36 @@ end
     mul!(r, P, [-1.0e-3, 2.0, 0.0])
     viol, wrong = Traulls.wrong_sign_bounds(x, xlow, xupp, P; tol = 1e-2)
     @test viol ≈ 2.0 && wrong == [2]
+end
+
+@testset "Subspace projector: signs of the multipliers with redundant bounds" begin
+    # Ω = {x₁ + x₂ + x₃ + x₄ = 1, 0 ≤ x ≤ 1}, at the degenerate vertex x = (0, 1, 0, 0):
+    # the four active bounds and the equality are linearly dependent
+    A = ones(1, 4)
+    P = Traulls.SubspaceProjector(A, cholesky(A * A'))
+    xlow, xupp = zeros(4), ones(4)
+    x = [0.0, 1.0, 0.0, 0.0]
+    r = zeros(4)
+    Traulls.identify_active_set!(x, xlow, xupp, P)
+    @test count(P.fixvars) == 4 && P.p == 3
+
+    # g = -1·(1, 1, 1, 1) + 0·e₁ + 0·e₂ + 2·e₃ + 4·e₄: x is critical, although the
+    # multipliers of the represented bounds alone have the wrong sign
+    g = [-1.0, -1.0, 1.0, 3.0]
+    mul!(r, P, g)
+    @test norm(r) < 1e-12
+    θ₀ = copy(Traulls.bound_multipliers(P))
+    @test minimum(θ₀) < 0
+    viol, wrong = Traulls.wrong_sign_bounds(x, xlow, xupp, P; tol = 1e-12)
+    @test viol == 0 && isempty(wrong)
+    @test Traulls.bound_multipliers(P) == θ₀
+    @test Traulls.criticality_measure(x, g, r, xlow, xupp, P) < 1e-12
+
+    # g = (-2, 1, 0, 0): no multipliers of the right sign, x is not critical
+    g = [-2.0, 1.0, 0.0, 0.0]
+    mul!(r, P, g)
+    viol, wrong = Traulls.wrong_sign_bounds(x, xlow, xupp, P)
+    @test viol > 0.1 && !isempty(wrong)
 end
 
 @testset "Subspace projector: ε-active set" begin

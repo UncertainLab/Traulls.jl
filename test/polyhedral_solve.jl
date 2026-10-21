@@ -55,6 +55,17 @@
         @test A * sol ≈ b atol = 1e-6
         @show sol
         @test all(xlow .- 1e-6 .<= sol .<= xupp .+ 1e-6)
+
+        # Starting at the solution, a degenerate vertex where the four bounds and the
+        # equality are active: the multipliers are not unique
+        for eps_active in (0.0, 1e-3)
+            model = Traulls.CnlsModel!(r!, c!, jac_r!, jac_c!, A, b, xlow, xupp,
+                                       [0.0, 1.0, 0.0, 0.0], n, nres, ncons,
+                                       Val(:only_equalities))
+            results = traulls(model; eps_active = eps_active)
+            @test results.status == Traulls.first_order_critical
+            @test results.solution ≈ [0.0, 1.0, 0.0, 0.0] atol = 1e-5
+        end
     end
 end
 

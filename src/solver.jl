@@ -842,7 +842,9 @@ multipliers of the wrong sign to zero in `g = Pg + Aᵀy₁ + E_𝒜y₂` yields
 the normal cone `N_Ω(x)` of the feasible set such that `||g + w|| ≤ ||Pg|| + ||y₂⁻||`.
 Since `||P_Ω[x - g] - x|| ≤ dist(-g, N_Ω(x))`, this measure bounds the norm of the
 projected gradient step up to a factor depending on the dimension, and it vanishes if and
-only if `x` is first-order critical when the active constraints are linearly independent.
+only if `x` is first-order critical. When some active bounds are redundant, the multipliers
+are not unique and those of smallest sign violation are used (see
+[`Traulls.wrong_sign_redundant`](@ref)).
 
 # Arguments
 

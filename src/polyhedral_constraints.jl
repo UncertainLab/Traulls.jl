@@ -857,6 +857,11 @@ The decomposition `g = Pg + Aᵀy₁ + E_𝒜y₂` satisfies the first-order con
 for a lower bound and nonpositive for an upper bound. Variables whose lower and upper
 bounds are both active are not checked, since their multiplier can have any sign.
 
+If some active bounds are redundant, i.e. not represented in the factor `L_H`, the
+multipliers are not unique, and those of the last projection may have the wrong sign at a
+first-order critical point. The multipliers are then chosen to minimize their sign
+violation (see [`wrong_sign_redundant`](@ref)).
+
 # Arguments
 
 - `x`: current point
@@ -889,6 +894,13 @@ function wrong_sign_bounds(
     tol::T = zero(T),
     eps_active::T = zero(T)) where T
 
+    # Non-unique multipliers when some active bounds are redundant
+    if count(P.fixvars) > P.p
+        redundant = [i for i in eachindex(P.fixvars) if P.fixvars[i] && P.fixpos[i] == 0]
+        return wrong_sign_redundant(x, xlow, xupp, P, redundant; eps_bound = eps_bound,
+                                    tol = tol, eps_active = eps_active)
+    end
+
     y = bound_multipliers(P)
     viol = zero(T)
     wrong = Vector{Int}()
@@ -909,6 +921,112 @@ function wrong_sign_bounds(
             push!(wrong, i)
         end
     end
+
+    return viol, wrong
+end
+
+"""
+    wrong_sign_redundant(x, xₗ, xᵤ, P, redundant; eps_bound, tol, eps_active)
+
+Variant of [`wrong_sign_bounds`](@ref) when the active bounds on the variables of
+`redundant` are not represented in the factor `L_H` of `P`.
+
+Each redundant bound `j` satisfies `eⱼ = Aᵀaⱼ + E_𝒜bⱼ`, where `bⱼ` gathers the multipliers
+formed by the projection of `eⱼ` with `P`. The multipliers of all the active bounds in the
+decomposition of `g` are then `θ(t) = θ₀ + Σⱼ tⱼ(bⱼ - eⱼ)` for any `t`, where `θ₀` gathers
+the multipliers of the last projection of `g`, zero for the redundant bounds. The parameter
+`t` minimizes the sum of the squared wrong-sign parts of `θ(t)`, a convex piecewise
+quadratic function, by a Newton iteration with backtracking: the quadratic of the current
+piece is minimized at each step. The minimum is zero if and only if multipliers of the right
+sign exist.
+
+The multipliers of the last projection of `g` are restored in `P` on return.
+
+# On return
+
+- `viol`: largest magnitude of the multipliers `θ(t)` of the wrong sign by more than `tol`,
+  `0` if there is none
+- `wrong`: `Vector{Int}` of the indices of the variables whose bound multiplier in `θ(t)`
+  has the wrong sign by more than `tol`
+"""
+function wrong_sign_redundant(
+    x::AbstractVector{T},
+    xlow::AbstractVector{T},
+    xupp::AbstractVector{T},
+    P::SubspaceProjector{T},
+    redundant::Vector{Int};
+    eps_bound::T = sqrt(eps(T)),
+    tol::T = zero(T),
+    eps_active::T = zero(T)) where T
+
+    p, r = P.p, length(redundant)
+    θ₀ = Vector{T}(bound_multipliers(P))
+
+    # Columns bⱼ: multipliers of the represented bounds in the decomposition of eⱼ
+    B = zeros(T, p, r)
+    e = zeros(T, P.n)
+    for (l, j) in enumerate(redundant)
+        fill!(e, zero(T))
+        e[j] = one(T)
+        mul!(e, P, e)
+        B[:, l] .= view(P.pbuf, 1:p)
+    end
+
+    # Bounds with a sign condition: the wrong-sign part of θᵢ(t) reads dᵢ + cᵢᵀt
+    idx = Vector{Int}()
+    d = Vector{T}()
+    rows = Vector{Vector{T}}()
+    for i in eachindex(P.fixvars)
+        P.fixvars[i] || continue
+        at_lower = near_lower_bound(x, xlow, i, eps_bound, eps_active)
+        at_upper = near_upper_bound(x, xupp, i, eps_bound, eps_active)
+
+        # Multiplier of any sign for fixed variables
+        at_lower == at_upper && continue
+
+        σ = at_lower ? -one(T) : one(T)
+        k = P.fixpos[i]
+        if k > 0
+            push!(d, σ * θ₀[k])
+            push!(rows, σ .* B[k, :])
+        else
+            c = zeros(T, r)
+            c[findfirst(==(i), redundant)] = -σ
+            push!(d, zero(T))
+            push!(rows, c)
+        end
+        push!(idx, i)
+    end
+    C = isempty(rows) ? zeros(T, 0, r) : permutedims(reduce(hcat, rows))
+
+    # Newton iteration with backtracking on F(t) = Σᵢ max(0, dᵢ + cᵢᵀt)²
+    F(w) = sum(wᵢ -> max(wᵢ, zero(T))^2, w; init = zero(T))
+    t = zeros(T, r)
+    w = copy(d)
+    for _ in 1:(2 * length(d) + 10)
+        S = w .> 0
+        any(S) || break
+        Δ = C[S, :] \ (-d[S]) .- t
+        F₀, α = F(w), one(T)
+        while α > eps(T) && F(d .+ C * (t .+ α .* Δ)) >= F₀
+            α /= 2
+        end
+        α > eps(T) || break
+        t .+= α .* Δ
+        w .= d .+ C * t
+    end
+
+    viol = zero(T)
+    wrong = Vector{Int}()
+    for (l, i) in enumerate(idx)
+        if w[l] > tol
+            viol = max(viol, w[l])
+            push!(wrong, i)
+        end
+    end
+
+    # Restore the multipliers of the last projection of g
+    view(P.pbuf, 1:p) .= θ₀
 
     return viol, wrong
 end
