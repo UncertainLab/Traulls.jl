@@ -1,9 +1,7 @@
 # Revised manuscript for Computational Optimization and Applications
 
 - `sn-preprint-theorie.tex`: revised manuscript, in the Springer Nature template. The file is
-  encoded in Windows-1252 with CRLF line endings: do not convert it to UTF-8. The red boxes and
-  the bracketed red remarks are revision notes, and the green paragraph of Section 2.4 is an
-  addition that remains to be supported by numerical tests.
+  encoded in Windows-1252 with CRLF line endings: do not convert it to UTF-8. The green paragraph of Section 2.4 is an addition that remains to be supported by numerical tests.
 - `sn-preprint-theorie.pdf`: compiled manuscript.
 - `sn-preprint-theorie-diff.pdf`: changes with respect to `sn-preprint-ojmo.tex`, the version
   submitted to OJMO, produced by
@@ -11,7 +9,7 @@
 - `refs-theorie.bib`: bibliography of the revised manuscript.
 
 The numerical results of Section 4 come from the timed campaign of 2026-10-21, run with the
-solver code of commit `ddaac73` on branch `align-paper`, whose files are in `benchmark/results`.
+solver code of commit `dde5a65` on branch `align-paper`, whose files are in `benchmark/results`.
 The figures `Fig1.pdf` to `Fig15.pdf` are those of `preprint/figures` on that branch, produced by
 `benchmark/make_figures.jl` and `benchmark/residual_cost_analysis.jl`.
 
