@@ -82,6 +82,11 @@ documentation.
   (default: `1000`)
 - `max_cg_iter`: Maximum number of minor iterates for the gradient projection loop
   (default: `50`)
+- `eps_active`: Threshold of the `ε`-active set strategy for problems with general linear
+  constraints (default: `0`, i.e. disabled). At outer iteration `K`, the bounds within
+  distance `min(eps_active, ωₖ)` of the current point, `ωₖ` being the relative criticality
+  tolerance of the subproblem, are treated as active in the choice of the variables fixed at
+  the start of the Cauchy step and in the criticality measure.
 
 ## Miscellaneous
 
@@ -117,6 +122,7 @@ function traulls(
     max_iter::Int = 200,
     max_inner_iter::Int = 1000,
     max_cg_iter::Int = 50,
+    eps_active::T = T(0),
     output_io::IO=stdout,
     init_mult::Bool=true,
     verbose::Bool=false,
@@ -185,8 +191,16 @@ function traulls(
     feas_measure = norm(cx, Inf)
     gproj = inner_workspace.proj_g
 
+    # With the ε-active set strategy, the success test uses the threshold of the final
+    # criticality tolerance
+    if lincons_present && eps_active > 0
+        identify_active_set!(x, xlow, xupp, proj_op;
+                             eps_active = min(eps_active, min_reltol_crit))
+    end
+
     pix = lincons_present ?
-        criticality_measure(x, g, gproj, xlow, xupp, proj_op) :
+        criticality_measure(x, g, gproj, xlow, xupp, proj_op;
+                            eps_active = min(eps_active, min_reltol_crit)) :
         criticality_measure(x, g, gproj, xlow, xupp)
 
     tol_crit = min_reltol_crit * (1 + pix)
@@ -205,6 +219,9 @@ function traulls(
     start_time = time()
 
     while !solved && iter <= max_iter && !max_penalty_reached
+
+        # Threshold of the ε-active set, vanishing with the criticality tolerance
+        eps_active_k = min(eps_active, reltol_crit)
 
         pix = solve_subproblem!(
             model,
@@ -225,6 +242,7 @@ function traulls(
             max_inner_iter,
             max_cg_iter,
             inner_workspace;
+            eps_active=eps_active_k,
             verbose=inner_verbose,
             io=output_io)
 
@@ -257,9 +275,12 @@ function traulls(
         # g .= J'*rx + C'*y 
         g .-= 0.5 * mu * dot(cx, cx) # Lagrangian gradient
 
+        # The success test uses the ε-active threshold of the final criticality tolerance
         norm_proj_gradlag = if lincons_present
-            identify_active_set!(x, xlow, xupp, proj_op)
-            criticality_measure(x, g, gproj, xlow, xupp, proj_op)
+            eps_active_final = min(eps_active, min_reltol_crit)
+            identify_active_set!(x, xlow, xupp, proj_op; eps_active = eps_active_final)
+            criticality_measure(x, g, gproj, xlow, xupp, proj_op;
+                                eps_active = eps_active_final)
         else
             criticality_measure(x, g, gproj, xlow, xupp)
         end
@@ -356,6 +377,8 @@ documentation.
   involed in linear algebra computations
 - `patience_counter`: Maximum number of consecutive stalling iterations before exiting the
   algorithm (default: `3`)
+- `eps_active`: threshold of the `ε`-active set used in the Cauchy step and in the
+  criticality measure when the problem has general linear constraints (default: `0`)
 - `verbose`:Boolean. If set to `true`, print iteration detail into `io` (default: false)
 - `io`: input/output stream to log iteration detail (default: `stdout`)
 """
@@ -379,6 +402,7 @@ function solve_subproblem!(
     max_cg_iter::Int,
     workspace::Workspace{T};
     patience_counter::Int = 3,
+    eps_active::T = zero(T),
     verbose::Bool=false,
     io::IO=stdout) where T
 
@@ -441,7 +465,8 @@ function solve_subproblem!(
             max_cg_iter,
             reltol_crit,
             reltol_crit,
-            workspace)
+            workspace;
+            eps_active=eps_active)
 
         # Evaluate the objective at trial point
         x .+= s
@@ -469,9 +494,11 @@ function solve_subproblem!(
 
             # Compute criticality measure
             pix = if lincons_present
-                # Identify bounds active at `x` to form the appropriate tangent space
-                identify_active_set!(x, xlow, xupp, proj_op)
-                criticality_measure(x, g, gproj, xlow, xupp, proj_op)
+                # Identify bounds active (or ε-active) at `x` to form the appropriate
+                # tangent space
+                identify_active_set!(x, xlow, xupp, proj_op; eps_active = eps_active)
+                criticality_measure(x, g, gproj, xlow, xupp, proj_op;
+                                    eps_active = eps_active)
             else
                 criticality_measure(x, g, gproj, xlow, xupp)
             end
@@ -548,9 +575,13 @@ description of the method is given in the [Method](@ref Method) page of the docu
 - `workspace`: Instance of `Workspace` whose fields contain pre-allocated memory for vectors
   involed in linear algebra computations
 
+# Keywords
+
+- `eps_active`: threshold of the `ε`-active set used in the Cauchy step (default: `0`)
+
 # On return
 
-- `s`: modified in-place, stores the trial step 
+- `s`: modified in-place, stores the trial step
 - `pred`: Reduction of the quadratic model after taking step `s`
 """
 function projected_gradient!(
@@ -566,7 +597,8 @@ function projected_gradient!(
     max_cg_iter::Int,
     tol_pg::T,
     mintol_cg::T,
-    workspace::Workspace{T}) where T
+    workspace::Workspace{T};
+    eps_active::T = zero(T)) where T
 
     # Buffers
     Hs = workspace.hess_vec
@@ -590,7 +622,8 @@ function projected_gradient!(
                  hess_op,
                  proj_op,
                  gproj,
-                 Hs)
+                 Hs;
+                 eps_active = eps_active)
 
     # Set up for conjugate gradient iterations
     mul!(Hs, hess_op, s)
@@ -820,6 +853,12 @@ only if `x` is first-order critical when the active constraints are linearly ind
 - `proj_op`: `Projector` operator to form the reduced gradient, encoding the bounds active
   at `x`
 
+# Keywords
+
+- `eps_active`: threshold of the `ε`-active set encoded in `proj_op` (default: `0`). With
+  `eps_active > 0`, the measure is computed with the `ε`-active bounds and bounds
+  `||P_Ω[x - g] - x||` up to an additional term proportional to `eps_active`.
+
 # On return
 
 - Maximum of the infinite norm of the reduced gradient and of the largest magnitude of the
@@ -831,9 +870,10 @@ function criticality_measure(
     gproj::AbstractVector{T},
     xlow::AbstractVector{T},
     xupp::AbstractVector{T},
-    proj_op::SubspaceProjector{T}) where T
+    proj_op::SubspaceProjector{T};
+    eps_active::T = zero(T)) where T
 
     mul!(gproj, proj_op, g)
-    viol, _ = wrong_sign_bounds(x, xlow, xupp, proj_op)
+    viol, _ = wrong_sign_bounds(x, xlow, xupp, proj_op; eps_active = eps_active)
     max(norm(gproj, Inf), viol)
 end

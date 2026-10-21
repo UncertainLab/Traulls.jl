@@ -242,7 +242,17 @@ least-squares estimates $y_2$ of the decomposition
 $g_j = P g_j + A^T y_1 + E_{\mathcal{A}} y_2$ computed with all the active bounds, and the
 bounds whose multiplier has the wrong sign are freed. A freed bound along which the
 resulting direction still points outwards is fixed again at the first breakpoint, of zero
-length. The search stops when a local
+length.
+
+With the option `eps_active > 0` of [`traulls`](@ref), the bounds lying within distance
+$\varepsilon_k = \min(\varepsilon_{\max}, \omega_k)$ of $x_j$ ($\varepsilon$-active bounds),
+where $\varepsilon_{\max}$ is the value of `eps_active` and $\omega_k$ the criticality
+tolerance of the subproblem, are treated as active: the corresponding variables are fixed
+at their current values, their multipliers are checked as above, and the freed bounds
+along which the direction points outwards are fixed again explicitly. The path then reaches
+no bound closer than $\varepsilon_k$, which guarantees a decrease of the model independent
+of the distance of the iterates to the inactive bounds; the criticality measure is computed
+with the same $\varepsilon$-active set. The search stops when a local
 minimizer is found on a segment, when the slope of the model along the path is
 nonnegative, or when no free direction remains, either because the subspace is saturated
 or because the projected direction vanishes at machine precision.

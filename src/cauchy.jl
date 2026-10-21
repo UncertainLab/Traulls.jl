@@ -42,6 +42,11 @@ Follows the procedure of algorithm 17.3.1 from Trust Regions Methods
 - `d`: buffer vector to store the projected steepest directions
 - `Hd`: Buffer vector to store Hessian-vector products
 
+# Keywords
+
+- `eps_active`: threshold of the `ε`-active set used to choose the variables fixed at the
+  start of the path, see [`initial_fixed!`](@ref). Defaults to `0`.
+
 # On return
 
 - `pred`: reduction of the quadratic model obtained after taking the Cauchy step
@@ -60,7 +65,8 @@ function cauchy_step!(
     hess_op::ALHessian{T},
     proj_op::Projector{T},
     d::AbstractVector{T},
-    Hd::AbstractVector{T}) where T
+    Hd::AbstractVector{T};
+    eps_active::T = zero(T)) where T
 
     # Constants
     zeroT = T(0.0)
@@ -69,7 +75,7 @@ function cauchy_step!(
 
     # Fixed variables for the Cauchy step computation and initial projected steepest
     # direction d ← P[-g]
-    zero_dir = initial_fixed!(proj_op, x, g, d, xlow, xupp)
+    zero_dir = initial_fixed!(proj_op, x, g, d, xlow, xupp; eps_active = eps_active)
 
     # Find first breakpoint
     s .= zeroT
@@ -217,6 +223,14 @@ and form the corresponding projected steepest direction `d ← P[-g]`.
 In both cases, the variables lying strictly between their bounds whose component in the
 direction is zero are also fixed. They are freed at the end of the Cauchy step computation.
 
+With a [`SubspaceProjector`](@ref) and `eps_active > 0`, the bounds within distance
+`eps_active` of `x` are treated as active (`ε`-active set): the corresponding variables are
+fixed at their current values, and their multipliers are formed and checked as above. A
+freed `ε`-active bound may then lie at a positive distance, so that the freed bounds along
+which the direction points outwards are fixed again explicitly, until the direction points
+inwards along all the remaining freed bounds. The path then reaches no bound closer than
+`eps_active`, which keeps its first segment from being arbitrarily short.
+
 # Arguments
 
 - `proj_op`: `Projector` operator, with no active bound on entry
@@ -230,6 +244,8 @@ direction is zero are also fixed. They are freed at the end of the Cauchy step c
 
 - `epsrel`: relative tolerance used to decide whether a component of `d` is zero.
   Defaults to the square root of the machine precision.
+- `eps_active`: threshold of the `ε`-active set, only used with a
+  [`SubspaceProjector`](@ref). Defaults to `0`.
 
 # On return
 
@@ -244,7 +260,8 @@ function initial_fixed!(
     d::AbstractVector{T},
     xlow::AbstractVector{T},
     xupp::AbstractVector{T};
-    epsrel::T = sqrt(eps(T))) where T
+    epsrel::T = sqrt(eps(T)),
+    eps_active::T = zero(T)) where T
 
     # Initial projected steepest direction
     mul!(d, proj_op, g, -one(T), zero(T)) # d ← P[-g]
@@ -267,17 +284,37 @@ function initial_fixed!(
     d::AbstractVector{T},
     xlow::AbstractVector{T},
     xupp::AbstractVector{T};
-    epsrel::T = sqrt(eps(T))) where T
+    epsrel::T = sqrt(eps(T)),
+    eps_active::T = zero(T)) where T
 
-    # Fix the bounds active at x, which forms their least-squares multipliers
-    identify_active_set!(x, xlow, xupp, proj_op)
+    # Fix the bounds active (or ε-active) at x, which forms their least-squares multipliers
+    identify_active_set!(x, xlow, xupp, proj_op; eps_active = eps_active)
     mul!(d, proj_op, g, -one(T), zero(T)) # d ← P[-g]
 
     # Free the bounds whose multiplier has the wrong sign
-    _, freed = wrong_sign_bounds(x, xlow, xupp, proj_op; tol = 10 * eps(T) * norm(g, Inf))
+    _, freed = wrong_sign_bounds(x, xlow, xupp, proj_op; tol = 10 * eps(T) * norm(g, Inf),
+                                 eps_active = eps_active)
     if !isempty(freed)
         set_free!(proj_op, freed)
         mul!(d, proj_op, g, -one(T), zero(T)) # d ← P[-g]
+    end
+
+    # Fix again the ε-active freed bounds along which d points outwards, since they would
+    # not all be fixed by a breakpoint of zero length
+    if eps_active > 0
+        outward = Vector{Int}()
+        while !isempty(freed)
+            empty!(outward)
+            for i in freed
+                at_lower = near_lower_bound(x, xlow, i, sqrt(eps(T)), eps_active)
+                (at_lower ? d[i] < 0 : d[i] > 0) && push!(outward, i)
+            end
+            isempty(outward) && break
+
+            set_active!(proj_op, outward)
+            setdiff!(freed, outward)
+            mul!(d, proj_op, g, -one(T), zero(T)) # d ← P[-g]
+        end
     end
 
     # Variables between their bounds but with zero direction

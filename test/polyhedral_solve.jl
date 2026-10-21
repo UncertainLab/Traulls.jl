@@ -135,4 +135,21 @@ end
         @test A * sol ≈ b atol = 1e-10
         @test all(xlow .- 1e-10 .<= sol .<= xupp .+ 1e-10)
     end
+
+    @testset "ε-active set strategy" begin
+        # Starting at the vertex, close to the vertex and along the face x₁ = -1
+        for (target, x0, xsol) in (
+                ([2.0, 0.0, -2.0, 1.0], [-1.0, 1.0, 0.0, 1.0], [2.0, 0.0, -2.0, 1.0]),
+                ([-1.0, 4.0, -1.0, 1.0], [-1.0 + 1e-6, 1.0 - 3e-6, 2e-6, 1.0],
+                 [-0.5, 1.0, -0.5, 1.0]),
+                ([-1.0, 4.0, -1.0, 1.0], [-1.0, -2.0, 3.0, 1.0], [-0.5, 1.0, -0.5, 1.0]))
+            results = traulls(vertex_model(target, x0); eps_active = 1e-3)
+            sol = results.solution
+
+            @test results.status == Traulls.first_order_critical
+            @test sol ≈ xsol atol = 1e-5
+            @test A * sol ≈ b atol = 1e-10
+            @test all(xlow .- 1e-10 .<= sol .<= xupp .+ 1e-10)
+        end
+    end
 end

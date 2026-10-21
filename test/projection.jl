@@ -217,6 +217,27 @@ end
     @test viol ≈ 2.0 && wrong == [2]
 end
 
+@testset "Subspace projector: ε-active set" begin
+    A = [1.0 1.0 1.0]
+    P = Traulls.SubspaceProjector(A, cholesky(A * A'))
+    xlow, xupp = [-1.0, -Inf, -Inf], [Inf, 1.0, Inf]
+    x = [-1.0 + 1e-4, 1.0 - 1e-2, 1e-2 - 1e-4]
+
+    # No bound is active, x₁ ≥ -1 is ε-active for ε = 1e-3, both for ε = 0.1
+    Traulls.identify_active_set!(x, xlow, xupp, P)
+    @test P.p == 0
+    Traulls.identify_active_set!(x, xlow, xupp, P; eps_active = 1e-3)
+    @test findall(P.fixvars) == [1]
+    Traulls.identify_active_set!(x, xlow, xupp, P; eps_active = 0.1)
+    @test findall(P.fixvars) == [1, 2]
+
+    # Same multipliers as at the vertex: wrong sign on x₁ ≥ -1 only
+    r = zeros(3)
+    mul!(r, P, [0.0, -3.0, 1.0])
+    viol, wrong = Traulls.wrong_sign_bounds(x, xlow, xupp, P; eps_active = 0.1)
+    @test viol ≈ 1.0 && wrong == [1]
+end
+
 @testset "Subspace projector: allocation-free projection" begin
     m, n = 4, 12
     A = rand(m, n)

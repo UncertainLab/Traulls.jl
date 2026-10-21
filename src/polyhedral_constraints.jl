@@ -761,7 +761,29 @@ function update_inner_active_set!(
 end
 
 """
-    identify_active_set!(x, xₗ, xᵤ, P; eps_bound = sqrt(eps(T)))
+    near_lower_bound(x, xₗ, i, eps_bound, eps_active)
+
+Return `true` if the lower bound on variable `i` is `ε`-active at `x`, i.e. if
+`xᵢ ≤ ℓᵢ + |ℓᵢ| eps_bound` or `xᵢ - ℓᵢ ≤ eps_active`. With `eps_active = 0`, this is the
+test of an active bound up to the relative tolerance `eps_bound`.
+"""
+@inline near_lower_bound(x, xlow, i, eps_bound, eps_active) =
+    isfinite(xlow[i]) &&
+    (x[i] <= xlow[i] + abs(xlow[i]) * eps_bound || x[i] - xlow[i] <= eps_active)
+
+"""
+    near_upper_bound(x, xᵤ, i, eps_bound, eps_active)
+
+Return `true` if the upper bound on variable `i` is `ε`-active at `x`, i.e. if
+`xᵢ + |uᵢ| eps_bound ≥ uᵢ` or `uᵢ - xᵢ ≤ eps_active`. With `eps_active = 0`, this is the
+test of an active bound up to the relative tolerance `eps_bound`.
+"""
+@inline near_upper_bound(x, xupp, i, eps_bound, eps_active) =
+    isfinite(xupp[i]) &&
+    (x[i] + abs(xupp[i]) * eps_bound >= xupp[i] || xupp[i] - x[i] <= eps_active)
+
+"""
+    identify_active_set!(x, xₗ, xᵤ, P; eps_bound = sqrt(eps(T)), eps_active = 0)
 
 Identify the bounds of the box `[xₗ, xᵤ]` that are active at point `x` and set the
 subspace projector `P` accordingly.
@@ -770,6 +792,9 @@ This sets up the projector for the computation of the criticality measure when t
 problem has linear equality constraints. Unlike [`update_inner_active_set!`](@ref), the
 set of fixed variables is replaced, not extended: the projector is reset and the factor
 `L_H` is rebuilt by successive bordered updates.
+
+With `eps_active > 0`, the `ε`-active bounds, i.e. those within distance `eps_active` of `x`,
+are identified instead (see [`near_lower_bound`](@ref) and [`near_upper_bound`](@ref)).
 
 # Arguments
 
@@ -782,6 +807,7 @@ set of fixed variables is replaced, not extended: the projector is reset and the
 
 - `eps_bound`: relative tolerance used to decide whether a bound is active. Defaults to
   the square root of the machine precision.
+- `eps_active`: absolute threshold of the `ε`-active set. Defaults to `0`.
 
 # On return
 
@@ -792,13 +818,14 @@ function identify_active_set!(
     xlow::AbstractVector{T},
     xupp::AbstractVector{T},
     P::SubspaceProjector{T};
-    eps_bound::T = sqrt(eps(T))) where T
+    eps_bound::T = sqrt(eps(T)),
+    eps_active::T = zero(T)) where T
 
     reset_projector!(P)
 
     for i in axes(x, 1)
-        at_lower = isfinite(xlow[i]) && x[i] <= xlow[i] + abs(xlow[i]) * eps_bound
-        at_upper = isfinite(xupp[i]) && x[i] + abs(xupp[i]) * eps_bound >= xupp[i]
+        at_lower = near_lower_bound(x, xlow, i, eps_bound, eps_active)
+        at_upper = near_upper_bound(x, xupp, i, eps_bound, eps_active)
         (at_lower || at_upper) && set_active!(P, i)
     end
 
@@ -819,7 +846,7 @@ multiplier.
 bound_multipliers(P::SubspaceProjector) = view(P.pbuf, 1:P.p)
 
 """
-    wrong_sign_bounds(x, xₗ, xᵤ, P; eps_bound = sqrt(eps(T)), tol = 0)
+    wrong_sign_bounds(x, xₗ, xᵤ, P; eps_bound = sqrt(eps(T)), tol = 0, eps_active = 0)
 
 Find the active bounds whose multipliers, formed by the last projection of the gradient `g`
 with `P` (see [`bound_multipliers`](@ref)), have the wrong sign for a first-order critical
@@ -843,6 +870,8 @@ bounds are both active are not checked, since their multiplier can have any sign
   the square root of the machine precision.
 - `tol`: nonnegative tolerance above which a multiplier is considered of the wrong sign.
   Defaults to `0`.
+- `eps_active`: absolute threshold of the `ε`-active set, which must be the one used to set
+  up `P` (see [`identify_active_set!`](@ref)). Defaults to `0`.
 
 # On return
 
@@ -857,7 +886,8 @@ function wrong_sign_bounds(
     xupp::AbstractVector{T},
     P::SubspaceProjector{T};
     eps_bound::T = sqrt(eps(T)),
-    tol::T = zero(T)) where T
+    tol::T = zero(T),
+    eps_active::T = zero(T)) where T
 
     y = bound_multipliers(P)
     viol = zero(T)
@@ -865,8 +895,8 @@ function wrong_sign_bounds(
 
     for k in 1:P.p
         i = P.fixidx[k]
-        at_lower = isfinite(xlow[i]) && x[i] <= xlow[i] + abs(xlow[i]) * eps_bound
-        at_upper = isfinite(xupp[i]) && x[i] + abs(xupp[i]) * eps_bound >= xupp[i]
+        at_lower = near_lower_bound(x, xlow, i, eps_bound, eps_active)
+        at_upper = near_upper_bound(x, xupp, i, eps_bound, eps_active)
 
         # Multiplier of any sign for fixed variables
         at_lower == at_upper && continue
