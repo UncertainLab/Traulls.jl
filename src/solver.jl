@@ -83,7 +83,7 @@ documentation.
 - `max_cg_iter`: Maximum number of minor iterates for the gradient projection loop
   (default: `50`)
 - `eps_active`: Threshold of the `ε`-active set strategy for problems with general linear
-  constraints (default: `0`, i.e. disabled). At outer iteration `K`, the bounds within
+  constraints (default: `1e-3`; `0` disables it). At outer iteration `K`, the bounds within
   distance `min(eps_active, ωₖ)` of the current point, `ωₖ` being the relative criticality
   tolerance of the subproblem, are treated as active in the choice of the variables fixed at
   the start of the Cauchy step and in the criticality measure.
@@ -122,7 +122,7 @@ function traulls(
     max_iter::Int = 200,
     max_inner_iter::Int = 1000,
     max_cg_iter::Int = 50,
-    eps_active::T = T(0),
+    eps_active::T = T(1e-3),
     output_io::IO=stdout,
     init_mult::Bool=true,
     verbose::Bool=false,

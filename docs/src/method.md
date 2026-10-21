@@ -240,11 +240,14 @@ bound-constrained case, these are the components that lie at a bound with $-g_j$
 outwards the feasible set. With general linear constraints, the multipliers are the
 least-squares estimates $y_2$ of the decomposition
 $g_j = P g_j + A^T y_1 + E_{\mathcal{A}} y_2$ computed with all the active bounds, and the
-bounds whose multiplier has the wrong sign are freed. A freed bound along which the
+bounds whose multiplier has the wrong sign are freed. When the active bounds and the rows
+of $A$ are linearly dependent, these multipliers are not unique, and those that minimize the
+sum of their squared sign violations are used. A freed bound along which the
 resulting direction still points outwards is fixed again at the first breakpoint, of zero
 length.
 
-With the option `eps_active > 0` of [`traulls`](@ref), the bounds lying within distance
+With the option `eps_active > 0` of [`traulls`](@ref) (default `1e-3`; `0` disables the
+strategy), the bounds lying within distance
 $\varepsilon_k = \min(\varepsilon_{\max}, \omega_k)$ of $x_j$ ($\varepsilon$-active bounds),
 where $\varepsilon_{\max}$ is the value of `eps_active` and $\omega_k$ the criticality
 tolerance of the subproblem, are treated as active: the corresponding variables are fixed
