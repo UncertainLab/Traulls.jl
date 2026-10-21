@@ -45,4 +45,7 @@
     @test results.status isa Traulls.CriticalityStatus
     @test results.objective isa Real
     @test eltype(results.solution) <: Real
+
+    # The initial penalty parameter must be greater than 1
+    @test_throws ArgumentError traulls(model; mu = 1.0)
 end

@@ -17,6 +17,13 @@ const RESULTS_DIR = "new_results"
 
 mkpath(RESULTS_DIR)
 
+# Record the commit of the solver code used for the results; the code is included from
+# ../src, so it must not contain uncommitted changes
+isempty(readchomp(`git -C $(@__DIR__) status --porcelain -- ../src`)) ||
+    error("Uncommitted changes in src/: commit them before running the experiments")
+write(joinpath(RESULTS_DIR, "commit.txt"),
+      readchomp(`git -C $(@__DIR__) rev-parse HEAD`) * "\n")
+
 # Diagnostics collected during the run, reported by `report_timing_diagnostics()`
 const COMPILE_WARNINGS = Tuple{String,Int,Float64}[]
 const NONDET_WARNINGS = String[]

@@ -40,7 +40,7 @@ documentation.
 
 ## Augmented Lagrangian parameters
 
-- `mu`: Initial penalty parameter (default: `10`)
+- `mu`: Initial penalty parameter, greater than `1` (default: `10`)
 - `tau`: Increase factor for the penalty parameter (default: `10`)
 - `omega0`: Constant to set the initial criticality tolerance
   (default: `1`)
@@ -132,6 +132,7 @@ function traulls(
     !(hessian_approx in keys(dict_hessians)) &&
         throw(ArgumentError("Wrong hessian argument has been passed. Supported keywords are " *
         string(keys(dict_hessians))))
+    mu <= 1 && throw(ArgumentError("The initial penalty parameter mu must be greater than 1"))
 
     # Dimensions of the problem
     n, nres, ncons = model.n, model.nres, model.ncons
