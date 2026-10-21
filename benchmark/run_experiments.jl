@@ -11,6 +11,9 @@ using DataFrames, CSV, Printf, ForwardDiff
 
 using NLPModelsIpopt, Percival, SolverBenchmark, NLSProblems
 
+# Exact Hessian of the constrained least-squares JuMP models for Ipopt
+include("nlpmodelsjump_fix.jl")
+
 
 const N_REPEAT = 3
 const RESULTS_DIR = "new_results"
