@@ -12,5 +12,7 @@ The numerical results of Section 4 come from the timed campaign of 2026-10-21, r
 solver code of commit `dde5a65` on branch `align-paper`, whose files are in `benchmark/results`.
 The figures `Fig1.pdf` to `Fig15.pdf` are those of `preprint/figures` on that branch, produced by
 `benchmark/make_figures.jl` and `benchmark/residual_cost_analysis.jl`.
+The results of Section 4.3 (Table 2) are in `benchmark/results/linear_constraints.csv`,
+produced by `benchmark/linear_constraints/run_linear_constraints.jl` at commit `2855bbf`.
 
 Build with `latexmk -pdf sn-preprint-theorie.tex`.
