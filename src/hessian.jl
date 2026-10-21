@@ -342,6 +342,9 @@ share this signature.
   is formed with the Jacobians `J` and `C` stored in `H`, then the second order terms are
   updated from the pair `(s, ŷ)` (see [`second_order_secant_update!`](@ref)) and the
   Jacobians are replaced by `J₊` and `C₊`. The objective values `f₊` and `f` are not used.
+  With the keyword `exact_secant = true`, the standard secant equation is enforced instead,
+  with `ŷ = g - g₋ - (J₊ᵀJ₊ + μC₊ᵀC₊)s`, where the gradient `g₋` at the previous point is
+  formed from the keywords `rx_prev` and `cx_prev`, residuals and constraints at that point.
 - For a [`Hybrid`](@ref) approximation, the small residuals heuristic is evaluated first:
   the residuals are deemed small if the relative reduction of the augmented Lagrangian
   objective satisfies
@@ -375,7 +378,8 @@ function update_hessian!(
     H::GN{T},
     J_new::AbstractMatrix{T},
     C_new::AbstractMatrix{T},
-    _...) where T
+    _args...;
+    _kwargs...) where T
 
     update_jacobians!(H, J_new, C_new)
     return
@@ -391,15 +395,33 @@ function update_hessian!(
     ::T,
     g::AbstractVector{T},
     y::AbstractVector{T},
-    s::AbstractVector{T}) where T
+    s::AbstractVector{T};
+    exact_secant::Bool = false,
+    rx_prev::Union{Nothing, AbstractVector{T}} = nothing,
+    cx_prev::Union{Nothing, AbstractVector{T}} = nothing) where T
 
-    # Secant equation right-hand side ŷ ← g - Jᵀr₊ - Cᵀ(y + μc₊)
     rhs = H.secant_rhs
-    rhs .= g
-    mul!(rhs, H.J', rx_new, -1, 1)
     w = view(H.temp, 1:size(cx_new, 1))
-    w .= y .+ H.mu .* cx_new
-    mul!(rhs, H.C', w, -1, 1)
+    if exact_secant
+        # Standard secant equation, Gauss-Newton term at the new point subtracted:
+        # ŷ ← g₊ - g - (J₊ᵀJ₊ + μC₊ᵀC₊)s, where g = Jᵀr + Cᵀ(y + μc) at the previous point
+        rhs .= g
+        mul!(rhs, H.J', rx_prev, -1, 1)
+        w .= y .+ H.mu .* cx_prev
+        mul!(rhs, H.C', w, -1, 1)
+        Js = view(H.temp, 1:size(J_new, 1))
+        mul!(Js, J_new, s)
+        mul!(rhs, J_new', Js, -1, 1)
+        Cs = view(H.temp, 1:size(C_new, 1))
+        mul!(Cs, C_new, s)
+        mul!(rhs, C_new', Cs, -H.mu, 1)
+    else
+        # Secant equation right-hand side ŷ ← g - Jᵀr₊ - Cᵀ(y + μc₊)
+        rhs .= g
+        mul!(rhs, H.J', rx_new, -1, 1)
+        w .= y .+ H.mu .* cx_new
+        mul!(rhs, H.C', w, -1, 1)
+    end
     H.step .= s
 
     # Update second order terms
@@ -421,7 +443,8 @@ function update_hessian!(
     fx_prev::T,
     g::AbstractVector{T},
     y::AbstractVector{T},
-    s::AbstractVector{T}) where T
+    s::AbstractVector{T};
+    kwargs...) where T
 
     # Constants
     eps_small_res = T(1//10) # Tjoa Biegler recommended value
@@ -432,7 +455,7 @@ function update_hessian!(
     H.small_res = (fx_prev - fx_new + delta_red) > eps_small_res * fx_prev
 
     # Update the underlying secant approximation
-    update_hessian!(H.approx, J_new, C_new, rx_new, cx_new, fx_new, fx_prev, g, y, s)
+    update_hessian!(H.approx, J_new, C_new, rx_new, cx_new, fx_new, fx_prev, g, y, s; kwargs...)
 
     return
 end

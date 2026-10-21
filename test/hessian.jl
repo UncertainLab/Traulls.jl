@@ -141,6 +141,17 @@ end
         @test H.S ≈ I && H.nupdates == 0
     end
 
+    @testset "Exact secant equation" begin
+        # The whole approximation maps the step to the change in the gradient of the AL
+        rx_prev = rand(m)
+        cx_prev = rand(p)
+        g_prev = J' * rx_prev + C' * (y + mu * cx_prev)
+        H = Traulls.SR1(J, C, mu)
+        Traulls.update_hessian!(H, J_new, C, rx, cx, 0.5, 1.0, g, y, s;
+                                exact_secant = true, rx_prev = rx_prev, cx_prev = cx_prev)
+        @test H * s ≈ g - g_prev
+    end
+
     @testset "Hybrid switching" begin
         H = Traulls.HybridSR1(J, C, mu)
         @test !H.small_res

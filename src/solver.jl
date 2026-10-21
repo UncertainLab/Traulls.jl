@@ -60,6 +60,9 @@ documentation.
   case of good improvement of the feasibility (default: `0.9`)
 - `hessian_approx`: Symbol encoding the Hessian approximation used during the inner
   minimization (default: `:gn` for Gauss-Newton)
+- `exact_secant`: Boolean. If set to `true`, the dense secant approximations enforce the
+  standard secant equation, the Gauss-Newton term being subtracted, instead of the structured
+  one (default: `false`; not available with `:limited_sr1`)
 - `init_mult`: Boolean. If set to true, initialises the Lagrange multipliers with the
   least-squares estimate.
 
@@ -118,6 +121,7 @@ function traulls(
     increase_factor::T = T(2.5),
     neg_ratio_factor::T = T(0.0625),
     hessian_approx::Symbol = :gn,
+    exact_secant::Bool = false,
     mu_max::T = 1/eps(T),
     max_iter::Int = 200,
     max_inner_iter::Int = 1000,
@@ -133,6 +137,8 @@ function traulls(
         throw(ArgumentError("Wrong hessian argument has been passed. Supported keywords are " *
         string(keys(dict_hessians))))
     mu <= 1 && throw(ArgumentError("The initial penalty parameter mu must be greater than 1"))
+    exact_secant && hessian_approx == :limited_sr1 &&
+        throw(ArgumentError("The exact secant equation is not available with :limited_sr1"))
 
     # Dimensions of the problem
     n, nres, ncons = model.n, model.nres, model.ncons
@@ -244,6 +250,7 @@ function traulls(
             max_cg_iter,
             inner_workspace;
             eps_active=eps_active_k,
+            exact_secant=exact_secant,
             verbose=inner_verbose,
             io=output_io)
 
@@ -404,6 +411,7 @@ function solve_subproblem!(
     workspace::Workspace{T};
     patience_counter::Int = 3,
     eps_active::T = zero(T),
+    exact_secant::Bool = false,
     verbose::Bool=false,
     io::IO=stdout) where T
 
@@ -491,7 +499,8 @@ function solve_subproblem!(
             model.counters.nalgrad_eval += 1
 
             # Update Hessian approximation
-            update_hessian!(hess_op, J, C, rx, cx, alx, alx_prev, g, y, s)
+            update_hessian!(hess_op, J, C, rx, cx, alx, alx_prev, g, y, s;
+                            exact_secant = exact_secant, rx_prev = rx_prev, cx_prev = cx_prev)
 
             # Compute criticality measure
             pix = if lincons_present
