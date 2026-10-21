@@ -10,7 +10,9 @@
   `latexdiff --encoding=cp1252 --math-markup=whole sn-preprint-ojmo.tex sn-preprint-theorie.tex`.
 - `refs-theorie.bib`: bibliography of the revised manuscript.
 
-The numerical results of Section 4 still come from commit `c7bc71b`, as stated in the red note
-at the start of that section, and have to be regenerated with `benchmark/run_experiments.jl`.
+The numerical results of Section 4 come from the timed campaign of 2026-10-21, run with the
+solver code of commit `ddaac73` on branch `align-paper`, whose files are in `benchmark/results`.
+The figures `Fig1.pdf` to `Fig15.pdf` are those of `preprint/figures` on that branch, produced by
+`benchmark/make_figures.jl` and `benchmark/residual_cost_analysis.jl`.
 
 Build with `latexmk -pdf sn-preprint-theorie.tex`.
