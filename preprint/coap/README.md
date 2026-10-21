@@ -1,7 +1,7 @@
 # Revised manuscript for Computational Optimization and Applications
 
 - `sn-preprint-theorie.tex`: revised manuscript, in the Springer Nature template. The file is
-  encoded in Windows-1252 with CRLF line endings: do not convert it to UTF-8. The green paragraph of Section 2.4 is an addition that remains to be supported by numerical tests.
+  encoded in Windows-1252 with CRLF line endings: do not convert it to UTF-8.
 - `sn-preprint-theorie.pdf`: compiled manuscript.
 - `sn-preprint-theorie-diff.pdf`: changes with respect to `sn-preprint-ojmo.tex`, the version
   submitted to OJMO, produced by
@@ -15,5 +15,8 @@ The figures `Fig1.pdf` to `Fig15.pdf` are those of `preprint/figures` on that br
 `benchmark/make_figures.jl` and `benchmark/residual_cost_analysis.jl`.
 The results of Section 4.3 (Table 2) are in `benchmark/results/linear_constraints.csv`,
 produced by `benchmark/linear_constraints/run_linear_constraints.jl` at commit `3f0744f`.
+The comparison of the structured and standard secant equations of Section 2.4 is in
+`benchmark/results/secant_comparison.csv` and `benchmark/results/secant_comparison_mu.csv`,
+produced by `benchmark/secant_comparison/run_secant_comparison.jl` with the solver code of `3f0744f`.
 
 Build with `latexmk -pdf sn-preprint-theorie.tex`.
