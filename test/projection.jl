@@ -188,6 +188,35 @@ end
     @test P * v ≈ reference_projection(A, Int[], v)
 end
 
+@testset "Subspace projector: signs of the bound multipliers" begin
+    # Ω = {x₁ + x₂ + x₃ = 0, x₁ ≥ -1, x₂ ≤ 1}, at the vertex x = (-1, 1, 0)
+    A = [1.0 1.0 1.0]
+    P = Traulls.SubspaceProjector(A, cholesky(A * A'))
+    xlow, xupp = [-1.0, -Inf, -Inf], [Inf, 1.0, Inf]
+    x = [-1.0, 1.0, 0.0]
+    r = zeros(3)
+    Traulls.identify_active_set!(x, xlow, xupp, P)
+
+    # g = 1·(1, 1, 1) - 1·e₁ - 4·e₂: wrong sign on the lower bound x₁ ≥ -1 only
+    mul!(r, P, [0.0, -3.0, 1.0])
+    @test norm(r) < 1e-12
+    @test Traulls.bound_multipliers(P) ≈ [-1.0, -4.0]
+    viol, wrong = Traulls.wrong_sign_bounds(x, xlow, xupp, P)
+    @test viol ≈ 1.0 && wrong == [1]
+    @test Traulls.criticality_measure(x, [0.0, -3.0, 1.0], r, xlow, xupp, P) ≈ 1.0
+
+    # g = 0·(1, 1, 1) + 1·e₁ - 1·e₂: both signs are right, x is critical
+    mul!(r, P, [1.0, -1.0, 0.0])
+    viol, wrong = Traulls.wrong_sign_bounds(x, xlow, xupp, P)
+    @test viol == 0 && isempty(wrong)
+    @test Traulls.criticality_measure(x, [1.0, -1.0, 0.0], r, xlow, xupp, P) < 1e-12
+
+    # Wrong signs on both bounds, only those above the tolerance are reported
+    mul!(r, P, [-1.0e-3, 2.0, 0.0])
+    viol, wrong = Traulls.wrong_sign_bounds(x, xlow, xupp, P; tol = 1e-2)
+    @test viol ≈ 2.0 && wrong == [2]
+end
+
 @testset "Subspace projector: allocation-free projection" begin
     m, n = 4, 12
     A = rand(m, n)

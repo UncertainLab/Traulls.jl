@@ -67,16 +67,9 @@ function cauchy_step!(
     eps_slope = 1e-10
     eps_curv = 1e-10
 
-    # Initial projected steepest direction
-    mul!(d, proj_op, g, -one(T), zero(T)) # d ← P[-g]
-
-    # Fixed variables for the Cauchy step computation
-    active, zero_dir = initial_fixed(x, d, xlow, xupp)
-    fixed = vcat(active, zero_dir)
-
-    # Update the projector operator and search direction
-    !isempty(fixed) && set_active!(proj_op, fixed)
-    mul!(d, proj_op, g, -one(T), zero(T)) # d ← P[-g]
+    # Fixed variables for the Cauchy step computation and initial projected steepest
+    # direction d ← P[-g]
+    zero_dir = initial_fixed!(proj_op, x, g, d, xlow, xupp)
 
     # Find first breakpoint
     s .= zeroT
@@ -204,6 +197,103 @@ function initial_fixed(
     end
 
     return active, zero_dir
+end
+
+"""
+    initial_fixed!(proj_op, x, g, d, xlow, xupp)
+
+Fix in `proj_op` the variables that are fixed at the start of the Cauchy step computation
+and form the corresponding projected steepest direction `d ← P[-g]`.
+
+- With a [`CoordinateSubspaceProjector`](@ref) (bounds only), a variable at a bound is
+  fixed if `-g` points out of the feasible region, which is exactly the sign condition on
+  its multiplier, see [`initial_fixed`](@ref).
+- With a [`SubspaceProjector`](@ref), the bounds active at `x` are first all fixed, which
+  forms the least-squares multipliers of the decomposition `g = Pg + Aᵀy₁ + E_𝒜y₂`. The
+  bounds whose multiplier has the wrong sign are then freed (see
+  [`wrong_sign_bounds`](@ref)). A freed bound along which the resulting direction still
+  points outwards is fixed again at the first breakpoint of the path, of zero length.
+
+In both cases, the variables lying strictly between their bounds whose component in the
+direction is zero are also fixed. They are freed at the end of the Cauchy step computation.
+
+# Arguments
+
+- `proj_op`: `Projector` operator, with no active bound on entry
+- `x`: current iterate
+- `g`: gradient of the augmented Lagrangian at current point
+- `d`: buffer vector to store the projected steepest direction
+- `xlow`: lower bounds on the variables `x`
+- `xupp`: upper bounds on the variables `x`
+
+# Keywords
+
+- `epsrel`: relative tolerance used to decide whether a component of `d` is zero.
+  Defaults to the square root of the machine precision.
+
+# On return
+
+- `zero_dir`: `Vector{Int}` of indices of the free variables with a zero direction
+- argument `d` stores the projected steepest direction
+- argument `proj_op` encodes the variables fixed at the start of the Cauchy path
+"""
+function initial_fixed!(
+    proj_op::CoordinateSubspaceProjector{T},
+    x::AbstractVector{T},
+    g::AbstractVector{T},
+    d::AbstractVector{T},
+    xlow::AbstractVector{T},
+    xupp::AbstractVector{T};
+    epsrel::T = sqrt(eps(T))) where T
+
+    # Initial projected steepest direction
+    mul!(d, proj_op, g, -one(T), zero(T)) # d ← P[-g]
+
+    # Fixed variables for the Cauchy step computation
+    active, zero_dir = initial_fixed(x, d, xlow, xupp; epsrel = epsrel)
+    fixed = vcat(active, zero_dir)
+
+    # Update the projector operator and search direction
+    !isempty(fixed) && set_active!(proj_op, fixed)
+    mul!(d, proj_op, g, -one(T), zero(T)) # d ← P[-g]
+
+    return zero_dir
+end
+
+function initial_fixed!(
+    proj_op::SubspaceProjector{T},
+    x::AbstractVector{T},
+    g::AbstractVector{T},
+    d::AbstractVector{T},
+    xlow::AbstractVector{T},
+    xupp::AbstractVector{T};
+    epsrel::T = sqrt(eps(T))) where T
+
+    # Fix the bounds active at x, which forms their least-squares multipliers
+    identify_active_set!(x, xlow, xupp, proj_op)
+    mul!(d, proj_op, g, -one(T), zero(T)) # d ← P[-g]
+
+    # Free the bounds whose multiplier has the wrong sign
+    _, freed = wrong_sign_bounds(x, xlow, xupp, proj_op; tol = 10 * eps(T) * norm(g, Inf))
+    if !isempty(freed)
+        set_free!(proj_op, freed)
+        mul!(d, proj_op, g, -one(T), zero(T)) # d ← P[-g]
+    end
+
+    # Variables between their bounds but with zero direction
+    zero_dir = Vector{Int}()
+    for i in axes(x, 1)
+        if !is_fixed(proj_op, i) && !(i in freed) && abs(d[i]) <= epsrel
+            push!(zero_dir, i)
+        end
+    end
+
+    if !isempty(zero_dir)
+        set_active!(proj_op, zero_dir)
+        mul!(d, proj_op, g, -one(T), zero(T)) # d ← P[-g]
+    end
+
+    return zero_dir
 end
 
 """

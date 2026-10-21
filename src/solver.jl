@@ -186,7 +186,7 @@ function traulls(
     gproj = inner_workspace.proj_g
 
     pix = lincons_present ?
-        criticality_measure(x, g, gproj, proj_op) :
+        criticality_measure(x, g, gproj, xlow, xupp, proj_op) :
         criticality_measure(x, g, gproj, xlow, xupp)
 
     tol_crit = min_reltol_crit * (1 + pix)
@@ -259,7 +259,7 @@ function traulls(
 
         norm_proj_gradlag = if lincons_present
             identify_active_set!(x, xlow, xupp, proj_op)
-            criticality_measure(x, g, gproj, proj_op)
+            criticality_measure(x, g, gproj, xlow, xupp, proj_op)
         else
             criticality_measure(x, g, gproj, xlow, xupp)
         end
@@ -408,7 +408,7 @@ function solve_subproblem!(
 
     # Prepare for inner minimization loop
     pix = lincons_present ?
-        criticality_measure(x, g, gproj, proj_op) :
+        criticality_measure(x, g, gproj, xlow, xupp, proj_op) :
         criticality_measure(x, g, gproj, xlow, xupp)
 
     tol_crit = reltol_crit * (1 + pix)
@@ -471,7 +471,7 @@ function solve_subproblem!(
             pix = if lincons_present
                 # Identify bounds active at `x` to form the appropriate tangent space
                 identify_active_set!(x, xlow, xupp, proj_op)
-                criticality_measure(x, g, gproj, proj_op)
+                criticality_measure(x, g, gproj, xlow, xupp, proj_op)
             else
                 criticality_measure(x, g, gproj, xlow, xupp)
             end
@@ -793,28 +793,47 @@ function criticality_measure(
 end
 
 """
-    criticality_measure(x, g, gproj, P)
+    criticality_measure(x, g, gproj, xₗ, xᵤ, P)
 
-Computes the criticality measure for problems where linear constraints are polyhedral, which
-is the norm of the reduced gradient.
+Computes the criticality measure for problems where linear constraints are polyhedral.
+
+It equals `max(||Pg||, ||y₂⁻||)`, where `Pg` is the reduced gradient, i.e. the projection
+of `g` onto the null space of the linear equalities and of the bounds active at `x`, and
+`y₂⁻` gathers the magnitudes of the least-squares multipliers of the active bounds that have
+the wrong sign (see [`Traulls.wrong_sign_bounds`](@ref)). Both norms are `∞`-norms.
+
+The reduced gradient alone vanishes at every point where `g` lies in the span of the active
+constraints, whatever the signs of the bound multipliers, e.g. at every vertex. Setting the
+multipliers of the wrong sign to zero in `g = Pg + Aᵀy₁ + E_𝒜y₂` yields an element `w` of
+the normal cone `N_Ω(x)` of the feasible set such that `||g + w|| ≤ ||Pg|| + ||y₂⁻||`.
+Since `||P_Ω[x - g] - x|| ≤ dist(-g, N_Ω(x))`, this measure bounds the norm of the
+projected gradient step up to a factor depending on the dimension, and it vanishes if and
+only if `x` is first-order critical when the active constraints are linearly independent.
 
 # Arguments
 
 - `x`: Current iterate
 - `g`: Gradient of the Augmented Lagrangian at current primal-dual iterate
 - `gproj`: Buffer vector to store the reduced gradient
-- `proj_op`: `Projector` operator to form the reduced gradient
+- `xₗ`: Lower bounds on `x`
+- `xᵤ`: Upper bounds on `x`
+- `proj_op`: `Projector` operator to form the reduced gradient, encoding the bounds active
+  at `x`
 
 # On return
 
-- Infinite norm of the reduced gradient
+- Maximum of the infinite norm of the reduced gradient and of the largest magnitude of the
+  bound multipliers of the wrong sign
 """
 function criticality_measure(
     x::AbstractVector{T},
     g::AbstractVector{T},
     gproj::AbstractVector{T},
+    xlow::AbstractVector{T},
+    xupp::AbstractVector{T},
     proj_op::SubspaceProjector{T}) where T
 
     mul!(gproj, proj_op, g)
-    norm(gproj, Inf)
+    viol, _ = wrong_sign_bounds(x, xlow, xupp, proj_op)
+    max(norm(gproj, Inf), viol)
 end

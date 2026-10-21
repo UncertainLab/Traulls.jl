@@ -90,3 +90,49 @@ end
     @test A * sol ≈ b atol = 1e-10
     @test all(xlow .- 1e-10 .<= sol .<= xupp .+ 1e-10)
 end
+
+# Regression tests: the vertex V = (-1, 1, 0) of {x₁ + x₂ + x₃ = 0, x₁ ≥ -1, x₂ ≤ 1} has a
+# zero reduced gradient for any objective, but it is not critical when the multiplier of
+# x₁ ≥ -1 is negative. The solver must neither stop there nor keep the bound fixed.
+@testset "Release of bounds with multipliers of the wrong sign" begin
+
+    n = 4
+    nres = n
+    ncons = 1
+
+    A = [1.0 1.0 1.0 0.0]
+    b = [0.0]
+    xlow = [-1.0, -Inf, -Inf, -Inf]
+    xupp = [Inf, 1.0, Inf, Inf]
+
+    # Minimize ½‖x - target‖² over the polyhedron, with x₄ free and x₄² - 1 = 0
+    function vertex_model(target, x0)
+        r!(rx, x) = (rx .= x .- target; nothing)
+        jac_r!(J, x) = (J .= Matrix{Float64}(I, n, n); nothing)
+        c!(cx, x) = (cx[1] = x[4]^2 - 1.0; nothing)
+        jac_c!(C, x) = (C .= [0.0 0.0 0.0 2x[4]]; nothing)
+        Traulls.CnlsModel!(r!, c!, jac_r!, jac_c!, A, b, xlow, xupp, x0, n, nres, ncons,
+                           Val(:only_equalities))
+    end
+
+    @testset "Starting at the vertex, bounds inactive at the solution" begin
+        # Multipliers at V: -5 for x₁ ≥ -1 (wrong sign), -1 for x₂ ≤ 1
+        model = vertex_model([2.0, 0.0, -2.0, 1.0], [-1.0, 1.0, 0.0, 1.0])
+        results = traulls(model)
+
+        @test results.status == Traulls.first_order_critical
+        @test results.solution ≈ [2.0, 0.0, -2.0, 1.0] atol = 1e-5
+    end
+
+    @testset "Reaching the vertex along the face x₁ = -1" begin
+        # Multipliers at V: -1 for x₁ ≥ -1 (wrong sign), -4 for x₂ ≤ 1
+        model = vertex_model([-1.0, 4.0, -1.0, 1.0], [-1.0, -2.0, 3.0, 1.0])
+        results = traulls(model)
+        sol = results.solution
+
+        @test results.status == Traulls.first_order_critical
+        @test sol ≈ [-0.5, 1.0, -0.5, 1.0] atol = 1e-5
+        @test A * sol ≈ b atol = 1e-10
+        @test all(xlow .- 1e-10 .<= sol .<= xupp .+ 1e-10)
+    end
+end

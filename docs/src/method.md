@@ -234,8 +234,15 @@ is the projection onto $\{s \mid As = 0, \ s_i = 0 \ i \in \mathcal{A}\}$. The s
 moves along $d$ until a component reaches a bound of $B_j$ (breakpoint), this bound is 
 added to $\mathcal{A}$, the projector $P$ is updated and a new direction is computed. 
 
-Before computing the path, the components that lie at a bound with a direction pointing
-outwards the feasible set are fixed in $\mathcal{A}$. The search stops when a local
+Before computing the path, the bounds active at $x_j$ whose multiplier has the sign
+required at a first-order critical point are fixed in $\mathcal{A}$. In the
+bound-constrained case, these are the components that lie at a bound with $-g_j$ pointing
+outwards the feasible set. With general linear constraints, the multipliers are the
+least-squares estimates $y_2$ of the decomposition
+$g_j = P g_j + A^T y_1 + E_{\mathcal{A}} y_2$ computed with all the active bounds, and the
+bounds whose multiplier has the wrong sign are freed. A freed bound along which the
+resulting direction still points outwards is fixed again at the first breakpoint, of zero
+length. The search stops when a local
 minimizer is found on a segment, when the slope of the model along the path is
 nonnegative, or when no free direction remains, either because the subspace is saturated
 or because the projected direction vanishes at machine precision.
@@ -376,13 +383,19 @@ quantity $\pi(x, g)$ that depends on the structure of the linear constraints.
   \pi(x, g) = \big\|P_{[\ell, u]}[x - g] - x\big\|_\infty,
   ```
   where $P_{[\ell, u]}$ is the projection onto the box $[\ell, u]$.
-- In the **general linear constraints case**, it is the $\infty$-norm of the reduced
-  gradient
+- In the **general linear constraints case**, it combines the reduced gradient and the
+  signs of the bound multipliers
   ```math
-  \pi(x, g) = \|P g\|_\infty,
+  \pi(x, g) = \max\big(\|P g\|_\infty, \|y_2^-\|_\infty\big),
   ```
   where $P$ is the projection onto the null space of the matrix $A_+$ formed by $A$ and the
-  bounds active at $x$ (see [Solving the quadratic program](@ref method_qp)).
+  bounds active at $x$ (see [Solving the quadratic program](@ref method_qp)), $y_2$ gathers
+  the least-squares multipliers of these bounds in $g = P g + A^T y_1 + E_{\mathcal{A}} y_2$,
+  and $y_2^-$ the magnitudes of those of the wrong sign (negative for a lower bound,
+  positive for an upper bound). The reduced gradient alone vanishes at every vertex of the
+  feasible set, critical or not; with the sign condition, $\pi(x, g) = 0$ certifies that
+  $x$ is first-order critical, and $\pi(x, g)$ bounds $\|P_\Omega[x - g] - x\|$ up to a
+  factor depending on the dimension.
 
 ### Outer loop
 

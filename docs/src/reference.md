@@ -53,6 +53,7 @@ projected_gradient!
 
 ```@docs
 cauchy_step!
+initial_fixed!
 initial_fixed
 next_breakpoint
 ```

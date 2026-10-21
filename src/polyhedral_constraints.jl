@@ -806,6 +806,84 @@ function identify_active_set!(
 end
 
 """
+    bound_multipliers(P::SubspaceProjector)
+
+Return a view on the multipliers of the active bounds formed by the last projection
+`mul!(r, P, v, α, β)`.
+
+The projection rests on the least-squares decomposition `v = Pv + Aᵀy₁ + E_𝒜y₂`, and entry
+`k` of the view is the component of `y₂` associated with the bound on variable
+`P.fixidx[k]`. Redundant active bounds are not represented in the factor `L_H` and have no
+multiplier.
+"""
+bound_multipliers(P::SubspaceProjector) = view(P.pbuf, 1:P.p)
+
+"""
+    wrong_sign_bounds(x, xₗ, xᵤ, P; eps_bound = sqrt(eps(T)), tol = 0)
+
+Find the active bounds whose multipliers, formed by the last projection of the gradient `g`
+with `P` (see [`bound_multipliers`](@ref)), have the wrong sign for a first-order critical
+point.
+
+The decomposition `g = Pg + Aᵀy₁ + E_𝒜y₂` satisfies the first-order conditions at `x` if
+`Pg = 0` and the multiplier of every active bound has the right sign, i.e. is nonnegative
+for a lower bound and nonpositive for an upper bound. Variables whose lower and upper
+bounds are both active are not checked, since their multiplier can have any sign.
+
+# Arguments
+
+- `x`: current point
+- `xₗ`: lower bounds on the variables `x`
+- `xᵤ`: upper bounds on the variables `x`
+- `P`: [`SubspaceProjector`](@ref) used for the last projection of `g`
+
+# Keywords
+
+- `eps_bound`: relative tolerance used to decide whether a bound is active. Defaults to
+  the square root of the machine precision.
+- `tol`: nonnegative tolerance above which a multiplier is considered of the wrong sign.
+  Defaults to `0`.
+
+# On return
+
+- `viol`: largest magnitude of the multipliers of the wrong sign by more than `tol`, `0`
+  if there is none
+- `wrong`: `Vector{Int}` of the indices of the variables whose bound multiplier has the
+  wrong sign by more than `tol`
+"""
+function wrong_sign_bounds(
+    x::AbstractVector{T},
+    xlow::AbstractVector{T},
+    xupp::AbstractVector{T},
+    P::SubspaceProjector{T};
+    eps_bound::T = sqrt(eps(T)),
+    tol::T = zero(T)) where T
+
+    y = bound_multipliers(P)
+    viol = zero(T)
+    wrong = Vector{Int}()
+
+    for k in 1:P.p
+        i = P.fixidx[k]
+        at_lower = isfinite(xlow[i]) && x[i] <= xlow[i] + abs(xlow[i]) * eps_bound
+        at_upper = isfinite(xupp[i]) && x[i] + abs(xupp[i]) * eps_bound >= xupp[i]
+
+        # Multiplier of any sign for fixed variables
+        at_lower == at_upper && continue
+
+        # Magnitude of the multiplier if it has the wrong sign, nonpositive otherwise
+        wrong_part = at_lower ? -y[k] : y[k]
+
+        if wrong_part > tol
+            viol = max(viol, wrong_part)
+            push!(wrong, i)
+        end
+    end
+
+    return viol, wrong
+end
+
+"""
     factor_to_boundary(p, s, sₗ, sᵤ, P)
 
 Computes the largest scalar `γ` such that `s + γp` stays in the box `[sₗ,sᵤ]`.
