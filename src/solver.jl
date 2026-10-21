@@ -279,9 +279,8 @@ function traulls(
             tol_feas = max(eta0 / mu^k_feas, min_tol_feas)
         end
 
-        # Evaluate termination status
-        # g .= J'*rx + C'*y 
-        g .-= 0.5 * mu * dot(cx, cx) # Lagrangian gradient
+        # Evaluate termination status. When the test can succeed, the multipliers have just
+        # been updated, so that g is the gradient of the Lagrangian Jᵀr + Cᵀy
 
         # The success test uses the ε-active threshold of the final criticality tolerance
         norm_proj_gradlag = if lincons_present
