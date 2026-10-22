@@ -38,3 +38,5 @@ main.fdb_latexmk
 
 ## Temporary files
 tmp/
+# Output of preprint/make_arxiv.sh
+/preprint/arxiv_build/
