@@ -5,7 +5,9 @@
 - `sn-preprint-theorie.pdf`: compiled manuscript.
 - `sn-preprint-theorie-diff.pdf`: changes with respect to `sn-preprint-ojmo.tex`, the version
   submitted to OJMO, produced by
-  `latexdiff --encoding=cp1252 --math-markup=whole sn-preprint-ojmo.tex sn-preprint-theorie.tex`.
+  `latexdiff --encoding=cp1252 --math-markup=whole --append-textcmd=abstract sn-preprint-ojmo.tex sn-preprint-theorie.tex`
+  (the last option marks the changes of the abstract). `CHANGEMENTS.md` lists the main changes
+  section by section, with the pages of this PDF.
 - `refs-theorie.bib`: bibliography of the revised manuscript.
 
 The code, results and scripts cited in the manuscript are those of the tag `coap-2026` of the
