@@ -1,7 +1,7 @@
 # Numerical experiments of the paper
 
 The numerical results of the paper *A structured quasi-Newton augmented Lagrangian algorithm
-for nonlinear least-squares with linear and nonlinear constraints* (P. Borie, F. Bastin and
+for nonlinear least squares with linear and nonlinear constraints* (P. Borie, F. Bastin and
 S. Dellacherie) come from the version of this repository tagged `coap-2026`. Everything they
 involve is in the `benchmark` folder, and the manuscript is in `preprint`.
 

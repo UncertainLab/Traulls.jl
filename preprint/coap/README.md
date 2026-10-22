@@ -10,8 +10,9 @@
   section by section, with the pages of this PDF.
 - `refs-theorie.bib`: bibliography of the revised manuscript.
 
-The code, results and scripts cited in the manuscript are those of the tag `coap-2026` of the
-repository (commit `9e0a332`, also on `main`).
+The code, results and scripts of the paper are those of the tag `coap-2026` of the repository,
+whose content is also on `main`. The scripts are described in `docs/src/benchmarks.md`, and
+`benchmark/paper_numbers.jl` prints the aggregated numbers of Sections 2.4, 4.2 and 4.3.
 The numerical results of Section 4 come from the timed campaign of 2026-10-21, run with the
 solver code of commit `3f0744f` on `main` (the campaign was launched at `3b97a8c`,
 which only adds results), whose files are in `benchmark/results`.
