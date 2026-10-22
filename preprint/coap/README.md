@@ -11,7 +11,7 @@
 The code, results and scripts cited in the manuscript are those of the tag `coap-2026` of the
 repository (commit `9e0a332`, also on `main`).
 The numerical results of Section 4 come from the timed campaign of 2026-10-21, run with the
-solver code of commit `3f0744f` on branch `align-paper` (the campaign was launched at `3b97a8c`,
+solver code of commit `3f0744f` on `main` (the campaign was launched at `3b97a8c`,
 which only adds results), whose files are in `benchmark/results`.
 The figures `Fig1.pdf` to `Fig15.pdf` are those of `preprint/figures` on that branch, produced by
 `benchmark/make_figures.jl` and `benchmark/residual_cost_analysis.jl`.
