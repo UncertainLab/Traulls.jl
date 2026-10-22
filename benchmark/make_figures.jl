@@ -1,6 +1,6 @@
-# Performance profiles of the paper (Figures 1 to 14), built from the result files with the
-# code of profiles.ipynb and saved in the preprint folder. Figure 15 is produced by
-# residual_cost_analysis.jl.
+# Performance profiles of the paper (files fig1 to fig14, which make up Figures 2, 3, 4 and 6),
+# built from the result files with the code of profiles.ipynb and saved in the preprint
+# folder. The file fig15 (Figure 5) is produced by residual_cost_analysis.jl.
 #
 # Usage, from the benchmark folder:
 #     julia --project=. make_figures.jl

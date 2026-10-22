@@ -9,6 +9,7 @@ makedocs(
         "Home" => "index.md",
         "Method" => "method.md",
         "Tutorials" => "tutorials.md",
+        "Numerical experiments" => "benchmarks.md",
         "Reference" => "reference.md"
     ],
     warnonly = [:missing_docs]
