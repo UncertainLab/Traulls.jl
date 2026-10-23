@@ -85,11 +85,12 @@ documentation.
   (default: `1000`)
 - `max_cg_iter`: Maximum number of minor iterates for the gradient projection loop
   (default: `50`)
-- `eps_active`: Threshold of the `ε`-active set strategy for problems with general linear
-  constraints (default: `1e-3`; `0` disables it). At outer iteration `K`, the bounds within
-  distance `min(eps_active, ωₖ)` of the current point, `ωₖ` being the relative criticality
-  tolerance of the subproblem, are treated as active in the choice of the variables fixed at
-  the start of the Cauchy step and in the criticality measure.
+- `eps_active`: Threshold of the `ε`-active set used in the criticality measure of problems
+  with general linear constraints (default: `1e-3`; `0` disables it). At outer iteration `K`,
+  the bounds within distance `min(eps_active, ωₖ)` of the current point, `ωₖ` being the
+  relative criticality tolerance of the subproblem, are treated as active in the stopping test
+  of the inner iterations, and those within distance `min(eps_active, ω_*)` in the final
+  test. Any positive value is suitable. The Cauchy step does not depend on it.
 
 ## Miscellaneous
 
@@ -384,8 +385,8 @@ documentation.
   involed in linear algebra computations
 - `patience_counter`: Maximum number of consecutive stalling iterations before exiting the
   algorithm (default: `3`)
-- `eps_active`: threshold of the `ε`-active set used in the Cauchy step and in the
-  criticality measure when the problem has general linear constraints (default: `0`)
+- `eps_active`: threshold of the `ε`-active set used in the criticality measure when the
+  problem has general linear constraints (default: `0`)
 - `verbose`:Boolean. If set to `true`, print iteration detail into `io` (default: false)
 - `io`: input/output stream to log iteration detail (default: `stdout`)
 """
@@ -473,8 +474,7 @@ function solve_subproblem!(
             max_cg_iter,
             reltol_crit,
             reltol_crit,
-            workspace;
-            eps_active=eps_active)
+            workspace)
 
         # Evaluate the objective at trial point
         x .+= s
@@ -584,10 +584,6 @@ description of the method is given in the [Method](@ref Method) page of the docu
 - `workspace`: Instance of `Workspace` whose fields contain pre-allocated memory for vectors
   involed in linear algebra computations
 
-# Keywords
-
-- `eps_active`: threshold of the `ε`-active set used in the Cauchy step (default: `0`)
-
 # On return
 
 - `s`: modified in-place, stores the trial step
@@ -606,8 +602,7 @@ function projected_gradient!(
     max_cg_iter::Int,
     tol_pg::T,
     mintol_cg::T,
-    workspace::Workspace{T};
-    eps_active::T = zero(T)) where T
+    workspace::Workspace{T}) where T
 
     # Buffers
     Hs = workspace.hess_vec
@@ -632,7 +627,7 @@ function projected_gradient!(
                  proj_op,
                  gproj,
                  Hs;
-                 eps_active = eps_active)
+                 cauchy_buffers(proj_op, workspace)...)
 
     # Set up for conjugate gradient iterations
     mul!(Hs, hess_op, s)

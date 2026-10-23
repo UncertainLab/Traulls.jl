@@ -846,6 +846,34 @@ multiplier.
 bound_multipliers(P::SubspaceProjector) = view(P.pbuf, 1:P.p)
 
 """
+    copy_bound_multipliers!(θ, P::SubspaceProjector)
+
+Scatter the multipliers of the active bounds formed by the last projection with `P` (see
+[`bound_multipliers`](@ref)) into the vector `θ` of size `n`, indexed by the variables:
+`θ[P.fixidx[k]]` receives entry `k` of the multipliers, and the other entries, including those
+of the redundant active bounds, are set to `0`.
+
+The multipliers are copied so that they survive the next projections with `P` and the changes
+in the order of `P.fixidx`.
+"""
+function copy_bound_multipliers!(θ::AbstractVector{T}, P::SubspaceProjector{T}) where T
+
+    fill!(θ, zero(T))
+    for k in 1:P.p
+        θ[P.fixidx[k]] = P.pbuf[k]
+    end
+    return θ
+end
+
+"""
+    is_represented(P::SubspaceProjector, i)
+
+Return `true` if the bound on variable `i` is active and represented in the factor `L_H` of
+`P`, `false` if it is inactive or redundant.
+"""
+is_represented(P::SubspaceProjector, i::Int) = P.fixpos[i] > 0
+
+"""
     wrong_sign_bounds(x, xₗ, xᵤ, P; eps_bound = sqrt(eps(T)), tol = 0, eps_active = 0)
 
 Find the active bounds whose multipliers, formed by the last projection of the gradient `g`

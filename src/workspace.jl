@@ -28,6 +28,12 @@ involved into intermediate computations.
 - `r`: residual vector (CG)
 - `v`: projected residual (CG)
 - `p`: conjugate direction (CG)
+- `eta`: multipliers of the active bounds along the projected gradient path (Cauchy step)
+- `theta`: rates of change of these multipliers on the current piece of the path
+- `side`: side of the active bounds, `1` for a lower bound, `-1` for an upper bound and `0`
+  when both bounds are active
+- `dhat`: minimizer on the current working set in the local cone projection
+- `dstep`: step of the local cone projection
 """
 mutable struct Workspace{T<:Real}
 
@@ -47,6 +53,13 @@ mutable struct Workspace{T<:Real}
     r::Vector{T}
     v::Vector{T}
     p::Vector{T}
+
+    # Cauchy step along the projected gradient path over a polyhedron
+    eta::Vector{T}
+    theta::Vector{T}
+    side::Vector{Int8}
+    dhat::Vector{T}
+    dstep::Vector{T}
 end
 
 # Constructor for `Workspace` structure
@@ -57,8 +70,21 @@ function Workspace(T::DataType, n::Int, m::Int, p::Int)
 
     Workspace{T}(zeros(T,n),zeros(T,m),zeros(T,p),zeros(T,n),zeros(T,n),zeros(T,n),
               zeros(T,n),zeros(T,n),zeros(T,n),zeros(T,n),zeros(T,n),zeros(T,n),
-              zeros(T,n))
+              zeros(T,n),zeros(T,n),zeros(T,n),zeros(Int8,n),zeros(T,n),zeros(T,n))
 end
+
+"""
+    cauchy_buffers(proj_op, wrkspc)
+
+Return the buffers of `wrkspc` used by [`cauchy_step!`](@ref) with the projector `proj_op`, as
+a `NamedTuple` of keyword arguments. Only the path over a polyhedron
+([`SubspaceProjector`](@ref)) needs buffers in addition to those passed as arguments.
+"""
+cauchy_buffers(::CoordinateSubspaceProjector, wrkspc::Workspace) = (;)
+
+cauchy_buffers(::SubspaceProjector, wrkspc::Workspace) =
+    (eta = wrkspc.eta, theta = wrkspc.theta, side = wrkspc.side, dhat = wrkspc.dhat,
+     dstep = wrkspc.dstep)
 
 """
     reset_workspace!(wrkspc)
@@ -81,6 +107,11 @@ function reset_workspace!(wrkspc::Workspace{T}) where T
     wrkspc.r .= zero_T
     wrkspc.v .= zero_T
     wrkspc.p .= zero_T
+    wrkspc.eta .= zero_T
+    wrkspc.theta .= zero_T
+    wrkspc.side .= 0
+    wrkspc.dhat .= zero_T
+    wrkspc.dstep .= zero_T
 
     return
 end

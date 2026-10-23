@@ -53,9 +53,12 @@ projected_gradient!
 
 ```@docs
 cauchy_step!
+next_breakpoint
+next_release
+local_cone_projection!
+projected_direction!
 initial_fixed!
 initial_fixed
-next_breakpoint
 ```
 
 ### Projected conjugate gradient

@@ -69,8 +69,9 @@
     end
 end
 
-# Regression test: once x₂ ≤ 1 becomes active on the Cauchy path, the projected direction
-# vanishes up to roundoff and must not produce a step leaving the feasible set.
+# Regression test: once x₂ ≤ 1 becomes active on the Cauchy path, at the vertex (-1, 1, 0), the
+# projected direction vanishes up to roundoff. This piece of the path is stationary and must
+# not produce a step leaving the feasible set.
 @testset "Vanishing projected direction in the Cauchy step" begin
 
     n = 4
@@ -104,7 +105,8 @@ end
 
 # Regression tests: the vertex V = (-1, 1, 0) of {x₁ + x₂ + x₃ = 0, x₁ ≥ -1, x₂ ≤ 1} has a
 # zero reduced gradient for any objective, but it is not critical when the multiplier of
-# x₁ ≥ -1 is negative. The solver must neither stop there nor keep the bound fixed.
+# x₁ ≥ -1 is negative. The solver must neither stop there nor keep the bound fixed: the
+# Cauchy path releases the bound at V, at its start or after a stationary piece.
 @testset "Release of bounds with multipliers of the wrong sign" begin
 
     n = 4
@@ -127,7 +129,8 @@ end
     end
 
     @testset "Starting at the vertex, bounds inactive at the solution" begin
-        # Multipliers at V: -5 for x₁ ≥ -1 (wrong sign), -1 for x₂ ≤ 1
+        # Multipliers at V: -5 for x₁ ≥ -1 (wrong sign), -1 for x₂ ≤ 1. The projection onto
+        # the tangent cone at V frees x₁ ≥ -1 at the start of the path
         model = vertex_model([2.0, 0.0, -2.0, 1.0], [-1.0, 1.0, 0.0, 1.0])
         results = traulls(model)
 
@@ -136,7 +139,8 @@ end
     end
 
     @testset "Reaching the vertex along the face x₁ = -1" begin
-        # Multipliers at V: -1 for x₁ ≥ -1 (wrong sign), -4 for x₂ ≤ 1
+        # Multipliers at V: -1 for x₁ ≥ -1 (wrong sign), -4 for x₂ ≤ 1. The path stays at V
+        # until the multiplier of x₁ ≥ -1 vanishes
         model = vertex_model([-1.0, 4.0, -1.0, 1.0], [-1.0, -2.0, 3.0, 1.0])
         results = traulls(model)
         sol = results.solution
@@ -147,8 +151,9 @@ end
         @test all(xlow .- 1e-10 .<= sol .<= xupp .+ 1e-10)
     end
 
-    @testset "ε-active set strategy" begin
-        # Starting at the vertex, close to the vertex and along the face x₁ = -1
+    @testset "ε-active set in the stopping test" begin
+        # Starting at the vertex, close to the vertex and along the face x₁ = -1. The
+        # ε-active set only enters the criticality measure, not the Cauchy step
         for (target, x0, xsol) in (
                 ([2.0, 0.0, -2.0, 1.0], [-1.0, 1.0, 0.0, 1.0], [2.0, 0.0, -2.0, 1.0]),
                 ([-1.0, 4.0, -1.0, 1.0], [-1.0 + 1e-6, 1.0 - 3e-6, 2e-6, 1.0],

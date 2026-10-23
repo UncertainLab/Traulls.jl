@@ -220,52 +220,74 @@ indices of the components fixed at one of their bounds.
 ### Cauchy step
 
 The Cauchy step is the first local minimizer of the model $q_j$ along the projected
-gradient path.
+gradient path
 ```math
-s(t) = \mathcal{P}\big[x_j - t g_j\big] - x_j, \quad t \ge 0,
+s(t) = P_D\big[-t g_j\big], \quad t \ge 0, \qquad
+D = \{s \mid As = 0,\ x_j + s \in B_j\},
 ```
-where $\mathcal{P}$ is the projection onto the feasible set. This path is piecewise 
-linear and its breakpoints are the values of $t$ at which a component reaches a bound of 
-$B_j$. The model restricted to each segment is a one-dimensional quadratic, so the 
-segments are examined successively until the first local minimizer is found.
+where $P_D$ is the projection onto the set $D$ of the feasible steps, the bounds of the
+trust region being ordinary bounds of $D$. This path is continuous and piecewise linear.
+The model restricted to each piece is a one-dimensional quadratic, so the pieces are
+examined successively until the first local minimizer is found.
 
-The path is built as a sequence of segments along the directions $d = -P g_j$ where $P$
-is the projection onto $\{s \mid As = 0, \ s_i = 0 \ i \in \mathcal{A}\}$. The search 
-moves along $d$ until a component reaches a bound of $B_j$ (breakpoint), this bound is 
-added to $\mathcal{A}$, the projector $P$ is updated and a new direction is computed. 
+On each piece, the path moves along $d = -P g_j$, where $P$ is the projection onto
+$\{s \mid As = 0, \ s_i = 0, \ i \in \mathcal{A}\}$ and $\mathcal{A}$ is the working set
+of the bounds held at their value. The multipliers $\eta(t)$ of these bounds in the
+projection, defined by $t g_j + s(t) = A^T\xi(t) + \sum_{i \in \mathcal{A}} \eta_i(t) e_i$,
+are affine in $t$. Their slopes $\theta$ are the bound multipliers of the least-squares
+decomposition $g_j = P g_j + A^T y_1 + E_{\mathcal{A}} \theta$, which are formed by the
+projection itself. A piece ends at the first of two events:
 
-Before computing the path, the bounds active at $x_j$ whose multiplier has the sign
-required at a first-order critical point are fixed in $\mathcal{A}$. In the
-bound-constrained case, these are the components that lie at a bound with $-g_j$ pointing
-outwards the feasible set. With general linear constraints, the multipliers are the
-least-squares estimates $y_2$ of the decomposition
-$g_j = P g_j + A^T y_1 + E_{\mathcal{A}} y_2$ computed with all the active bounds, and the
-bounds whose multiplier has the wrong sign are freed. When the active bounds and the rows
-of $A$ are linearly dependent, these multipliers are not unique, and those that minimize the
-sum of their squared sign violations are used. A freed bound along which the
-resulting direction still points outwards is fixed again at the first breakpoint, of zero
-length.
+- **a hit**: a free component reaches a bound of $B_j$, which enters $\mathcal{A}$;
+- **a release**: the multiplier of a bound of $\mathcal{A}$ vanishes, i.e. reaches the
+  wrong sign, nonnegative at a lower bound and nonpositive at an upper bound. The release
+  time follows from a ratio test on $\eta$ and $\theta$, and the bound leaves
+  $\mathcal{A}$ by a rank-one update of the factor of $P$.
 
-With the option `eps_active > 0` of [`traulls`](@ref) (default `1e-3`; `0` disables the
-strategy), the bounds lying within distance
-$\varepsilon_k = \min(\varepsilon_{\max}, \omega_k)$ of $x_j$ ($\varepsilon$-active bounds),
-where $\varepsilon_{\max}$ is the value of `eps_active` and $\omega_k$ the criticality
-tolerance of the subproblem, are treated as active: the corresponding variables are fixed
-at their current values, their multipliers are checked as above, and the freed bounds
-along which the direction points outwards are fixed again explicitly. The path then reaches
-no bound closer than $\varepsilon_k$, which guarantees a decrease of the model independent
-of the distance of the iterates to the inactive bounds; the criticality measure is computed
-with the same $\varepsilon$-active set. The search stops when a local
-minimizer is found on a segment, when the slope of the model along the path is
-nonnegative, or when no free direction remains, either because the subspace is saturated
-or because the projected direction vanishes at machine precision. After a breakpoint, the
-direction is considered to vanish as soon as $\|d\|_\infty \le \sqrt{\epsilon_M}\,
-\|g\|_\infty$: below that threshold, the rounding errors of the projection, of order
-$\epsilon_M \|g\|$, dominate the direction, and following it could move the step out of
-the null space of $A$.
+In the bound-constrained case, no bound is ever released, and the path only consists of
+hits.
+
+At $t = 0$ and at each breakpoint, the direction of the next piece is the projection of
+$-g_j$ onto the critical cone of the projection (Haraux, 1977). The bounds with a nonzero
+multiplier stay fixed, while those with a vanishing multiplier (weakly active), i.e. the
+bounds just reached or released and the redundant ones, are subject to the sign condition
+$d_i \ge 0$ at a lower bound and $d_i \le 0$ at an upper bound. This small quadratic program
+is solved by a primal active-set method, which starts with all the weakly active bounds
+fixed, frees those whose multiplier has the wrong sign and fixes again those along which
+the direction would point outwards. At a breakpoint where a single bound is reached or
+released, it ends after at most one change of $\mathcal{A}$. At $t = 0$, it yields the
+projection of $-g_j$ onto the tangent cone of the feasible set at $x_j$.
+
+When the active bounds and the rows of $A$ are linearly dependent, e.g. at the degenerate
+vertices of a simplex with explicit upper bounds or of a transportation polytope, the
+multipliers are not unique: the redundant bounds, which are not represented in the factor
+of $P$, keep a zero multiplier, and the active-set method keeps the direction exactly
+whenever a change of $\mathcal{A}$ leaves the subspace unchanged.
+
+A piece along which the direction vanishes is stationary: the step does not move while the
+multipliers keep evolving until the next release. Stationary pieces are skipped in the
+search for the first local minimizer, which stops when the minimizer of the model on a
+piece lies within it, when the slope of the model at the start of a piece is nonnegative,
+or at the end of the path, when the direction vanishes and no release is ahead. After the
+first piece, the direction is considered to vanish as soon as
+$\|d\|_\infty \le \sqrt{\epsilon_M}\,\|g\|_\infty$: below that threshold, the rounding errors
+of the projection, of order $\epsilon_M \|g\|$, dominate the direction, and following it
+could move the step out of the null space of $A$.
+
+The number of pieces is finite, since each working set occurs on a single interval of $t$,
+but it is no longer bounded by $n - m$; it is limited to $10(n - m) + 10$. The bounds
+active at the Cauchy point are then fixed for the conjugate gradient iterations.
 
 The Cauchy step provides a sufficient reduction of the model, which is enough to guarantee
 the convergence of the trust-region method.
+
+The option `eps_active` of [`traulls`](@ref) (default `1e-3`; `0` disables it) does not
+affect the Cauchy step: it only enters the [criticality measure](@ref method_stop) used in
+the stopping tests, in which the bounds lying within distance
+$\varepsilon_k = \min(\varepsilon_{\max}, \omega_k)$ of $x_j$ ($\varepsilon$-active
+bounds), $\varepsilon_{\max}$ being the value of `eps_active` and $\omega_k$ the
+criticality tolerance of the subproblem, are treated as active. Any positive value of
+`eps_active` is suitable.
 
 ### Beyond the Cauchy point
 
@@ -413,6 +435,13 @@ quantity $\pi(x, g)$ that depends on the structure of the linear constraints.
   feasible set, critical or not; with the sign condition, $\pi(x, g) = 0$ certifies that
   $x$ is first-order critical, and $\pi(x, g)$ bounds $\|P_\Omega[x - g] - x\|$ up to a
   factor depending on the dimension.
+
+  With the option `eps_active > 0` of [`traulls`](@ref), the bounds active at $x$ are
+  replaced by the $\varepsilon$-active bounds, those lying within distance
+  $\varepsilon = \min(\varepsilon_{\max}, \omega)$ of $x$, where $\varepsilon_{\max}$ is the
+  value of `eps_active` and $\omega$ the relative criticality tolerance of the test. A bound
+  close to $x$ but not active then cannot keep the measure away from zero, so that the inner
+  iterations terminate for any $\varepsilon_{\max} > 0$.
 
 ### Outer loop
 
