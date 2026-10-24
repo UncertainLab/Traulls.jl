@@ -1,0 +1,1002 @@
+\documentclass[11pt,a4paper]{article}
+
+\usepackage[T1]{fontenc}
+\usepackage{lmodern}
+\usepackage[margin=2.6cm]{geometry}
+\usepackage{amsmath,amssymb,amsthm,mathtools}
+\usepackage{microtype}
+\usepackage{booktabs}
+\usepackage[shortlabels]{enumitem}
+\usepackage{algorithm}
+\usepackage[noend]{algpseudocode}
+\usepackage{xcolor}
+\usepackage{listings}
+\usepackage[colorlinks=true,linkcolor=blue!60!black,citecolor=blue!60!black,urlcolor=blue!60!black]{hyperref}
+\usepackage[capitalize,nameinlink]{cleveref}
+
+\numberwithin{equation}{section}
+\setlength{\emergencystretch}{2em} % long labels in typewriter font
+
+\theoremstyle{plain}
+\newtheorem{theorem}{Theorem}
+\newtheorem{proposition}[theorem]{Proposition}
+\newtheorem{lemma}[theorem]{Lemma}
+\newtheorem{corollary}[theorem]{Corollary}
+\newtheorem{lemmaaux}{Lemma}
+\renewcommand{\thelemmaaux}{\Alph{lemmaaux}}
+\theoremstyle{definition}
+\newtheorem*{definition*}{Definition}
+\theoremstyle{remark}
+\newtheorem*{remark*}{Remark}
+
+\crefname{proposition}{Proposition}{Propositions}
+\crefname{lemma}{Lemma}{Lemmas}
+\crefname{corollary}{Corollary}{Corollaries}
+\crefname{lemmaaux}{Lemma}{Lemmas}
+
+\newcommand{\R}{\mathbb{R}}
+\newcommand{\inner}[2]{\langle #1,#2\rangle}
+\newcommand{\ri}{\operatorname{ri}}
+\newcommand{\aff}{\operatorname{aff}}
+\newcommand{\dist}{\operatorname{dist}}
+\newcommand{\Tend}{T_{\mathrm{end}}}
+\newcommand{\kG}{\kappa_G}
+\newcommand{\calA}{\mathcal{A}}
+\newcommand{\calN}{\mathcal{N}}
+\newcommand{\calT}{\mathcal{T}}
+\newcommand{\calW}{\mathcal{W}}
+\newcommand{\calX}{\mathcal{X}}
+% Typewriter text with line breaks allowed after underscores
+\newcommand{\codeus}{\textunderscore\allowbreak}
+\newcommand{\code}[1]{{\let\_\codeus\texttt{#1}}}
+
+\lstset{basicstyle=\ttfamily\small,columns=fullflexible,keepspaces=true,
+  frame=single,framerule=0.3pt,rulecolor=\color{black!30},
+  commentstyle=\color{black!60},morecomment=[l]{\#}}
+
+\title{Global convergence of the inner iterations\\with the exact projected gradient path}
+\author{Traulls.jl --- working notes for the COAP revision}
+\date{October 24, 2026}
+
+\begin{document}
+
+\maketitle
+
+\begin{abstract}
+These notes prove the global convergence of the inner trust-region iterations
+(Algorithm~2 of the manuscript) when the Cauchy step follows the exact projected gradient
+path over the polyhedron $\Omega\cap\{\|s\|_\infty\le\Delta\}$. They show that the first local
+minimizer of the model along this path has no uniform decrease guarantee over a polyhedron,
+identify the bound releases as the cause, and add a one-parameter safeguard under which the
+standard Cauchy decrease holds with no rank assumption. They complement
+\code{cauchy-projected-gradient-path.md}, whose open points~1 and~2 (§9) they settle. The
+setting is idealized: exact arithmetic, exact path, no tolerances. The parking, tie and noise
+tolerances of the implementation are not discussed.
+\end{abstract}
+
+\section*{Summary}
+
+\begin{enumerate}[1.]
+\item \textbf{The first local minimizer alone has no uniform decrease guarantee over a
+  polyhedron.} The model decrease it provides cannot be bounded below by any positive function
+  of $h(x)=\|P_\Omega(x-g)-x\|$, $\pi_\varepsilon(x)$, $\Delta$ and $\|H\|$. This is not a
+  weakness of the proof. A four-variable example (\cref{subsec:counterexample}) has
+  $\Delta=1$, $H\succeq0$ with $\|H\|=2$, $h\to\sqrt2/10$ and $\pi_\varepsilon=0.2$, while the
+  decrease at the first local minimizer is $3.7\delta+O(\delta^2)\to0$. It is the zigzag
+  example of the manuscript plus one free variable, which turns the stationary piece into a
+  \emph{slow} piece.
+\item \textbf{The cause is the releases.} Along a piece, the speed $\|s'(t)\|$ is the norm of
+  the reduced gradient. It decreases at a hit and increases at a release (\cref{lemma:speed}).
+  If no bound is released after the first local minimizer, as on a box, the former argument is
+  correct and gives the decrease of \cref{subsec:nested} with no safeguard
+  (\cref{prop:nested}). The old draft's error (nested tangent spaces) is exactly the missing
+  release case.
+\item \textbf{A one-parameter safeguard restores the guarantee.} Let
+  $L(t)=-\inner{g}{s(t)}$ and let $t_G$ be the first $t>0$ at which $\psi(t)=q(s(t))$ reaches
+  $-\kG L(t)$, with $\kG\in(0,1)$. The first local minimizer is kept whenever $t_G$ (or the
+  end of the path) comes first. Otherwise the scan goes on to the next local minimizer after
+  $t_G$ and returns the best one met (\cref{subsec:safeguard}). In random tests the step
+  changes by less than 0.7\%, and the safeguard costs one extra piece in the median case
+  (\cref{subsec:evidence}).
+\item \textbf{Cauchy decrease} (\cref{theo:cauchy_decrease}), with no rank assumption, no
+  threshold on $\varepsilon$, and no dimension constant:
+  \[
+    -q(s^C)\ \ge\ \frac{\kG}{2}\,h(x)\,\min\Big(\Delta,\ \frac{\kappa'\,h(x)}{1+\|H\|}\Big),
+    \qquad \kappa'=\min(1,4(1-\kG)).
+  \]
+\item \textbf{Convergence.} $\liminf_k h(x_k)=0$ with the proof of
+  \code{theo:\allowbreak inner\_convergence} unchanged. Since $h$ is continuous, the growth assumption on
+  $b_k$ also gives $\lim_k h(x_k)=0$ (\cref{theo:limit}).
+\item \textbf{Stopping test.} If $h(x)\le\varepsilon$, then
+  $\pi_\varepsilon(x)\le\max(1,1/\sigma^+)\,h(x)$. Here $\sigma^+$ is the smallest nonzero
+  singular value of the matrices $[A;E_S^\top]$, and the multipliers are those of minimal sign
+  violation, which is what the code computes. Hence the test $\pi_\varepsilon(x_k)\le\omega$ is
+  met after finitely many iterations, for every $\varepsilon>0$ (\cref{cor:termination}). The
+  outer analysis does not change.
+\end{enumerate}
+
+% ---------------------------------------------------------------------------------------------
+\section{Setting}\label{sec:setting}
+
+\subsection{Step set, path, model}
+
+Fix an inner iterate $x\in\Omega$, its gradient $g$, a symmetric $H$ and $\Delta>0$. The steps
+lie in the polyhedron
+\begin{gather*}
+  D=\{s\in\R^n \mid As=0,\ \ell^\Delta\le s\le u^\Delta\},\\
+  \ell^\Delta_i=\max(-\Delta,\,l_i-x_i)\le0,\qquad u^\Delta_i=\min(\Delta,\,u_i-x_i)\ge0,
+\end{gather*}
+so $0\in D$, $D$ is bounded, and $D=(\Omega-x)\cap\{\|s\|_\infty\le\Delta\}$. The projected
+gradient path is $s(t)=P_D(-tg)$, $t\ge0$, and
+\[
+  \psi(t)=q(s(t))=\inner{g}{s(t)}+\tfrac12\inner{s(t)}{Hs(t)},\qquad L(t)=-\inner{g}{s(t)}.
+\]
+$L$ is the decrease of the \emph{linear} model along the path, and
+$\psi(t)=-L(t)+\tfrac12\inner{s(t)}{Hs(t)}$. The criticality measure is the projected
+gradient
+\[
+  p=P_\Omega(x-g)-x,\qquad h(x)=\|p\|.
+\]
+It is continuous in $x$, and $h(x)=0$ if and only if $x$ is first-order critical. We also
+mention the measure
+$\chi(x)=-\min\{\inner{g}{d}\mid x+d\in\Omega,\ \|d\|_\infty\le1\}$ of~\cite{CGT00}, which is
+not needed in the proofs.
+
+\subsection{Faces, normal cones and projections}\label{subsec:faces}
+
+This subsection gathers the facts on polyhedra that the description of the path uses. Since
+$\Delta<\infty$, all the bounds of $D$ are finite. We write them as pairs: $\beta=(i,-)$ stands
+for $s_i\ge\ell^\Delta_i$ and $\beta=(i,+)$ for $s_i\le u^\Delta_i$. With
+\[
+  a_{(i,-)}=-e_i,\quad b_{(i,-)}=-\ell^\Delta_i,\qquad a_{(i,+)}=e_i,\quad b_{(i,+)}=u^\Delta_i,
+\]
+the bound $\beta$ reads $\inner{a_\beta}{s}\le b_\beta$, and
+$D=\{s\mid As=0,\ \inner{a_\beta}{s}\le b_\beta\text{ for all }\beta\}$. For $s\in D$,
+$\calA(s)=\{\beta\mid\inner{a_\beta}{s}=b_\beta\}$ is the set of bounds active at $s$. For a set
+$\calW$ of bounds, $I(\calW)=\{i\mid(i,-)\in\calW\text{ or }(i,+)\in\calW\}$ is the set of the
+variables concerned, and $E_I$ denotes the matrix of the columns $e_i$, $i\in I$.
+
+\begin{definition*}
+\leavevmode
+\begin{enumerate}[(a)]
+\item A \emph{face} of $D$ is a nonempty set of the form
+  \[
+    F_\calW=\{s\in D\mid\inner{a_\beta}{s}=b_\beta\text{ for all }\beta\in\calW\},
+  \]
+  where $\calW$ is a set of bounds. For a face $F$, we denote by
+  $\calW(F)=\{\beta\mid\inner{a_\beta}{s}=b_\beta\text{ for all }s\in F\}$ the set of the bounds
+  active on all of $F$, and $I(F)=I(\calW(F))$.
+\item The \emph{affine hull} of a nonempty set $S\subseteq\R^n$ is the smallest affine subspace
+  of $\R^n$ containing $S$, that is, the set of its affine combinations
+  \[
+    \aff S=\Big\{\sum_{k=1}^p\lambda_ks_k\ \Big|\ p\ge1,\ s_k\in S,\ \lambda_k\in\R,\
+    \sum_{k=1}^p\lambda_k=1\Big\}.
+  \]
+  An affine subspace $E$ is the translate $E=c+T$ of a unique linear subspace $T=E-E$, its
+  \emph{direction space}, by any $c\in E$.
+\item The \emph{relative interior} of a convex set $S$ is its interior relative to $\aff S$:
+  \[
+    \ri S=\big\{s\in S\ \big|\ \exists r>0,\ \{v\in\aff S\mid\|v-s\|<r\}\subseteq S\big\}.
+  \]
+\item The \emph{normal cone} to $D$ at $s\in D$ is
+  $N_D(s)=\{w\in\R^n\mid\inner{w}{v-s}\le0\text{ for all }v\in D\}$. As an intersection of closed
+  half-spaces, it is a closed convex cone.
+\end{enumerate}
+\end{definition*}
+
+A face $F$ is convex, as the intersection of $D$ with hyperplanes, and $F=F_{\calW(F)}$. Indeed,
+$F=F_\calW$ for some $\calW\subseteq\calW(F)$, so that $F_{\calW(F)}\subseteq F_\calW=F$, and
+$F\subseteq F_{\calW(F)}$ by definition of $\calW(F)$.
+
+\begin{lemmaaux}[faces]\label[lemmaaux]{lemma:faces}
+Let $F$ be a face of $D$, $\calW=\calW(F)$ and $I=I(F)$.
+\begin{enumerate}[(i)]
+\item The affine hull of $F$ is
+  \[
+    \aff F=\{s\in\R^n\mid As=0,\ \inner{a_\beta}{s}=b_\beta\text{ for all }\beta\in\calW\},
+  \]
+  i.e.\ the points with $As=0$, $s_i=\ell^\Delta_i$ for $(i,-)\in\calW$ and $s_i=u^\Delta_i$ for
+  $(i,+)\in\calW$. Its direction space is
+  $T_F=\{v\in\R^n\mid Av=0,\ v_i=0\text{ for all } i\in I\}$.
+\item $\ri F=\{s\in D\mid\calA(s)=\calW\}=\{s\in\aff F\mid\inner{a_\beta}{s}<b_\beta\text{ for all }\beta\notin\calW\}$.
+  In particular, $\ri F$ is convex and nonempty.
+\item Every $s\in D$ belongs to $\ri F$ for exactly one face $F$, namely $F=F_{\calA(s)}$, and
+  then $\calW(F)=\calA(s)$.
+\item $D$ has finitely many faces.
+\end{enumerate}
+\end{lemmaaux}
+
+\begin{proof}
+We first build a point $\hat s\in F$ with $\calA(\hat s)=\calW$. For each bound $\beta\notin\calW$,
+there is $s^\beta\in F$ with $\inner{a_\beta}{s^\beta}<b_\beta$, by definition of $\calW$. Let
+$\hat s$ be the average of these points (any point of $F$ if every bound is in $\calW$). Then
+$\hat s\in F$ by convexity. For $\beta\notin\calW$, $\inner{a_\beta}{\hat s}$ is the average of
+numbers $\le b_\beta$, one of which is $<b_\beta$, so $\inner{a_\beta}{\hat s}<b_\beta$. The bounds
+of $\calW$ are active at $\hat s$ since $\hat s\in F$.
+
+(i) Let $E$ be the right-hand side. It is an affine subspace containing $F$, so
+$\aff F\subseteq E$. Conversely, let $e\in E$ and $s_\lambda=\hat s+\lambda(e-\hat s)$ for
+$\lambda>0$. Then $s_\lambda\in E$, so $As_\lambda=0$ and the bounds of $\calW$ are active at
+$s_\lambda$. The finitely many strict inequalities $\inner{a_\beta}{\hat s}<b_\beta$,
+$\beta\notin\calW$, still hold at $s_\lambda$ for $\lambda$ small enough. Hence $s_\lambda\in D$
+and $s_\lambda\in F$. Then $e=(1-1/\lambda)\,\hat s+(1/\lambda)\,s_\lambda$ is an affine
+combination of points of $F$, and $e\in\aff F$. The direction space is
+$E-E=\{v\mid Av=0,\ \inner{a_\beta}{v}=0\ (\beta\in\calW)\}$, and
+$\inner{a_\beta}{v}=\pm v_i$ for $\beta=(i,\pm)$, which gives $T_F$.
+
+(ii) Let $s\in D$ with $\calA(s)=\calW$. Then $s\in F_\calW=F$. For $v\in\aff F=E$ close to $s$,
+the strict inequalities $\inner{a_\beta}{v}<b_\beta$, $\beta\notin\calW$, still hold, and the
+other constraints of $D$ hold with equality on $E$. So $v\in F$, and $s\in\ri F$. Conversely,
+let $s\in F$ and suppose that a bound $\beta\notin\calW$ is active at $s$. For $\lambda>0$, the
+point $s+\lambda(s-\hat s)$ belongs to $\aff F$, tends to $s$ as $\lambda\to0$, and violates
+$\beta$, since
+$\inner{a_\beta}{s+\lambda(s-\hat s)}=b_\beta+\lambda\big(b_\beta-\inner{a_\beta}{\hat s}\big)>b_\beta$.
+So $s\notin\ri F$. This proves the first equality. For the second, a point of $\aff F$ satisfies
+$As=0$ and the bounds of $\calW$ with equality. It thus belongs to $D$ with $\calA(s)=\calW$ if and
+only if the other bounds hold strictly. This set is the intersection of an affine subspace with
+open half-spaces, hence convex, and it contains $\hat s$.
+
+(iii) Let $s\in D$ and $F=F_{\calA(s)}$, a face since $s\in F$. Every $s'\in F$ satisfies the
+bounds of $\calA(s)$ with equality, so $\calA(s)\subseteq\calW(F)$. Conversely, the bounds of
+$\calW(F)$ are active at $s\in F$, so $\calW(F)\subseteq\calA(s)$. Hence $\calW(F)=\calA(s)$, and
+$s\in\ri F$ by (ii). If $s\in\ri F'$ for another face $F'$, then $\calW(F')=\calA(s)$ by (ii), and
+$F'=F_{\calW(F')}=F_{\calA(s)}=F$.
+
+(iv) There are finitely many sets of bounds.
+\end{proof}
+
+\begin{lemmaaux}[normal cones]\label[lemmaaux]{lemma:normal_cones}
+Let $s\in D$.
+\begin{enumerate}[(i)]
+\item $N_D(s)=\big\{A^\top\xi+\sum_{\beta\in\calA(s)}\lambda_\beta a_\beta\ \big|\ \xi\in\R^m,\
+  \lambda_\beta\ge0\big\}$.
+\item Equivalently, $w\in N_D(s)$ if and only if
+  $-w=A^\top\xi+\sum_{i\in I(\calA(s))}\eta_ie_i$ for some $\xi\in\R^m$ and $\eta$ with
+  $\sigma_i\eta_i\ge0$, where $\sigma_i=+1$ if only the lower bound of $i$ is active, $\sigma_i=-1$
+  if only the upper bound is, and $\sigma_i=0$ (no condition) if both are, i.e.\
+  $\ell^\Delta_i=u^\Delta_i$.
+\item For a face $F$, $N_D(s)$ is the same cone at every $s\in\ri F$. We denote it by $N_D(F)$.
+  It is contained in
+  $T_F^\perp=\operatorname{range}\begin{bmatrix}A^\top & E_{I(F)}\end{bmatrix}$.
+\end{enumerate}
+\end{lemmaaux}
+
+\begin{proof}
+(i) If $w=A^\top\xi+\sum_{\beta\in\calA(s)}\lambda_\beta a_\beta$ with $\lambda\ge0$, then for
+$v\in D$,
+$\inner{w}{v-s}=\inner{\xi}{A(v-s)}+\sum_{\beta\in\calA(s)}\lambda_\beta\big(\inner{a_\beta}{v}-b_\beta\big)\le0$,
+since $Av=As=0$ and $\inner{a_\beta}{s}=b_\beta$ for $\beta\in\calA(s)$. Conversely, let
+$w\in N_D(s)$. Then $s$ solves the linear program
+$\max\{\inner{w}{v}\mid Av=0,\ \inner{a_\beta}{v}\le b_\beta\text{ for all }\beta\}$. By the duality
+theorem of linear programming, its dual
+$\min\{\sum_\beta b_\beta\lambda_\beta\mid A^\top\xi+\sum_\beta\lambda_\beta a_\beta=w,\ \lambda\ge0\}$
+has a solution $(\xi,\lambda)$ with the same value $\inner{w}{s}$. Subtracting,
+$0=\sum_\beta b_\beta\lambda_\beta-\inner{w}{s}=\sum_\beta\lambda_\beta\big(b_\beta-\inner{a_\beta}{s}\big)$,
+a sum of nonnegative terms. So $\lambda_\beta=0$ for every $\beta\notin\calA(s)$.
+
+(ii) Group the two bounds of each variable:
+$\sum_{\beta\in\calA(s)}\lambda_\beta a_\beta=\sum_i(\lambda_{(i,+)}-\lambda_{(i,-)})\,e_i$, with
+$\lambda_{(i,\pm)}=0$ when $(i,\pm)$ is inactive. Set $\eta_i=\lambda_{(i,-)}-\lambda_{(i,+)}$ and
+change $\xi$ into $-\xi$. Then $\eta_i\ge0$ if only the lower bound is active, $\eta_i\le0$ if only
+the upper bound is, and $\eta_i$ is arbitrary if both are. Conversely, every such $\eta$ is
+obtained in this way.
+
+(iii) By (i), $N_D(s)$ only depends on $\calA(s)$, which equals $\calW(F)$ on $\ri F$ by
+\cref{lemma:faces}(ii). By \cref{lemma:faces}(i), $T_F=\{v\mid Av=0,\ E_{I(F)}^\top v=0\}$ is
+the null space of the matrix whose transpose is $[A^\top\ E_{I(F)}]$, so $T_F^\perp$ is the range
+of $[A^\top\ E_{I(F)}]$. By (ii), every element of $N_D(F)$ lies in this range.
+\end{proof}
+
+\begin{lemmaaux}[projections]\label[lemmaaux]{lemma:projections}
+Let $y\in\R^n$ and let $F$ be a face of $D$.
+\begin{enumerate}[(i)]
+\item $s=P_D(y)$ if and only if $s\in D$ and $y-s\in N_D(s)$. Moreover,
+  $\|P_D(y)-P_D(y')\|\le\|y-y'\|$ for all $y'\in\R^n$.
+\item $P_D(y)\in\ri F$ if and only if $y\in C_F:=\ri F+N_D(F)=\{s+w\mid s\in\ri F,\ w\in N_D(F)\}$.
+  In any decomposition $y=s+w$ with $s\in\ri F$ and $w\in N_D(F)$, necessarily $s=P_D(y)$.
+\item If $y\in C_F$, then $P_D(y)=P_{\aff F}(y)=c_F+P_{T_F}\,y$, where
+  $c_F=P_{\aff F}(0)\in T_F^\perp$.
+\item $C_F$ is convex.
+\end{enumerate}
+\end{lemmaaux}
+
+\begin{proof}
+(i) Let $f(v)=\frac12\|v-y\|^2$, which is strictly convex, so that $P_D(y)$ is its unique
+minimizer on $D$. For $s,v\in D$, $f(v)=f(s)+\inner{s-y}{v-s}+\frac12\|v-s\|^2$. If
+$\inner{y-s}{v-s}\le0$ for all $v\in D$, i.e.\ $y-s\in N_D(s)$, then $f(v)\ge f(s)$ on $D$.
+Conversely, if $s$ minimizes $f$ on $D$, then
+$0\le f(s+\tau(v-s))-f(s)=\tau\inner{s-y}{v-s}+\frac{\tau^2}2\|v-s\|^2$ for $v\in D$ and
+$\tau\in(0,1]$, by convexity of $D$. Dividing by $\tau$ and letting $\tau\to0$ gives
+$\inner{y-s}{v-s}\le0$. For the Lipschitz bound, write $s=P_D(y)$ and $s'=P_D(y')$. Adding the
+inequalities $\inner{y-s}{s'-s}\le0$ and $\inner{y'-s'}{s-s'}\le0$ gives
+$\|s-s'\|^2\le\inner{y-y'}{s-s'}\le\|y-y'\|\,\|s-s'\|$.
+
+(ii) If $s=P_D(y)\in\ri F$, then $w=y-s\in N_D(s)=N_D(F)$ by (i) and
+\cref{lemma:normal_cones}(iii), and $y=s+w\in C_F$. Conversely, let $y=s+w$ with $s\in\ri F$
+and $w\in N_D(F)$. Then $s\in D$ and $y-s=w\in N_D(s)$, so $s=P_D(y)$ by (i), and
+$P_D(y)\in\ri F$. This also proves the uniqueness of the decomposition.
+
+(iii) Let $E=\aff F=c+T_F$. For $s\in E$ with $y-s\in T_F^\perp$ and any $e\in E$, we have
+$s-e\in T_F$, hence $\|y-e\|^2=\|y-s\|^2+\|s-e\|^2$. So $P_E(y)$ is the unique $s\in E$ with
+$y-s\in T_F^\perp$. If $y\in C_F$, then $s=P_D(y)$ belongs to $\ri F\subseteq E$ and
+$y-s\in N_D(F)\subseteq T_F^\perp$ by (ii) and \cref{lemma:normal_cones}(iii), so $P_D(y)=P_E(y)$.
+For $y=0$, the characterization gives $c_F=P_E(0)\in T_F^\perp$. Then, for any $y$,
+$c_F+P_{T_F}y\in E$ and $y-c_F-P_{T_F}y=(y-P_{T_F}y)-c_F\in T_F^\perp$, so
+$P_E(y)=c_F+P_{T_F}y$.
+
+(iv) $\ri F$ is convex by \cref{lemma:faces}(ii), and $N_D(F)$ is a convex cone. The sum of two
+convex sets is convex:
+$\lambda(s_1+w_1)+(1-\lambda)(s_2+w_2)=\big(\lambda s_1+(1-\lambda)s_2\big)+\big(\lambda w_1+(1-\lambda)w_2\big)$
+for $\lambda\in[0,1]$.
+\end{proof}
+
+With $y=-tg$, \cref{lemma:projections}(i) and \cref{lemma:normal_cones}(ii) characterize the
+path: $s(t)\in D$ and
+\begin{equation}\label{eq:kkt}
+  tg+s(t)=A^\top\xi(t)+\sum_i\eta_i(t)\,e_i,\qquad
+  \begin{cases}
+    \eta_i(t)\ge0 & \text{if } s_i(t)=\ell^\Delta_i<u^\Delta_i,\\
+    \eta_i(t)\le0 & \text{if } s_i(t)=u^\Delta_i>\ell^\Delta_i,\\
+    \eta_i(t)=0 & \text{if } \ell^\Delta_i<s_i(t)<u^\Delta_i,
+  \end{cases}
+\end{equation}
+with any sign if $\ell^\Delta_i=u^\Delta_i$. These are the KKT conditions of
+$\min_{s\in D}\frac12\|s+tg\|^2$. With $\sigma_i=+1$ at a lower and $\sigma_i=-1$ at an upper
+bound, the sign condition reads $\sigma_i\eta_i\ge0$, as in §2.3 of the plan.
+
+\subsection{Pieces, events and multipliers}
+
+\begin{proposition}[structure of the path]\label[proposition]{prop:structure}
+\leavevmode
+\begin{enumerate}[(i)]
+\item $[0,\infty)$ is partitioned into the sets $I_F=\{t\ge0\mid s(t)\in\ri F\}$, $F$ ranging
+  over the faces of $D$, and each $I_F$ is an interval.
+\item On $I_F$, $s(t)=P_{\aff F}(-tg)=c_F-t\,z_F$ with $z_F=P_{T_F}\,g$, so $s'(t)=-z_F$ in the
+  interior of $I_F$. The path is continuous and piecewise affine with finitely many pieces
+  $0=t_0<t_1<\dots<t_N=\Tend$, and it is constant on $[\Tend,\infty)$.
+\item A piece on $\ri F$ ends at a \emph{hit}, when a bound $\beta\notin\calW(F)$ becomes active
+  (a free variable reaches a bound), or at a \emph{release}, when no multiplier vector of the
+  right signs represents $tg+s(t)$ any more. When the rows of $A$ and the $e_i^\top$,
+  $i\in I(F)$, are linearly independent, a release means that a multiplier
+  $\eta_j(t)=\eta_j(t_k)+(t-t_k)\theta_j$, affine with slope $\theta_j$ (the bound part of the
+  decomposition $g=z_F+A^\top y+E_{I(F)}\theta$), crosses zero with $\sigma_j\theta_j<0$.
+\end{enumerate}
+\end{proposition}
+
+\begin{proof}
+(i) \emph{Partition.} For $t\ge0$, $s(t)\in D$ belongs to $\ri F$ for exactly one face $F$ by
+\cref{lemma:faces}(iii), that is, $t$ belongs to exactly one set $I_F$. \emph{Intervals.} By
+\cref{lemma:projections}(ii) with $y=-tg$, $I_F=\{t\ge0\mid-tg\in C_F\}$. Let
+$t_1,t_2\in I_F$ and $t=\lambda t_1+(1-\lambda)t_2$ with $\lambda\in[0,1]$. Since $t\mapsto-tg$ is
+linear, $-tg=\lambda(-t_1g)+(1-\lambda)(-t_2g)$, which belongs to $C_F$ by convexity
+(\cref{lemma:projections}(iv)). Hence $t\in I_F$. A convex subset of $\R$ is an interval, which
+may be empty or reduced to a point.
+
+(ii) \emph{Affine on each $I_F$.} \Cref{lemma:projections}(iii) with $y=-tg$ gives
+$s(t)=c_F-tP_{T_F}g$ for $t\in I_F$. \emph{Finitely many pieces.} By \cref{lemma:faces}(iv), the
+nonempty sets $I_F$ are finitely many pairwise disjoint intervals covering $[0,\infty)$. Let
+$0=t_0<t_1<\dots<t_N$ be their finite endpoints. An open interval $(t_k,t_{k+1})$, or
+$(t_N,\infty)$, contains no endpoint, so it meets a single $I_F$: two disjoint intervals meeting
+it would have an endpoint inside it. Hence $s$ is affine on each of these open intervals.
+\emph{Continuity.} By \cref{lemma:projections}(i),
+$\|s(t)-s(t')\|\le|t-t'|\,\|g\|$, so $s$ is also affine on their closures. \emph{End of the
+path.} On $[t_N,\infty)$, $s$ is affine and bounded, since $D$ is bounded, so its slope
+vanishes. We set $\Tend=t_N$.
+
+(iii) Let $F$ be a face such that $I_F$ has a nonempty interior and a finite right endpoint
+$\bar t$. For all $t\in\R$, set $\hat s(t)=c_F-tz_F$ and $\hat w(t)=-tg-\hat s(t)$. We claim
+that, for $t\ge0$,
+\[
+  t\in I_F\iff \hat s(t)\in\ri F\ \text{ and }\ \hat w(t)\in N_D(F).
+\]
+If the right-hand side holds, then $-tg=\hat s(t)+\hat w(t)\in C_F$, and $t\in I_F$ by
+\cref{lemma:projections}(ii). Conversely, if $t\in I_F$, then $s(t)=\hat s(t)\in\ri F$ by
+(ii), and $\hat w(t)=-tg-s(t)\in N_D(F)$ by the uniqueness in \cref{lemma:projections}(ii).
+
+Since $c_F\in\aff F$ and $z_F\in T_F$, $\hat s(t)\in\aff F$ for all $t$. So, by
+\cref{lemma:faces}(ii), the first condition reads $\inner{a_\beta}{\hat s(t)}<b_\beta$ for all
+$\beta\notin\calW(F)$: finitely many strict affine inequalities in $t$. The second condition
+defines a closed set of values of $t$, since $N_D(F)$ is closed and $\hat w$ is continuous. For
+$t>\bar t$ arbitrarily close to $\bar t$, $t\notin I_F$, so one of the two conditions fails.
+\begin{itemize}
+\item \emph{Hit.} If the first condition fails, there is a bound $\beta\notin\calW(F)$, one of
+  finitely many, with $\inner{a_\beta}{\hat s(t)}\ge b_\beta$ for $t>\bar t$ arbitrarily close to
+  $\bar t$. Since $\inner{a_\beta}{\hat s(t)}<b_\beta$ in the interior of $I_F$, continuity
+  gives $\inner{a_\beta}{s(\bar t)}=b_\beta$: the bound $\beta$, inactive along the piece,
+  becomes active at $\bar t$.
+\item \emph{Release.} If the second condition fails, $\hat w(t)\notin N_D(F)$ for $t>\bar t$
+  arbitrarily close to $\bar t$, while $\hat w(\bar t)\in N_D(F)$ since $N_D(F)$ is closed. Now
+  $-\hat w(t)=tg+\hat s(t)=t(g-z_F)+c_F$, and both $g-z_F=(I-P_{T_F})g$ and $c_F$ belong to
+  $T_F^\perp=\operatorname{range}[A^\top\ E_{I(F)}]$. So $-\hat w(t)$ can always be written
+  $A^\top\xi+E_{I(F)}\eta$, but, by \cref{lemma:normal_cones}(ii), for $t>\bar t$ close to
+  $\bar t$, none of these representations has $\sigma_i\eta_i\ge0$ for all $i\in I(F)$.
+\end{itemize}
+Both events may occur at the same $\bar t$, which is then a degenerate breakpoint.
+
+Finally, suppose that the rows of $A$ and the $e_i^\top$, $i\in I(F)$, are linearly independent.
+Then the coefficients $(\xi(t),\eta(t))$ of $-\hat w(t)$ are unique, and they are affine in $t$
+since $-\hat w$ is affine. With the unique decomposition $g-z_F=A^\top y+E_{I(F)}\theta$, they
+read $\eta(t)=\eta(\bar t)+(t-\bar t)\,\theta$. If $\sigma_i\eta_i(\bar t)>0$, this sign persists
+for $t$ close to $\bar t$. If $\sigma_i\eta_i(\bar t)=0$ and $\sigma_i\theta_i\ge0$, then
+$\sigma_i\eta_i(t)\ge0$ for $t>\bar t$. Hence $\hat w(t)$ leaves $N_D(F)$ right after $\bar t$ if
+and only if $\sigma_j\eta_j(\bar t)=0$ and $\sigma_j\theta_j<0$ for some $j\in I(F)$: the
+multiplier of the bound of $j$ crosses zero, which is the release of that bound.
+\end{proof}
+
+At a breakpoint, the right derivative is $s'(t^+)=P_K(-g)$ with $K=T_D(s)\cap\{tg+s\}^\perp$
+\cite{Har77}. This is what \code{local\_cone\_projection!} computes. The proofs below only use
+\cref{prop:structure}.
+
+\subsection{Speed along the path}
+
+On a piece, $\|s'(t)\|=\|z_F\|$ is the norm of the reduced gradient.
+
+\begin{lemma}[hits slow down, releases speed up]\label[lemma]{lemma:speed}
+Let $F$, $F'$ be the faces of two consecutive pieces, and write $z=z_F$, $z'=z_{F'}$.
+\begin{itemize}
+\item If $F'\subseteq F$ (a hit), then $T_{F'}\subseteq T_F$ and $\|z'\|\le\|z\|$.
+\item If $I(F')=I(F)\setminus\{j\}$ (a single release, independent rows), then
+  \[
+    \|z'\|^2=\|z\|^2+\theta_j^2\,\|P_{T_{F'}}e_j\|^2\ \ge\ \|z\|^2.
+  \]
+\end{itemize}
+\end{lemma}
+
+\begin{proof}
+If $F'\subseteq F$, then $\calW(F')\supseteq\calW(F)$, so $T_{F'}\subseteq T_F$ by
+\cref{lemma:faces}(i), and the first claim holds because $z'=P_{T_{F'}}z$. For the second,
+decompose $g=z+A^\top y+E_{I(F)}\theta$. The vectors $A^\top y$ and $e_k$, $k\ne j$, are orthogonal
+to $T_{F'}$, and $P_{T_{F'}}z=z$, so $z'=z+\theta_jP_{T_{F'}}e_j$. Moreover
+$P_{T_{F'}}e_j\perp T_F$, since its component in $T_F$ is $P_{T_F}e_j=0$, so the two terms are
+orthogonal.
+\end{proof}
+
+On a box, a coordinate that reaches a bound stays there, so every breakpoint is a hit and
+$\|s'\|$ is nonincreasing. Over a polyhedron, the dual events make $\|s'\|$ jump up. A
+stationary piece followed by a release (as in the manuscript's example: $0\to\sqrt2/10$) is
+the extreme case.
+
+% ---------------------------------------------------------------------------------------------
+\section{Path inequalities}\label{sec:inequalities}
+
+\begin{lemma}\label[lemma]{lemma:path}
+For all $t>0$:
+\begin{enumerate}[(a)]
+\item $L(t)=\int_0^t\|s'(\tau)\|^2\,d\tau$. Hence $L$ is continuous, nondecreasing, and
+  constant on $[\Tend,\infty)$, where it equals $\max_tL$.
+\item $\|s(t)\|^2\le t\,L(t)$.
+\item $L(t)\ge-\inner{g}{v}-\dfrac{\|v\|^2}{4t}$ for every $v\in D$.
+\item $L(t)\ge\dfrac{h^2}{2}\min\Big(1,\dfrac{\Delta}{h},2t\Big)=\dfrac h2\min(h,\Delta,2th)$,
+  with $h=h(x)$.
+\end{enumerate}
+\end{lemma}
+
+\begin{proof}
+(a) On a piece, $-\inner{g}{s'}=\inner{g}{P_{T_F}g}=\|P_{T_F}g\|^2=\|s'\|^2$, and $L(0)=0$.
+
+(b) Take the inner product of~\eqref{eq:kkt} with $s(t)$. Since $As=0$,
+$\inner{tg+s}{s}=\sum_i\eta_is_i$. Each term is nonpositive: at a lower bound
+$s_i=\ell^\Delta_i\le0$ and $\eta_i\ge0$, at an upper bound $s_i=u^\Delta_i\ge0$ and
+$\eta_i\le0$, and $s_i=0$ for a fixed variable. Hence $t\inner{g}{s}\le-\|s\|^2$. This is also
+the variational inequality of the projection with $v=0$.
+
+(c) The projection gives $\inner{-tg-s}{v-s}\le0$, i.e.
+$t\inner{g}{s}\le t\inner{g}{v}+\inner{s}{v}-\|s\|^2\le t\inner{g}{v}+\|v\|^2/4$.
+
+(d) Let $c=\min(1,\Delta/\|p\|_\infty)\ge\min(1,\Delta/h)$ and $v=\lambda cp$ with
+$\lambda\in[0,1]$. Then $v\in D$, because $\Omega-x$ is convex and contains~0, and
+$\|v\|_\infty\le\Delta$. The projection $p$ satisfies $\inner{g}{p}\le-\|p\|^2=-h^2$
+(variational inequality with $y=x$). Then (c) gives
+$L(t)\ge\lambda ch^2-\lambda^2c^2h^2/(4t)$. Take $\lambda=1$ if $2t\ge c$ and $\lambda=2t/c$
+otherwise.
+\end{proof}
+
+Item~(d) deals with open point~2 of the plan: merging the $\ell_\infty$ trust region into the
+bounds costs nothing, since a scaled projected gradient step stays in $D$.
+
+\Cref{lemma:path}(a) shows why the decrease is governed by the \emph{integral} of
+$\|s'\|^2$. The pointwise value of the reduced gradient at early times does not control it,
+unless $\|s'\|$ is monotone.
+
+% ---------------------------------------------------------------------------------------------
+\section{The first local minimizer}\label{sec:first_local_min}
+
+Scan the pieces in order. On a piece $[t_i,t_{i+1}]$ with $d=s'\ne0$, let
+$\varphi_1=\inner{g+Hs(t_i)}{d}=\psi'(t_i^+)$ and $\varphi_2=\inner{d}{Hd}$. Stop at $t_i$ if
+$\varphi_1\ge0$, and at $t_i-\varphi_1/\varphi_2$ if $\varphi_1<0<\varphi_2$ and this point lies
+before $t_{i+1}$. Otherwise, go to the next piece. Stationary pieces ($d=0$) are skipped, and
+the scan stops at $\Tend$ at the latest. Call $t_1$ the stopping point. By construction,
+$\psi$ is nonincreasing on $[0,t_1]$. If $t_1<\Tend$, the direction $d\ne0$ at $t_1$ (of the
+current piece, or of the next nonstationary one) satisfies $\inner{g+Hs(t_1)}{d}\ge0$. Hence
+$\|d\|^2=-\inner{g}{d}\le\inner{Hs(t_1)}{d}$, that is
+\begin{equation}\label{eq:slow}
+  \|d\|\le\|H\|\,\|s(t_1)\|.
+\end{equation}
+So an early stop requires a slow direction.
+
+\subsection{Without releases: the box argument is correct}\label{subsec:nested}
+
+\begin{proposition}\label[proposition]{prop:nested}
+Suppose $\|s'\|$ is nonincreasing on $(t_1,\infty)$, i.e.\ no bound is released after $t_1$.
+This holds in particular when $\Omega$ is a box, with the trust region included in the bounds.
+Then
+\[
+  -\psi(t_1)\ \ge\ \frac3{10}\,h\,\min\Big(\Delta,\ \frac h{1+\|H\|}\Big).
+\]
+\end{proposition}
+
+\begin{proof}
+Let $\tau_0=1/(2(1+\|H\|))$, so that $\|H\|\tau_0\le\frac12$. By \cref{lemma:path}(b), for
+$t\le\tau_0$, $-\psi(t)\ge L(t)(1-\tfrac12\|H\|t)\ge\tfrac34L(t)$.
+\begin{itemize}
+\item If $t_1\ge\tau_0$: $\psi$ is nonincreasing on $[0,t_1]$, so
+  $-\psi(t_1)\ge-\psi(\tau_0)\ge\frac34L(\tau_0)$.
+\item If $t_1=\Tend<\tau_0$: $-\psi(t_1)\ge\frac34L(\Tend)\ge\frac34L(\tau_0)$.
+\item Otherwise $t_1<\min(\tau_0,\Tend)$. By monotonicity of $\|s'\|$ and~\eqref{eq:slow},
+  \[
+    L(\tau_0)-L(t_1)=\int_{t_1}^{\tau_0}\|s'\|^2\le\tau_0\|d\|^2\le\tau_0\|H\|^2\|s(t_1)\|^2
+    \le\tau_0\|H\|^2t_1L(t_1)\le\tfrac14L(t_1),
+  \]
+  so $-\psi(t_1)\ge\frac34L(t_1)\ge\frac35L(\tau_0)$.
+\end{itemize}
+In all cases $-\psi(t_1)\ge\frac35L(\tau_0)$. Conclude with \cref{lemma:path}(d) and
+$2\tau_0h=h/(1+\|H\|)$.
+\end{proof}
+
+The monotonicity of the reduced gradient, the core of~\cite{CGT88} and of the old draft, is
+used in exactly one place: to stop the path from speeding up after $t_1$. This is where
+releases break the argument.
+
+\subsection{With releases: a counterexample}\label{subsec:counterexample}
+
+Take the manuscript's polyhedron plus a free variable:
+\begin{gather*}
+  \Omega=\{x\in\R^4\mid x_1+x_2+x_3=0,\ x_1\ge-1,\ x_2\le1\},\\
+  g=(0.3,\,-0.8,\,0.5,\,a),\qquad H=vv^\top,\quad v=e_4-e_2,
+\end{gather*}
+with $\Delta=1$, $x_\delta=(-1,1,0,0)+\delta(1,-3,2,0)$ and $0<a\le\delta\le0.01$. Then
+$H\succeq0$ and $\|H\|=2$. Since $D=D_3\times[-1,1]$, the path is the product of the 3D path of
+the manuscript's zigzag example and $s_4(t)=-at$ (\cref{tab:path}).
+
+\begin{table}[ht]
+\centering
+\caption{Pieces of the path of the counterexample.}\label{tab:path}
+\begin{tabular}{lll}
+\toprule
+$t$ & direction $s'$ & event at the end \\
+\midrule
+$[0,\ 10\delta/3]$ & $-g$ & hit $x_1\ge-1$ \\
+$[10\delta/3,\ 50\delta/13]$ & $(0,0.65,-0.65,-a)$ & hit $x_2\le1$: vertex \\
+$[50\delta/13,\ 5\delta]$ & $(0,0,0,-a)$, \textbf{slow} & release of $x_1\ge-1$ \\
+$[5\delta,\ \approx10]$ & $(0.1,0,-0.1,-a)$ & trust region \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+At the vertex, $g=(0,0,0,a)+0.5\,(1,1,1,0)-0.2\,e_1-1.3\,e_2$. The multiplier of $x_1\ge-1$
+has slope $\theta_1=-0.2<0$: it decreases from $0.45\cdot20\delta/39$ and vanishes at
+$t=5\delta$. The speed jumps from $a$ to $\sqrt{0.02+a^2}$ (\cref{lemma:speed}).
+\begin{itemize}
+\item \textbf{Before the vertex} the scan does not stop. On the first two pieces
+  $\varphi_1\le-0.845+1.8\delta<0$, and the minimizers of the quadratics lie beyond the pieces.
+\item \textbf{At the vertex} $t_v=50\delta/13$, $s=(-\delta,3\delta,-2\delta,-at_v)$, and on
+  the slow piece
+  \[
+    \psi'(t_v^+)=-a^2+\inner{v}{s}\inner{v}{d}=a\,(3\delta+at_v-a)>0.
+  \]
+  So $t_1=t_v$, and the decrease is
+  \[
+    -\psi(t_1)=L(t_v)-\tfrac12\inner{v}{s}^2
+    =3.7\,\delta+\tfrac{50}{13}a^2\delta-\tfrac12\big(3\delta+\tfrac{50}{13}a\delta\big)^2
+    =3.7\,\delta+O(\delta^2).
+  \]
+\item \textbf{The measures stay bounded away from zero:} $h(x_\delta)\to\sqrt{0.02+a^2}\ge\sqrt2/10$,
+  $\chi(x_\delta)\to0.2$, and $\pi_\varepsilon(x_\delta)=\max(a,0.2)=0.2$ as soon as both
+  bounds are $\varepsilon$-active.
+\item \textbf{After the release} $\psi$ keeps decreasing by about $0.2$ up to the trust region
+  ($\psi'=-(0.02+a^2)+a(3\delta+at)<0$).
+\end{itemize}
+
+\begin{proposition}\label[proposition]{prop:counterexample}
+No inequality $-q(s^C)\ge\Phi(h(x),\Delta,\|H\|)$, with $\Phi>0$ for positive arguments, can
+hold for the first local minimizer over polyhedra. The same holds with $\pi_\varepsilon$ or
+$\chi$ in place of $h$, and even for convex models.
+\end{proposition}
+
+\Cref{tab:counterexample} gives the values computed with \code{cauchy\_step!} (current code)
+for $a=\delta/2$.
+
+\begin{table}[ht]
+\centering
+\caption{Counterexample with $a=\delta/2$. The last column is the best value of $\psi$ on
+$[0,\hat t]$ for $\kG=\frac12$ (\cref{sec:safeguard}), evaluated on the traced path.}
+\label{tab:counterexample}
+\begin{tabular}{cccccc}
+\toprule
+$\delta$ & $-q(s^C)$, code & $t_1$ & $h(x_\delta)$ & $\chi(x_\delta)$ & $-q$, safeguarded \\
+\midrule
+1e-1 & 3.20e-1 & 3.85e-1 & 0.397  & 0.580 & 0.326 \\
+1e-2 & 3.66e-2 & 3.85e-2 & 0.146  & 0.238 & 0.230 \\
+1e-3 & 3.70e-3 & 3.85e-3 & 0.1415 & 0.204 & 0.203 \\
+1e-4 & 3.70e-4 & 3.85e-4 & 0.1414 & 0.200 & 0.200 \\
+1e-6 & 3.70e-6 & 3.85e-6 & 0.1414 & 0.200 & 0.200 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+With $a=\delta^2$, the slow piece falls below \code{tol\_dir} once $\delta\le10^{-4}$. The code
+then treats it as stationary and skips it, which shows that the slow piece is a perturbation of
+the stationary piece of the zigzag example. Skipping stationary pieces handles $a=0$, and the
+safeguard below handles $a>0$.
+
+This is a failure of the per-iteration decrease, which the trust-region analysis needs. It is
+not a proven failure of the algorithm: here the Cauchy point lands on the vertex, and from there
+the next path starts with the release direction. A zigzag sequence would have to repeat this
+near ever closer faces. Whether one exists is open, and the safeguard makes the question moot.
+
+% ---------------------------------------------------------------------------------------------
+\section{A safeguarded Cauchy point}\label{sec:safeguard}
+
+\subsection{Definition}\label{subsec:safeguard}
+
+Fix $\kG\in(0,1)$. Let
+\[
+  t_G=\inf\{t>0\mid\psi(t)\ge-\kG\,L(t)\}\in(0,\infty],\qquad \hat t=\min(t_G,\Tend).
+\]
+$t_G$ is where the model decrease falls to the fraction $\kG$ of the linear decrease: the
+curvature starts to matter. Before $t_G$, $\psi\approx-L$, and a stop there can only come from
+a slow piece, by~\eqref{eq:slow}.
+
+\begin{definition*}[safeguarded Cauchy point]
+The Cauchy step $s^C=s(t^C)$ satisfies \textbf{condition (C)} if $\psi(t^C)\le\psi(\hat t)$.
+The following \textbf{rule} produces such a point.
+\begin{itemize}
+\item If $t_1\ge\hat t$, take $t^C=t_1$. This is the common case, and the current behavior.
+\item Otherwise ($t_1$ is \emph{premature}), go on scanning from $\hat t$ to the next stop
+  $t^\sharp$: the first $t\ge\hat t$ with $\psi'(t^+)\ge0$ on the next nonstationary piece, or
+  $\Tend$. Take for $t^C$ the best of the stops met on $[0,t^\sharp]$.
+\end{itemize}
+\end{definition*}
+
+The rule satisfies (C). In the first case, $\psi$ is nonincreasing on $[0,t_1]\ni\hat t$. In
+the second, $\psi$ decreases on $[\hat t,t^\sharp]$, so
+$\psi(t^C)\le\psi(t^\sharp)\le\psi(\hat t)$. Any other way of reaching (C) is also fine for the
+theory.
+
+The test $t_1\ge\hat t$ means that $t_1=\Tend$ or that $r(t)=\psi(t)+\kG L(t)\ge0$ for some
+$t\in(0,t_1]$. On a piece,
+\[
+  r(t_i+\tau)=r(t_i)+(\varphi_1-\kG\inner{g}{d})\,\tau+\tfrac12\varphi_2\tau^2
+\]
+(note $L'=-\inner{g}{d}$), so the scan only needs the running value of $L$, one inner product
+it already computes, and the maximum of a quadratic on an interval. This is in the spirit of
+the generalized Cauchy point of~\cite[§12.2]{CGT00}, with a single Goldstein condition: the
+trust region is part of $D$, so their condition on $\|s\|$ versus $\Delta$ is replaced by the
+end of the path.
+
+If $\kG\ge\frac12$, a minimizer inside the first piece is always accepted: there
+$\psi(t)=-t\|d\|^2+\frac12t^2\inner{d}{Hd}$ and $L(t)=t\|d\|^2$, so
+$\psi(t_1)=-\frac12L(t_1)\ge-\kG L(t_1)$.
+
+\subsection{Decrease}
+
+\begin{lemma}\label[lemma]{lemma:goldstein}
+If $x$ is not critical, then $t_G\ge2(1-\kG)/\|H\|$ (with $t_G=\infty$ if $H=0$) and
+$\psi(\hat t)\le-\kG L(\hat t)$.
+\end{lemma}
+
+\begin{proof}
+If $x$ is not critical, $s(t)\ne0$, hence $L(t)\ge\|s(t)\|^2/t>0$, for all $t>0$. By
+\cref{lemma:path}(b),
+\[
+  \psi(t)+\kG L(t)\le-(1-\kG)L(t)+\tfrac12\|H\|tL(t)<0
+  \qquad\text{for } t<2(1-\kG)/\|H\|.
+\]
+For $t<t_G$, $\psi(t)<-\kG L(t)$. If $\hat t=\Tend<t_G$, the claim is this inequality at
+$\Tend$. If $\hat t=t_G<\infty$, continuity gives $\psi(t_G)=-\kG L(t_G)$.
+\end{proof}
+
+\begin{theorem}[Cauchy decrease]\label{theo:cauchy_decrease}
+If $s^C=s(t^C)$ satisfies (C), then
+\[
+  -q(s^C)\ \ge\ \frac{\kG}{2}\,h(x)\,\min\Big(\Delta,\ \frac{\kappa'\,h(x)}{1+\|H\|}\Big),
+  \qquad\kappa'=\min(1,4(1-\kG)).
+\]
+\end{theorem}
+
+\begin{proof}
+Assume $h=h(x)>0$ and let $\tilde t=2(1-\kG)/(1+\|H\|)\le t_G$. Since $L$ is nondecreasing and
+maximal from $\Tend$ on, $L(\hat t)\ge L(\tilde t)$ in both cases $\hat t=t_G$ and
+$\hat t=\Tend$. By (C), \cref{lemma:goldstein} and \cref{lemma:path}(d),
+\[
+  -\psi(t^C)\ge-\psi(\hat t)\ge\kG L(\hat t)\ge\kG L(\tilde t)
+  \ge\frac{\kG h}{2}\min(h,\Delta,2\tilde th),
+\]
+and $\min(h,2\tilde th)\ge\kappa'h/(1+\|H\|)$.
+\end{proof}
+
+The theorem uses neither the rank of the active rows nor $\varepsilon$, and has no dimension
+constant. Only the convexity of $D$, $0\in D$, and the piecewise structure are used.
+
+% ---------------------------------------------------------------------------------------------
+\section{Convergence of the inner iterations}\label{sec:convergence}
+
+The steps satisfy $s_k\in D_k$ and $q_k(s_k)\le q_k(s_k^C)$ (minor iterations), and $H_k$
+changes only after successful iterations. The assumptions are those of the manuscript:
+\begin{itemize}
+\item $r$ and $c$ are twice continuously differentiable (\code{assumption:\allowbreak functions\_C2});
+\item the level set $\calX=\{x\in\Omega\mid\varphi(x)\le\varphi(x_0)\}$ is compact
+  (\code{assumption:\allowbreak inner\_iterates\_compact});
+\item $\lim_k b_k(\varphi_{k+1}-\varphi_k)=0$, with $b_k=1+\max_{i\le k}\|H_i\|$
+  (\code{assumption:\allowbreak hessian\_norm\_compared\_convergence\_speed}).
+\end{itemize}
+
+\begin{theorem}\label{theo:liminf}
+If Algorithm~2, with the Cauchy step of \cref{sec:safeguard}, generates infinitely many
+iterates, then $\liminf_k h(x_k)=0$.
+\end{theorem}
+
+\begin{proof}
+If $h(x_k)\ge\underline h>0$ for $k\ge k_0$, \cref{theo:cauchy_decrease} and
+$b_k\ge\max(1,1+\|H_k\|)$ give
+\[
+  -q_k(s_k)\ge c\min(\Delta_k,\zeta/b_k),\qquad c=\kG\underline h/2,\quad\zeta=\kappa'\underline h.
+\]
+This is inequality \code{eq:\allowbreak decrease\_bk}. The proof of \code{theo:\allowbreak inner\_convergence} uses
+nothing else about the Cauchy step, and applies word for word.
+\end{proof}
+
+\begin{theorem}\label{theo:limit}
+Under the same assumptions, $\lim_kh(x_k)=0$.
+\end{theorem}
+
+\begin{proof}
+We follow~\cite[Theorem~11]{CGT88}.
+\begin{enumerate}[1.]
+\item \emph{Setup.} Suppose $h(x_{m_i})\ge\epsilon_1>0$ along a subsequence, and let $l_i>m_i$
+  be the first index with $h(x_{l_i})<\epsilon_2=\epsilon_1/2$ (\cref{theo:liminf}). For the
+  successful $k\in[m_i,l_i)$, \cref{theo:cauchy_decrease} gives
+  $\varphi_k-\varphi_{k+1}\ge\eta_1\frac{\kG\epsilon_2}2\min(\Delta_k,\kappa'\epsilon_2/b_k)$.
+\item \emph{Steps are short.} Since $b_k(\varphi_k-\varphi_{k+1})\to0$, we get
+  $b_k\Delta_k\to0$ on these iterations, so the minimum is $\Delta_k$ for $i$ large. Hence
+  $\|x_{k+1}-x_k\|\le\sqrt n\,\Delta_k\le C(\varphi_k-\varphi_{k+1})$.
+\item \emph{Contradiction.} Summing, $\|x_{m_i}-x_{l_i}\|\le C(\varphi_{m_i}-\varphi_{l_i})\to0$,
+  since $(\varphi_k)$ is nonincreasing and bounded below on $\calX$. The map
+  $x\mapsto\|P_\Omega(x-\nabla\varphi(x))-x\|$ is uniformly continuous on the compact set
+  $\calX$, so $h(x_{m_i})-h(x_{l_i})\to0$, which contradicts
+  $h(x_{m_i})-h(x_{l_i})\ge\epsilon_1/2$.\qedhere
+\end{enumerate}
+\end{proof}
+
+The manuscript now only claims $\liminf\pi_\varepsilon=0$, because $\pi_\varepsilon$ is not
+continuous. \Cref{theo:limit} gives a full limit for $h$.
+
+% ---------------------------------------------------------------------------------------------
+\section{Link with the stopping test}\label{sec:link}
+
+Recall that $\calN_\varepsilon(x)$ is generated by $\pm$ the rows of $A$, by $-e_i$
+($i\in\calA^-_\varepsilon(x)$) and by $e_i$ ($i\in\calA^+_\varepsilon(x)$), and that
+$\pi_\varepsilon(x)=\max(\|u\|_\infty,\|\theta^{\mathrm w}\|_\infty)$, with
+$u=P_{T_\varepsilon(x)}g$ and $\theta$ a bound part of a decomposition
+$g=u+A^\top\xi+E_S\theta$, $S=\calA_\varepsilon(x)$. When the rows of
+$\tilde A_S=[A;E_S^\top]$ are dependent, $\theta$ is chosen to minimize
+$\|\theta^{\mathrm w}\|_2$ over all decompositions, which is what \code{wrong\_sign\_redundant}
+does: its parametrization by the redundant bounds spans the whole null space of
+$[A^\top\ E_S]$.
+
+\begin{lemma}[link]\label[lemma]{lemma:link}
+If $\|p\|_\infty\le\varepsilon$, then $\dist(-g,\calN_\varepsilon(x))\le\|p\|=h(x)$.
+\end{lemma}
+
+\begin{proof}
+Let $y=x+p$. If $y_i=l_i$, then $x_i-l_i=-p_i\le\varepsilon$, so
+$i\in\calA^-_\varepsilon(x)$, and likewise for the upper bounds. Hence
+$\calN_\Omega(y)\subseteq\calN_\varepsilon(x)$. Moreover $-g-p=(x-g)-y\in\calN_\Omega(y)$.
+\end{proof}
+
+\begin{lemma}\label[lemma]{lemma:sigma_plus}
+Let $\sigma^+>0$ be the smallest nonzero singular value of the finitely many matrices
+$\tilde A_S$, $S\subseteq\{1,\dots,n\}$. With the multipliers of minimal violation, for all
+$x\in\Omega$, $\varepsilon\ge0$ and $g$,
+\[
+  \pi_\varepsilon(x)\le\max(1,1/\sigma^+)\,\dist(-g,\calN_\varepsilon(x)).
+\]
+\end{lemma}
+
+\begin{proof}
+\leavevmode
+\begin{enumerate}[1.]
+\item \emph{Moreau decomposition.} Write $-g=d+w$ with $d=P_{\calT_\varepsilon}(-g)$,
+  $w\in\calN_\varepsilon$ and $\|d\|=\dist(-g,\calN_\varepsilon(x))$. Then
+  $w=A^\top\xi'-E_S\theta^+$, where $\theta^+$ has the right signs (the sign is free for fixed
+  variables).
+\item \emph{Reduced gradient.} $u=P_{T_\varepsilon}g=-P_{T_\varepsilon}d$, so
+  $\|u\|\le\|d\|$.
+\item \emph{Multipliers.} $d-P_{T_\varepsilon}d=\tilde A_S^\top y$ with $y$ of minimal norm,
+  hence $y\in\operatorname{range}\tilde A_S$ and $\|y\|\le\|d\|/\sigma^+$. Then
+  $g=u+A^\top(-\xi'-y_A)+E_S(\theta^+-y_S)$ is a valid decomposition, and its violation is at
+  most $|y_{S,i}|$ componentwise. So the minimal violation satisfies
+  $\|\theta^{\mathrm w}\|_\infty\le\|\theta^{\mathrm w}\|_2\le\|y_S\|\le\|d\|/\sigma^+$.\qedhere
+\end{enumerate}
+\end{proof}
+
+The right inequality of \code{lemma:\allowbreak certification},
+$\dist(-g,\calN_\varepsilon(x))\le\sqrt n\,\pi_\varepsilon(x)$, holds for any multipliers, so it
+is unchanged. The left one (with $\sigma_{\min}$ and Assumption \code{full\_rank\_active}) is
+replaced by \cref{lemma:sigma_plus}.
+
+\begin{corollary}\label[corollary]{cor:termination}
+For every $\varepsilon>0$ and $\omega>0$, the stopping test $\pi_\varepsilon(x_k)\le\omega$ of
+Algorithm~2 is met after finitely many iterations.
+\end{corollary}
+
+\begin{proof}
+By \cref{theo:liminf} there is $k$ with $h(x_k)\le\min(\varepsilon,\omega/\max(1,1/\sigma^+))$.
+Then $\|p_k\|_\infty\le h(x_k)\le\varepsilon$, and \cref{lemma:link,lemma:sigma_plus} give
+$\pi_\varepsilon(x_k)\le\max(1,1/\sigma^+)\,h(x_k)\le\omega$.
+\end{proof}
+
+The only requirement on $\varepsilon$ is $\varepsilon>0$. The constant does not depend on
+$\varepsilon$, so $\varepsilon_K=\min(\varepsilon_{\max},\omega_K)$ works for any
+$\varepsilon_{\max}>0$. The outer analysis (§3.2 of the manuscript) is unchanged.
+
+% ---------------------------------------------------------------------------------------------
+\section{Consequences}\label{sec:consequences}
+
+\subsection{Manuscript (\texorpdfstring{\code{sn-preprint-theorie.tex}}{sn-preprint-theorie.tex})}
+
+\begin{itemize}
+\item \textbf{§2.1.} Remove Assumption \code{full\_rank\_active} and the threshold
+  $\bar\varepsilon$, and define the multipliers of minimal violation.
+\item \textbf{§2.3.} The Cauchy step is the first local minimizer along the exact path
+  \code{eq:\allowbreak projected\_gradient\_path}, with the safeguard of \cref{subsec:safeguard} (one more
+  constant, $\kG$).
+\item \textbf{§3.1.} Replace \code{lemma:\allowbreak eps\_threshold}, \code{prop:\allowbreak computed\_path},
+  \code{lemma:\allowbreak initial\_direction} and \code{theo:\allowbreak cauchy\_decrease} by
+  \cref{prop:structure}, \cref{lemma:speed,lemma:path}, \cref{lemma:goldstein} and
+  \cref{theo:cauchy_decrease}.
+  \begin{itemize}
+  \item \Cref{prop:nested} (box) and the example of \cref{subsec:counterexample} can replace the
+    zigzag remark. They explain why stationary pieces are skipped, and why the first local
+    minimizer needs the safeguard over a polyhedron and not over a box.
+  \item \code{theo:\allowbreak inner\_convergence} keeps its proof, with $h$ in place of
+    $\kappa_0\pi_\varepsilon$. Add \cref{theo:limit}, \cref{lemma:link} and
+    \cref{cor:termination}.
+  \end{itemize}
+\item \textbf{\code{lemma:\allowbreak certification}.} Replace the left inequality by
+  \cref{lemma:sigma_plus}, and update the paragraph after it (``if
+  $\varepsilon_{\max}\le\bar\varepsilon$\ldots'').
+\item \textbf{§3.2.} Remove ``Consistently with the well-posedness of the projector,
+  $\tilde A_*$ has full row rank''. $T(x_*)=\operatorname{null}\tilde A_*$ always has an
+  orthonormal basis.
+\item \textbf{Appendix~A.} Add the safeguard to Algorithm \code{algo:\allowbreak cauchy\_point}.
+\item \textbf{Bibliography.} \cite{CGT88} (Theorem~11) and \cite{CGT00} (§12.2) are already
+  there. Add~\cite{Har77} if the critical cone is mentioned.
+\end{itemize}
+
+\subsection{Code (\texorpdfstring{\code{cauchy\_step!}, \code{SubspaceProjector}}{cauchy\_step!, SubspaceProjector} method)}\label{subsec:code}
+
+The box method (\code{CoordinateSubspaceProjector}) needs no change, by \cref{prop:nested}.
+\Cref{alg:scan} lists the changes to the polyhedral loop, $\bar\tau$ being the length of the
+current piece in $t$.
+
+\begin{algorithm}[ht]
+\caption{Safeguarded scan (changes to the polyhedral loop of \code{cauchy\_step!})}\label{alg:scan}
+\begin{algorithmic}[1]
+\State $L\gets0$, $\mathit{crossed}\gets$ false, $\mathit{best}\gets$ none
+  \Comment{$L=-g^\top s$; $\mathit{crossed}\iff t_G\le t$}
+\For{each piece}
+  \State (unchanged: stationary pieces, parking, next event at distance $\bar\tau$)
+  \If{the piece is not stationary}
+    \State $w\gets Hd$;\ $\varphi_1\gets g^\top d+s^\top w$;\ $\varphi_2\gets d^\top w$;\ $\ell\gets-g^\top d$
+    \State $\tau_{\mathrm{stop}}\gets0$ if $\varphi_1\ge0$;
+    \Statex\hspace{\algorithmicindent}\hspace{\algorithmicindent}$\tau_{\mathrm{stop}}\gets-\varphi_1/\varphi_2$ if $\varphi_2>0$ and $-\varphi_1/\varphi_2<\bar\tau$; none otherwise
+    \State $\mathit{crossed}\gets\mathit{crossed}$ or
+    \Statex\hspace{\algorithmicindent}\hspace{\algorithmicindent}$\max_{0<\tau\le\min(\tau_{\mathrm{stop}},\bar\tau)}\big[\mathit{pred}+\kG L+(\varphi_1+\kG\ell)\tau+\varphi_2\tau^2/2\big]\ge0$
+    \If{$\tau_{\mathrm{stop}}\ne$ none}
+      \State record $(t+\tau_{\mathrm{stop}},\ s+\tau_{\mathrm{stop}}d,\ \text{value},\ \text{working set})$ in $\mathit{best}$ if better
+      \If{$\mathit{crossed}$} \textbf{break} \Comment{usual case: unchanged result}
+      \EndIf
+      \State \Comment{premature: continue; the rest of the piece also updates $\mathit{crossed}$}
+    \EndIf
+  \EndIf
+  \If{end of the path} record the current point in $\mathit{best}$; \textbf{break}
+  \EndIf
+  \State $L\gets L+\ell\bar\tau$;\ $\mathit{pred}\gets\mathit{pred}+\varphi_1\bar\tau+\varphi_2\bar\tau^2/2$;\ \ldots
+    \Comment{move to the breakpoint, unchanged}
+\EndFor
+\State \Return $\mathit{best}$, restoring its working set in \code{proj\_op} if it is not the last point
+\end{algorithmic}
+\end{algorithm}
+
+A small \code{eps\_slope}-style tolerance on the crossing test is enough. The example of
+\cref{subsec:counterexample} makes a good regression test: the decrease must stay above about
+0.2 as $\delta\to0$.
+
+\subsection{Numerical evidence}\label{subsec:evidence}
+
+The test problems are random polyhedra with $(n,m)\in\{(10,3),(40,8)\}$, $A$ Gaussian, box
+$[-1,1]$ and $x=P_\Omega(z)$ with $z\sim3\mathcal N(0,I)$, so many bounds are active. The other
+data are $g\sim3\mathcal N(0,I)$, $H=J^\top J$ with $J$ of scale 0.1, 1 or~3, and
+$\Delta\in\{0.1,0.5,2\}$. The code examines a median of 2 pieces (at most 35) up to $t_1$.
+\Cref{tab:frequency} summarizes 299 paths.
+
+\begin{table}[ht]
+\centering
+\caption{Premature first local minimizers and cost of the safeguard over 299 random paths.}
+\label{tab:frequency}
+\begin{tabular}{cccc}
+\toprule
+$\kG$ & premature $t_1$ & worst $q(s^C_{\mathrm{code}})/q(s^C_{\mathrm{safe}})$ & extra pieces (median / max) \\
+\midrule
+0.60  & 62 & 0.993 & 2 / 14 \\
+0.75  & 53 & 0.993 & 1 / 14 \\
+0.90  & 33 & 0.997 & 1 / 7 \\
+0.99  & 8  & 1.000 & 1 / 5 \\
+0.999 & 0  & 1.000 & --- \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\begin{itemize}
+\item \textbf{On generic problems the first local minimizer is right.} The safeguard almost
+  never improves the step: it only buys a guarantee against the adversarial geometry of
+  \cref{subsec:counterexample}.
+\item \textbf{Choice of $\kG$.} A value close to 1, say 0.99, keeps the extra cost negligible.
+  The theoretical constant scales like $\kG(1-\kG)$. Any $\kG\ge\frac12$ also accepts a
+  minimizer inside the first piece.
+\item \textbf{Checks on the same instances.} \Cref{theo:cauchy_decrease} held with a margin of
+  at least 4.1. The $\chi$ version,
+  $\frac{\kG\chi}2\min(\Delta,1,4(1-\kG)\chi/(n(1+\|H\|)))$, held with a margin of at least
+  2.4. The inequality $\|s\|^2\le tL$ held to rounding, and $L$ was nondecreasing.
+\end{itemize}
+
+% ---------------------------------------------------------------------------------------------
+\section{Remarks}\label{sec:remarks}
+
+\begin{enumerate}[1.]
+\item \textbf{Why not keep the pure first local minimizer?} Its guarantee needs the speed not to
+  increase after $t_1$, which only the future of the path can tell
+  (\cref{subsec:nested}). A safeguard has to look ahead somehow. The Goldstein crossing is the
+  cheapest look-ahead with a proof, and it is already computable from the quantities of the
+  scan.
+\item \textbf{Stationary pieces} are the limit $a=0$ of \cref{subsec:counterexample}. With the
+  safeguard, skipping them is still the right choice: $\psi$ and $L$ are constant there, so
+  they never trigger the crossing.
+\item \textbf{Number of pieces.} The safeguard can only lengthen the scan up to $t^\sharp$, and
+  still finitely (\cref{prop:structure}). The worst case is still the number of faces.
+\item \textbf{What is not covered.} Rounding tolerances, parking and the \code{maxpieces} cap.
+  On the cap, the current $s$ still satisfies (C) if the crossing has been seen; otherwise the
+  guarantee is lost, as before. Failure of the local cone projection only affects the
+  direction, not the path theory, since $d$ stays a feasible descent direction.
+\end{enumerate}
+
+\appendix
+\section{Reproducing the counterexample}
+
+With the helpers of \code{test/cauchy\_path.jl} (\code{cauchy\_path}, \code{proj\_dykstra}):
+
+\begin{lstlisting}
+A = [1.0 1.0 1.0 0.0]
+xlow, xupp = [-1.0, -Inf, -Inf, -Inf], [Inf, 1.0, Inf, Inf]
+delta = 1e-4; a = delta / 2
+x = [-1.0, 1.0, 0.0, 0.0] + delta * [1.0, -3.0, 2.0, 0.0]
+g = [0.3, -0.8, 0.5, a]
+v = [0.0, -1.0, 0.0, 1.0]
+res = cauchy_path(A, xlow, xupp, x, g, 1.0; J = reshape(v, 1, 4))
+res.pred                                               # about -3.7e-4
+norm(proj_dykstra(A, xlow .- x, xupp .- x, -g))        # h(x), about 0.1414
+\end{lstlisting}
+
+\begin{thebibliography}{9}
+\bibitem{CGT88} A.~R. Conn, N.~I.~M. Gould, and Ph.~L. Toint. Global convergence of a class of
+  trust region algorithms for optimization with simple bounds. \emph{SIAM Journal on Numerical
+  Analysis}, 25(2):433--460, 1988.
+\bibitem{CGT00} A.~R. Conn, N.~I.~M. Gould, and Ph.~L. Toint. \emph{Trust-Region Methods}.
+  SIAM, Philadelphia, PA, USA, 2000.
+\bibitem{Har77} A.~Haraux. How to differentiate the projection on a convex set in Hilbert
+  space. Some applications to variational inequalities. \emph{Journal of the Mathematical
+  Society of Japan}, 29(4):615--631, 1977.
+\end{thebibliography}
+
+\end{document}
