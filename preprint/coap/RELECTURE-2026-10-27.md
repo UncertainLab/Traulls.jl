@@ -6,7 +6,7 @@
 
 Cette relecture couvre tout le manuscrit COAP, en particulier les modifications de Pierre des 26 et 27 octobre (commits `f08ede5`, `7466fd4` et `1fdad8e`). Quatre corrections et deux coquilles ont été appliquées aux deux versions, `preprint/coap/sn-preprint-theorie.tex` et `preprint/main.tex`, dont les corps sont identiques au gabarit près.
 
-Le texte ajouté apparaît en magenta dans les PDF (les liens et les citations sont déjà en bleu dans le gabarit Springer), grâce à une macro `\rev` définie dans le préambule des deux fichiers. Le texte supprimé n'apparaît plus : chaque section ci-dessous donne l'ancienne et la nouvelle version. Pour retirer la couleur avant la soumission, il suffit de remplacer la définition de la macro par `\newcommand{\rev}[1]{#1}`.
+Le texte ajouté est entouré d'une macro `\rev`, définie dans le préambule des deux fichiers. Pendant la relecture, elle l'affichait en magenta (les liens et les citations sont déjà en bleu dans le gabarit Springer). Depuis le commit `e62184f`, elle laisse le texte inchangé, et le commentaire au-dessus de sa définition donne celle qui remet le magenta. Le texte supprimé n'apparaît pas : chaque section ci-dessous donne l'ancienne et la nouvelle version.
 
 Les numéros d'équations, de théorèmes et de pages sont ceux de la version COAP ; les numéros de ligne sont donnés pour les deux fichiers.
 
@@ -110,7 +110,7 @@ C'est le sens de la version du 21 octobre, où la mesure certifiait ce test « w
 
 ## Coquilles corrigées
 
-Deux coquilles ont été corrigées dans les deux versions ; elles sont aussi marquées en magenta.
+Deux coquilles ont été corrigées dans les deux versions ; elles sont aussi entourées de `\rev`.
 
 | Emplacement | Avant | Après |
 | --- | --- | --- |
@@ -121,7 +121,7 @@ Deux coquilles ont été corrigées dans les deux versions ; elles sont aussi ma
 
 Les deux `.tex` modifiés et les deux PDF régénérés sont commités sur main. Les points suivants, hors du texte de l'article, restent à régler avant la soumission.
 
-- [ ] Relire les passages en magenta, puis retirer la couleur : remplacer la définition de `\rev` par `\newcommand{\rev}[1]{#1}` (COAP l. 113, `main.tex` l. 50) et recompiler.
+- [x] Retirer la couleur : fait dans le commit `e62184f`, qui définit `\rev` par `\newcommand{\rev}[1]{#1}` (COAP l. 113, `main.tex` l. 50).
 - [ ] Mettre à jour `coap/CHANGEMENTS.md` et régénérer `sn-preprint-theorie-diff.pdf`. Ils décrivent encore l'état du 21 octobre : contre-exemple de la p. 34, chiffres de 7 % à 57 % au §2.4, références Hoffman, Wolfe et McCormick, qui ne sont plus citées (71 entrées).
 - [ ] Choisir pour la comparaison des équations sécantes : le §2.4 ne cite plus ses chiffres, mais `coap/README.md`, `docs/src/benchmarks.md` et `benchmark/paper_numbers.jl` les annoncent encore. Cette phrase était le seul appui empirique de la remarque, désormais présentée comme heuristique.
 - [ ] Encodage : depuis `7466fd4`, le `.tex` COAP est en UTF-8 (U+FFFD dans le commentaire de la l. 28), contrairement à `coap/README.md`. Sans effet sur le PDF, comme le commentaire périmé « + Hoffman (1952) » de la l. 1459.
