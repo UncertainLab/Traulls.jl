@@ -58,7 +58,7 @@
 
 %% ADDED PACKAGES
 \usepackage{enumitem}
-\usepackage{tikz-cd}
+\usepackage{tikz-cd,orcidlink}
 \usepackage{cleveref}
 \makeatletter
 \def\theHALG@line{\thealgorithm.\arabic{ALG@line}}
@@ -108,6 +108,9 @@
 \providecommand{\argmin}{\operatorname*{argmin}}
 \newcommand{\inner}[2]{\left\langle {#1} , {#2} \right\rangle} % inner product
 \newcommand{\proj}[2]{P_{#1} \left[ {#2} \right]} % Projection 
+% Modifications of the review of 2026-10-27, in magenta for proofreading.
+% To remove the color before submission, define instead \newcommand{\rev}[1]{#1}.
+\newcommand{\rev}[1]{{\color{magenta}#1}}
 
 \raggedbottom
 %%\unnumbered% uncomment this for unnumbered level heads
@@ -125,11 +128,11 @@
 %%  \sfx{IV}}\email{iauthor@gmail.com}
 %%=============================================================%%
 
-\author*[1]{\fnm{Pierre} \sur{Borie}}\email{pierre.borie@umontreal.ca}
+\author*[1]{\fnm{Pierre} \sur{Borie}\,\orcidlink{0009-0000-1043-5057}}\email{pierre.borie@umontreal.ca}
 
-\author*[1]{\fnm{Fabian} \sur{Bastin}}\email{bastin@iro.umontreal.ca}
+\author*[1]{\fnm{Fabian} \sur{Bastin}\,\orcidlink{0000-0003-1323-6787}}\email{bastin@iro.umontreal.ca}
 
-\author[2,3]{\fnm{St\'ephane} \sur{Dellacherie}}\email{dellacherie.stephane@hydroquebec.com}
+\author[2,3]{\fnm{St\'ephane} \sur{Dellacherie}\,\orcidlink{0009-0005-9043-9328}}\email{dellacherie.stephane@hydroquebec.com}
 
 \affil*[1]{\orgdiv{Department of Computer Science and Operations Research}, \orgname{Universit\'e de Montr\'eal}, \orgaddress{\city{Montreal}, \state{QC}, \country{Canada}}}
 
@@ -222,7 +225,7 @@ It is worth pointing out what this combination leaves uncovered in the existing 
 The present work brings the SQN philosophy of nonlinear least squares into the AL framework. Our contributions are the following.
 \begin{enumerate}[label=(\roman*), leftmargin=*, itemsep=2pt]
 	\item We derive a structured secant equation for the Hessian of the AL, given in~\eqref{eq:structured_secant_eq}, which simultaneously captures the curvature carried by the residuals and that carried by the nonlinear constraints, the latter being weighted by the shifted multipliers $\bar{\lambda} = \lambda + \mu c$, built from the multiplier estimate $\lambda$ and the penalty parameter $\mu$ of the outer iteration. Correcting the GN term of the AL by a structured update satisfying this equation yields an approximation that satisfies the standard secant equation up to second-order terms in the step, the equation holding exactly if the residuals and constraints are affine. To the best of our knowledge, this is the first SQN approximation designed for the AL of a least-squares problem. Following~\cite{tjoabiegler:1991}, we complement it with a hybrid switching rule driven by the relative decrease of the AL itself, rather than of the objective, so that the decision to activate the second-order correction reflects the penalized function that is actually minimized.
-	\item We provide an explicit inner solver for the subproblems over the polyhedron~\eqref{eq:linear_constraints}, in which bounds and linear equalities coexist, by adapting to the polyhedral case the gradient projection approach of~\cite{conn-etal:1988b} that underlies the bound-constrained inner solver of LANCELOT. Unlike the generalized Cauchy point procedure of~\cite{conn-etal:1993}, which requires the approximate solution of a linear program at every trial step, or the projected gradient methods of~\cite{calamaimore:1987}, which require projections onto $\Omega$, our Cauchy point is computed along nested faces of $\Omega$, with projections onto subspaces only. This path is safeguarded by two classical devices, namely the release of the bounds whose least-squares multiplier estimates have the wrong sign, as in gradient projection methods since~\cite{rosen:1960}, and $\varepsilon$-active bounds, as in the $\varepsilon$-active sets of~\cite{zoutendijk:1960,topkisveinott:1967,bertsekas:1982} and the dominant constraints of~\cite{conn-etal:1996b}. We prove the global convergence of the resulting inner iterations, and then that of the overall method to a first-order critical point of problem~\eqref{pb:cnls}. Our analysis follows the framework of~\cite{conn-etal:1996b}, of which our problem is a particular case, but without any assumption on the signs of the bound multipliers. To that end, we show that the measure used in our implementation, based on the reduced gradient and on least-squares multiplier estimates, certifies the criticality test of~\cite{conn-etal:1996b}.
+	\item We provide an explicit inner solver for the subproblems over the polyhedron~\eqref{eq:linear_constraints}, in which bounds and linear equalities coexist, by adapting to the polyhedral case the gradient projection approach of~\cite{conn-etal:1988b} that underlies the bound-constrained inner solver of LANCELOT. Unlike the generalized Cauchy point procedure of~\cite{conn-etal:1993}, which requires the approximate solution of a linear program at every trial step, or the projected gradient methods of~\cite{calamaimore:1987}, which require projections onto $\Omega$, our Cauchy point is computed along nested faces of $\Omega$, with projections onto subspaces only. This path is safeguarded by two classical devices, namely the release of the bounds whose least-squares multiplier estimates have the wrong sign, as in gradient projection methods since~\cite{rosen:1960}, and $\varepsilon$-active bounds, as in the $\varepsilon$-active sets of~\cite{zoutendijk:1960,topkisveinott:1967,bertsekas:1982} and the dominant constraints of~\cite{conn-etal:1996b}. We prove the global convergence of the resulting inner iterations, and then that of the overall method to a first-order critical point of problem~\eqref{pb:cnls}. Our analysis follows the framework of~\cite{conn-etal:1996b}, of which our problem is a particular case\rev{. To apply it}, we show that the measure used in our implementation, based on the reduced gradient and on least-squares multiplier estimates, certifies the criticality test of~\cite{conn-etal:1996b} \rev{without any assumption on the signs of the bound multipliers}.
 	\item We provide TRAULLS (Trust Region AUgmented nonLinear Least-squares Solver), an open-source Julia~\cite{bezanson-etal:2017} implementation available at \url{https://github.com/UncertainLab/Traulls.jl}. All the experiments of Section~\ref{sec:numerical_experiments} can be reproduced from the \texttt{benchmark} folder of that repository, in the version tagged \texttt{coap-2026}.
 \end{enumerate}
 Together, these ingredients yield a solver specifically designed for NLS problems while handling constraints of general form, including nonlinear equalities and inequalities alongside linear equalities and bounds.
@@ -650,11 +653,11 @@ We end our description of the Hessian approximation by discussing hybrid updates
 The approximated Hessian is then updated following the switching rule
 \begin{equation}\label{eq:hybrid_update_strategy}
 	H_{k+1} = \left\{\begin{aligned}
-		&B^{\mathrm{GN}}_{k+1} + B_{k+1} & &\text{if } \zeta_k \le \kappa_{\mathrm{hyb}} \\
+		&B^{\mathrm{GN}}_{k+1} + B_{k+1} & &\text{if } \rev{\varphi(x_k)-\varphi(x_{k+1}) \le \kappa_{\mathrm{hyb}}\,\varphi(x_k)} \\
 		&B^{\mathrm{GN}}_{k+1}  & & \text{otherwise}, 
 	\end{aligned}\right.
 \end{equation}
-where $\kappa_{\mathrm{hyb}}$ is a parameter in $(0,1)$. In~\cite{tjoabiegler:1991}, the ratio is computed with the AL used as a merit function by their SQP method. As we will see in Section~\ref{sec:numerical_experiments}, this switching rule has an important impact on the performance of the algorithm.
+where $\kappa_{\mathrm{hyb}}$ is a parameter in $(0,1)$. \rev{When $\varphi(x_k) > 0$, the test reads $\zeta_k \le \kappa_{\mathrm{hyb}}$; when $\varphi(x_k) \le 0$, which can happen because of the term $\inner{\lambda}{c(x)}$, any decrease of $\varphi$ selects the GN approximation.} In~\cite{tjoabiegler:1991}, the ratio is computed with the AL used as a merit function by their SQP method. As we will see in Section~\ref{sec:numerical_experiments}, this switching rule has an important impact on the performance of the algorithm.
 
 \subsection{Summary and implementation details}\label{subsec:implementation_details}
 
@@ -790,7 +793,7 @@ We first make the following standard assumption.
 \end{assumption}
 By Assumption~\ref{assumption:functions_C2}, $\varphi$ is twice continuously differentiable. We recall that the quadratic model is of the form
 \[q_k(s) = \dfrac{1}{2} \inner{s}{H_ks} + \inner{g_k}{s},\]
-where $g_k = \nabla \varphi(x_k)$ and $H_k$ is a symmetric approximation of the Hessian, for instance one of the structured approximations of Section~\ref{subsec:hessian_approx}. The norm used is the induced norm on matrices, and we define the nondecreasing sequence
+where $g_k = \nabla \varphi(x_k)$ and $H_k$ is a symmetric approximation of the Hessian, for instance one of the structured approximations of Section~\ref{subsec:hessian_approx}. \rev{We assume that the approximation is not modified after an unsuccessful iteration, that is, $H_{k+1} = H_k$ when $\rho_k < \eta_1$. This is the case in our implementation: the approximations of Section~\ref{subsec:hessian_approx} are updated from the derivatives at the trial point $x_k+s_k$, which are only evaluated when the step is accepted.} The norm used is the induced norm on matrices, and we define the nondecreasing sequence
 \[b_k = 1+\max_{0 \le i \le k} \ \left\| H_i\right\|.\]
 We do not require the approximations to be bounded, but only that their norms do not grow too fast compared with the decrease of the function values.
 \begin{assumption}\label{assumption:hessian_norm_compared_convergence_speed}
@@ -864,7 +867,7 @@ The next lemma is a key result that compares the norm of the initial reduced gra
 	\end{equation}
 	Two reductions simplify the argument. First, multiplying $\vartheta$ by a positive scalar does not change the signs tested by the iteration, so that $F(t\vartheta) = F(\vartheta)$ for all $t > 0$, and it suffices to consider vectors with $\|\vartheta\| = 1$. Second, the iteration produces a chain of sets $\mathcal{V} = F_0 \supsetneq F_1 \supsetneq \cdots \supsetneq F_J = F(\vartheta)$, and there are finitely many such chains of subsets of $\mathcal{V}$. It is therefore enough to prove~\eqref{eq:retained_violation} for the vectors $\vartheta$ that produce a given chain, $\kappa_1$ being then the smallest of the finitely many constants obtained.
 
-	Fix such a chain, with last set $F$, and assume for contradiction that there are vectors $\vartheta^\ell \in (0,\infty)^{\mathcal{V}}$ producing it, with $\|\vartheta^\ell\| = 1$ and $\vartheta^\ell_F \to 0$. By compactness of the unit sphere, a subsequence of $(\vartheta^\ell)_\ell$ converges to some $\bar\vartheta$ such that $\bar\vartheta \ge 0$, $\|\bar\vartheta\| = 1$ and $\bar\vartheta_F = 0$. We show that $\bar\vartheta$ vanishes on every set of the chain, which contradicts $\|\bar\vartheta\| = 1$ since $F_0 = \mathcal{V}$. The mechanism is the following. By~\eqref{eq:gram_expression}, a released bound $i$ is fixed again only if its inward component $G_{ii}\vartheta_i + \sum_{k\ne i}G_{ik}\vartheta_k$ is negative which, the diagonal term being positive, requires a coupling with other released bounds carrying positive weights. In the limit, the bounds fixed again at the last iteration can only be coupled with each other, since those of $F$ carry no weight, and positive definiteness then forces their weights to vanish. Repeating this argument backwards along the chain gives the result.
+	Fix such a chain, with last set $F$, and assume for contradiction that there are vectors $\vartheta^\ell \in (0,\infty)^{\mathcal{V}}$ producing it, with $\|\vartheta^\ell\| = 1$ and $\vartheta^\ell_F \to 0$. By compactness of the unit sphere, a subsequence of $(\vartheta^\ell)_\ell$ converges to some $\bar\vartheta$ such that $\bar\vartheta \ge 0$, $\|\bar\vartheta\| = 1$ and $\bar\vartheta_F = 0$. We show that $\bar\vartheta$ vanishes on every set of the chain, which contradicts $\|\bar\vartheta\| = 1$ since $F_0 = \mathcal{V}$. The mechanism is the following. By~\eqref{eq:gram_expression}, a released bound $i$ is fixed again only if its inward component $G_{ii}\vartheta_i + \sum_{k\ne i}G_{ik}\vartheta_k$ is \rev{negative, which,} the diagonal term being positive, requires a coupling with other released bounds carrying positive weights. In the limit, the bounds fixed again at the last iteration can only be coupled with each other, since those of $F$ carry no weight, and positive definiteness then forces their weights to vanish. Repeating this argument backwards along the chain gives the result.
 
 	Formally, we proceed by backward induction on $j$, the property holding for $j = J$ since $F_J = F$. Assume that $\bar\vartheta$ vanishes on $F_{j+1}$, and let $R = F_j\setminus F_{j+1}$ be the set of bounds fixed again at iteration $j$. For $i \in R$, $(G(F_j)\,\vartheta^\ell_{F_j})_i < 0$ for all $\ell$, hence $(G(F_j)\,\bar\vartheta_{F_j})_i \le 0$ in the limit. Since $\bar\vartheta_{F_j}$ vanishes outside $R$, this reads $(G_{RR}\,\bar\vartheta_R)_i \le 0$, where $G_{RR}$ is the principal submatrix of $G(F_j)$ indexed by $R$. Multiplying by $\bar\vartheta_i \ge 0$ and summing over $i \in R$ yields $\bar\vartheta_R^\top G_{RR}\,\bar\vartheta_R \le 0$. As a principal submatrix of a positive definite matrix, $G_{RR}$ is positive definite, so that $\bar\vartheta_R = 0$, and $\bar\vartheta$ vanishes on $F_j = F_{j+1}\cup R$.
 
@@ -902,9 +905,9 @@ We can now establish an inequality on the guaranteed decrease.
 \end{proof}
 
 
-The following theorem states the convergence of the inner iterations procedure.
+The following theorem states the convergence of the inner \rev{iteration} procedure.
 \begin{theorem}\label{theo:inner_convergence}
-	Suppose that Assumptions~\ref{assumption:functions_C2}, \ref{assumption:full_rank_active}, \ref{assumption:inner_iterates_compact} and~\ref{assumption:hessian_norm_compared_convergence_speed} hold, and that $\varepsilon \in (0,\bar\varepsilon]$. If Algorithm~\ref{algo:trinner_iteration} generates an infinite sequence of iterates, then
+	Suppose that Assumptions~\ref{assumption:functions_C2}, \ref{assumption:full_rank_active}, \ref{assumption:inner_iterates_compact} and~\ref{assumption:hessian_norm_compared_convergence_speed} hold, and that $\varepsilon \in (0,\bar\varepsilon]$. If Algorithm~\ref{algo:trinner_iteration}\rev{, with the radius update rule of Section~\ref{subsec:implementation_details},} generates an infinite sequence of iterates, then
 	\[\liminf_{k\to\infty} \pi_\varepsilon(x_k) = 0.\]
 	Consequently, for every $\omega > 0$, the stopping test $\pi_\varepsilon(x_k) \le \omega$ is satisfied after finitely many iterations.
 \end{theorem}
