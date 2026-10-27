@@ -40,3 +40,5 @@ main.fdb_latexmk
 tmp/
 # Output of preprint/make_arxiv.sh
 /preprint/arxiv_build/
+# Output of preprint/make_coap.sh
+/preprint/coap_build/
